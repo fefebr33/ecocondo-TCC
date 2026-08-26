@@ -1,0 +1,24 @@
+# Dependências e artefatos de compilação
+node_modules/
+dist/
+.vite/
+
+# Variáveis de ambiente e registros locais
+.env
+.env.*
+!.env.example
+.manus-logs/
+.project-config.json
+
+# Documentação e entregáveis acadêmicos fora do escopo deste repositório
+docs/
+todo.md
+*.md
+*.docx
+*.pdf
+*.ppt
+*.pptx
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db

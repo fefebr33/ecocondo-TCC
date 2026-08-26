@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --background: oklch(0.978 0.006 145);
+  --foreground: oklch(0.245 0.027 155);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.245 0.027 155);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.245 0.027 155);
+  --primary: oklch(0.46 0.11 155);
+  --primary-foreground: oklch(0.99 0.01 145);
+  --secondary: oklch(0.945 0.024 150);
+  --secondary-foreground: oklch(0.30 0.045 155);
+  --muted: oklch(0.95 0.012 150);
+  --muted-foreground: oklch(0.50 0.024 155);
+  --accent: oklch(0.94 0.025 150);
+  --accent-foreground: oklch(0.30 0.045 155);
+  --destructive: oklch(0.59 0.19 25);
+  --border: oklch(0.90 0.016 150);
+  --input: oklch(0.90 0.016 150);
+  --ring: oklch(0.46 0.11 155);
+  --radius: 0.75rem;
+}
+
+* { border-color: var(--border); }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Inter", "Avenir Next", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+
+button:active, [role="button"]:active { transform: scale(0.98); }
+
+@media (prefers-reduced-motion: no-preference) {
+  a, button { transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+}
