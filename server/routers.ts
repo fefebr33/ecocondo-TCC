@@ -6,6 +6,7 @@ import { ecoRouter } from "./routers/ecocondo";
 import { operationsRouter } from "./routers/operations";
 import { analyticsRouter } from "./routers/analytics";
 import { sustainabilityRouter } from "./routers/sustainability";
+import { auditRouter } from "./routers/audit";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -25,6 +26,7 @@ export const appRouter = router({
   ...operationsRouter._def.record,
   ...analyticsRouter._def.record,
   ...sustainabilityRouter._def.record,
+  ...auditRouter._def.record,
 
   // TODO: add feature routers here, e.g.
   // todo: router({

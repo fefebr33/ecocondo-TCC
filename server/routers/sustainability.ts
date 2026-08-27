@@ -21,6 +21,7 @@ import { administratorOnly, withProfile } from "./ecocondo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { calculateComplianceOverview, calculateGoalProgress, compareBlocks, compareBlocksOverTime } from "../domain/sustainabilityRules";
+import { incidentAuditState, writeAuditLog } from "../audit";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 const incidentInput = z.object({
@@ -85,12 +86,38 @@ export const sustainabilityRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
       const image = await saveIncidentImage(input.imageDataUrl, ctx.eco.condominium.id, ctx.user.id);
       const inserted = await db.insert(incidents).values({ condominiumId: ctx.eco.condominium.id, reporterUserId: ctx.user.id, block: ctx.eco.profile.role === "morador" && ctx.eco.resident ? ctx.eco.resident.block : input.block, wasteType: input.wasteType, location: input.location, description: input.description, imageKey: image.key, imageUrl: image.url });
-      return { id: Number(inserted[0].insertId) };
+      const incidentId = Number(inserted[0].insertId);
+      await writeAuditLog(db, {
+        condominiumId: ctx.eco.condominium.id,
+        actorUserId: ctx.user.id,
+        entityType: "ocorrencia",
+        entityId: incidentId,
+        action: "ocorrencia_criada",
+        summary: `Ocorrência de ${input.wasteType} registrada no bloco ${ctx.eco.profile.role === "morador" && ctx.eco.resident ? ctx.eco.resident.block : input.block}.`,
+        afterState: { status: "aberta", block: ctx.eco.profile.role === "morador" && ctx.eco.resident ? ctx.eco.resident.block : input.block, wasteType: input.wasteType, location: input.location, description: input.description, hasImage: Boolean(image.key) },
+      });
+      return { id: incidentId };
     }),
     updateStatus: administratorOnly.input(z.object({ id: z.number().int().positive(), status: z.enum(incidentStatuses), resolutionNote: z.string().trim().max(1600).nullable().optional() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      await db.update(incidents).set({ status: input.status, resolutionNote: input.resolutionNote || null, resolvedByUserId: input.status === "resolvida" ? ctx.user.id : null, resolvedAt: input.status === "resolvida" ? new Date() : null }).where(and(eq(incidents.id, input.id), eq(incidents.condominiumId, ctx.eco.condominium.id)));
+      const found = await db.select().from(incidents).where(and(eq(incidents.id, input.id), eq(incidents.condominiumId, ctx.eco.condominium.id))).limit(1);
+      const incident = found[0];
+      if (!incident) throw new TRPCError({ code: "NOT_FOUND", message: "Ocorrência não encontrada." });
+      const resolvedAt = input.status === "resolvida" ? new Date() : null;
+      const resolvedByUserId = input.status === "resolvida" ? ctx.user.id : null;
+      const resolutionNote = input.resolutionNote || null;
+      await db.update(incidents).set({ status: input.status, resolutionNote, resolvedByUserId, resolvedAt }).where(and(eq(incidents.id, input.id), eq(incidents.condominiumId, ctx.eco.condominium.id)));
+      await writeAuditLog(db, {
+        condominiumId: ctx.eco.condominium.id,
+        actorUserId: ctx.user.id,
+        entityType: "ocorrencia",
+        entityId: incident.id,
+        action: "ocorrencia_atualizada",
+        summary: `Ocorrência atualizada para o status ${input.status}.`,
+        beforeState: incidentAuditState(incident),
+        afterState: { ...incidentAuditState(incident), status: input.status, resolutionNote, resolvedByUserId, resolvedAt },
+      });
       return { success: true };
     }),
   }),

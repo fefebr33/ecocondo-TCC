@@ -1,12 +1,13 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { collections, disposalGuides, notificationReads, notifications, residents, rewards, redemptions } from "../../drizzle/schema";
+import { collections, disposalGuides, notificationReads, notifications, residents, rewards, redemptions, userProfiles, users } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./ecocondo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { countUnreadNotifications } from "../domain/notificationRules";
+import { buildCollectionsCsv } from "../domain/csvExport";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 
@@ -92,6 +93,19 @@ export const analyticsRouter = router({
       draw(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 48, 72, 9);
       const bytes = await pdf.save();
       return { filename: `relatorio-ecocondo-${new Date().toISOString().slice(0, 10)}.pdf`, contentBase64: Buffer.from(bytes).toString("base64") };
+    }),
+    exportCsv: administratorOnly.input(periodInput).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
+      const records = await db.select().from(collections).where(and(...periodConditions(ctx.eco.condominium.id, input))).orderBy(desc(collections.scheduledAt));
+      const community = await db.select().from(residents).where(eq(residents.condominiumId, ctx.eco.condominium.id));
+      const collectorProfiles = await db.select({ userId: userProfiles.userId, name: users.name }).from(userProfiles).leftJoin(users, eq(users.id, userProfiles.userId)).where(eq(userProfiles.condominiumId, ctx.eco.condominium.id));
+      const content = buildCollectionsCsv(records.map((record) => ({
+        ...record,
+        residentName: community.find((resident) => resident.id === record.residentId)?.name ?? null,
+        collectorName: collectorProfiles.find((profile) => profile.userId === record.collectorUserId)?.name ?? null,
+      })));
+      return { filename: `coletas-ecocondo-${new Date().toISOString().slice(0, 10)}.csv`, content };
     }),
   }),
   engagement: router({

@@ -7,6 +7,7 @@ const routePermissions: Record<string, EcoRole[]> = {
   "/moradores": ["administrador"],
   "/pessoas": ["administrador"],
   "/relatorios": ["administrador"],
+  "/auditoria": ["administrador"],
   "/engajamento": ["administrador", "morador"],
   "/guia": ["administrador", "coletor", "morador"],
   "/notificacoes": ["administrador", "coletor", "morador"],

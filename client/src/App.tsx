@@ -16,6 +16,7 @@ import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
 import Sustainability from "@/pages/Sustainability";
 import Community from "@/pages/Community";
+import Audit from "@/pages/Audit";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/moradores"><ProtectedRoute><Residents /></ProtectedRoute></Route>
       <Route path="/pessoas"><ProtectedRoute><People /></ProtectedRoute></Route>
       <Route path="/relatorios"><ProtectedRoute><Reports /></ProtectedRoute></Route>
+      <Route path="/auditoria"><ProtectedRoute><Audit /></ProtectedRoute></Route>
       <Route path="/engajamento"><ProtectedRoute><Engagement /></ProtectedRoute></Route>
       <Route path="/guia"><ProtectedRoute><DisposalGuide /></ProtectedRoute></Route>
       <Route path="/notificacoes"><ProtectedRoute><Notifications /></ProtectedRoute></Route>

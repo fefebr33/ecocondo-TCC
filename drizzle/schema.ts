@@ -41,6 +41,7 @@ export const residentStatuses = ["ativo", "inativo"] as const;
 export const wasteTypes = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"] as const;
 export const collectionStatuses = ["agendada", "em_andamento", "concluida", "cancelada", "ocorrencia"] as const;
 export const notificationKinds = ["coleta_agendada", "coleta_concluida", "lembrete_coleta", "comunicado", "sistema"] as const;
+export const auditEntityTypes = ["coleta", "ocorrencia"] as const;
 export const redemptionStatuses = ["solicitado", "aprovado", "entregue", "cancelado"] as const;
 export const incidentStatuses = ["aberta", "em_analise", "resolvida"] as const;
 export const campaignStatuses = ["planejada", "ativa", "encerrada"] as const;
@@ -117,6 +118,26 @@ export const collections = mysqlTable("collections", {
   index("collections_condominium_idx").on(table.condominiumId),
   index("collections_status_idx").on(table.status),
   index("collections_scheduled_idx").on(table.scheduledAt),
+  index("collections_condominium_scheduled_idx").on(table.condominiumId, table.scheduledAt),
+  index("collections_condominium_status_scheduled_idx").on(table.condominiumId, table.status, table.scheduledAt),
+  index("collections_condominium_block_scheduled_idx").on(table.condominiumId, table.block, table.scheduledAt),
+]);
+
+export const auditLogs = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  condominiumId: int("condominiumId").notNull(),
+  actorUserId: int("actorUserId").notNull(),
+  entityType: mysqlEnum("entityType", auditEntityTypes).notNull(),
+  entityId: int("entityId").notNull(),
+  action: varchar("action", { length: 80 }).notNull(),
+  summary: varchar("summary", { length: 300 }).notNull(),
+  beforeState: text("beforeState"),
+  afterState: text("afterState"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  index("audit_logs_condominium_created_idx").on(table.condominiumId, table.createdAt),
+  index("audit_logs_entity_idx").on(table.entityType, table.entityId),
+  index("audit_logs_actor_created_idx").on(table.actorUserId, table.createdAt),
 ]);
 
 export const notifications = mysqlTable("notifications", {
@@ -220,6 +241,7 @@ export const incidents = mysqlTable("incidents", {
 }, (table) => [
   index("incidents_condominium_idx").on(table.condominiumId),
   index("incidents_status_idx").on(table.status),
+  index("incidents_condominium_status_created_idx").on(table.condominiumId, table.status, table.createdAt),
 ]);
 
 export const campaigns = mysqlTable("campaigns", {

@@ -85,6 +85,8 @@ describe("autorização de procedimentos EcoCondo", () => {
     await expect(caller.incidents.updateStatus({ id: 1, status: "resolvida" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.compliance.overview()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.comparison.timeline({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.audit.list({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.reports.exportCsv({})).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.campaigns.create({ title: "Campanha", description: "Descrição de campanha válida", targetDescription: "Meta", startDate: new Date("2026-08-01"), endDate: new Date("2026-08-31"), status: "ativa" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.feedback.respond({ id: 1, response: "Resposta válida" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });

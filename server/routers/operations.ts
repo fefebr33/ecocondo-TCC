@@ -7,6 +7,7 @@ import { administratorOnly, staffOnly, withProfile } from "./ecocondo";
 import { router } from "../_core/trpc";
 import { prepareCollectionCompletion, resolveCollectorAssignment } from "../domain/collectionRules";
 import { buildPendingResidentPerson } from "../domain/peopleRules";
+import { collectionAuditState, writeAuditLog } from "../audit";
 
 const residentInput = z.object({
   name: z.string().trim().min(3).max(180),
@@ -132,6 +133,15 @@ export const operationsRouter = router({
         notes: input.notes || null,
       });
       const collectionId = Number(inserted[0].insertId);
+      await writeAuditLog(db, {
+        condominiumId: ctx.eco.condominium.id,
+        actorUserId: ctx.user.id,
+        entityType: "coleta",
+        entityId: collectionId,
+        action: "coleta_criada",
+        summary: `Coleta de ${input.wasteType} criada para o bloco ${block}.`,
+        afterState: { status: "agendada", wasteType: input.wasteType, block, scheduledAt: input.scheduledAt, residentId, collectorUserId, notes: input.notes || null },
+      });
       if (resident?.userId) {
         await db.insert(notifications).values({
           condominiumId: ctx.eco.condominium.id,
@@ -183,6 +193,23 @@ export const operationsRouter = router({
         collectorUserId: collection.collectorUserId ?? ctx.user.id,
         notes: completion.notes,
       }).where(eq(collections.id, collection.id));
+      await writeAuditLog(db, {
+        condominiumId: ctx.eco.condominium.id,
+        actorUserId: ctx.user.id,
+        entityType: "coleta",
+        entityId: collection.id,
+        action: "coleta_atualizada",
+        summary: `Coleta atualizada para o status ${input.status}.`,
+        beforeState: collectionAuditState(collection),
+        afterState: {
+          status: input.status,
+          weightGrams: nextWeight,
+          pointsAwarded: nextAward,
+          collectorUserId: collection.collectorUserId ?? ctx.user.id,
+          completedAt,
+          notes: completion.notes,
+        },
+      });
 
       if (collection.residentId && pointDelta !== 0) {
         await db.update(residents).set({ points: sql`${residents.points} + ${pointDelta}` }).where(eq(residents.id, collection.residentId));
