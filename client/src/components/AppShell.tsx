@@ -8,6 +8,8 @@ import { canAccessRoute, type EcoRole as SharedEcoRole } from "@shared/permissio
 import {
   Bell,
   BookOpenCheck,
+  CalendarDays,
+  Camera,
   ChevronRight,
   ClipboardList,
   Gift,
@@ -36,10 +38,13 @@ const navigation: NavItem[] = [
   { href: "/dashboard", label: "Visão geral", icon: LayoutDashboard, roles: ["administrador", "coletor", "morador"] },
   { href: "/coletas", label: "Coletas", icon: Recycle, roles: ["administrador", "coletor", "morador"] },
   { href: "/moradores", label: "Moradores", icon: UsersRound, roles: ["administrador"] },
+  { href: "/pessoas", label: "Pessoas e acessos", icon: UsersRound, roles: ["administrador"] },
   { href: "/relatorios", label: "Relatórios", icon: ClipboardList, roles: ["administrador"] },
   { href: "/engajamento", label: "Engajamento", icon: Gift, roles: ["administrador", "morador"] },
   { href: "/guia", label: "Guia de descarte", icon: BookOpenCheck, roles: ["administrador", "coletor", "morador"] },
   { href: "/notificacoes", label: "Notificações", icon: Bell, roles: ["administrador", "coletor", "morador"] },
+  { href: "/ambiental", label: "Gestão ambiental", icon: Camera, roles: ["administrador", "coletor", "morador"] },
+  { href: "/comunidade", label: "Calendário e campanhas", icon: CalendarDays, roles: ["administrador", "coletor", "morador"] },
   { href: "/configuracoes", label: "Configurações", icon: Settings, roles: ["administrador"] },
 ];
 
@@ -107,6 +112,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const { loading, user, logout } = useAuth();
   const [isDrawerOpen, setDrawerOpen] = useState(false);
   const profileQuery = trpc.profile.me.useQuery(undefined, { enabled: Boolean(user) });
+  const unreadNotifications = trpc.notifications.unreadCount.useQuery(undefined, { enabled: Boolean(user) });
 
   if (loading) {
     return <div className="min-h-screen bg-[#f6f8f6]" aria-busy="true" />;
@@ -159,9 +165,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/notificacoes" aria-label="Abrir notificações" className="relative grid h-10 w-10 place-items-center rounded-xl border border-[#dfe9e3] bg-white text-muted-foreground transition-colors hover:bg-[#edf7f1] hover:text-[#0f7350] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
+            <Link href="/notificacoes" aria-label={`Abrir notificações${unreadNotifications.data?.count ? `, ${unreadNotifications.data.count} não lidas` : ""}`} className="relative grid h-10 w-10 place-items-center rounded-xl border border-[#dfe9e3] bg-white text-muted-foreground transition-colors hover:bg-[#edf7f1] hover:text-[#0f7350] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
               <Bell className="h-[18px] w-[18px]" />
-              <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#e67948] ring-2 ring-white" />
+              {unreadNotifications.data?.count ? <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-[#e67948] px-1 text-[10px] font-bold text-white ring-2 ring-[#f6f8f6]">{unreadNotifications.data.count > 99 ? "99+" : unreadNotifications.data.count}</span> : null}
             </Link>
             <div className="hidden h-7 w-px bg-[#dce8e0] sm:block" />
             <div className="flex items-center gap-2.5">

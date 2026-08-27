@@ -1,11 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { collections, collectionStatuses, notifications, residents, residentStatuses, userProfiles, users, wasteTypes } from "../../drizzle/schema";
+import { collections, collectionStatuses, notifications, people, residents, residentStatuses, userProfiles, users, wasteTypes } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, staffOnly, withProfile } from "./ecocondo";
 import { router } from "../_core/trpc";
 import { prepareCollectionCompletion, resolveCollectorAssignment } from "../domain/collectionRules";
+import { buildPendingResidentPerson } from "../domain/peopleRules";
 
 const residentInput = z.object({
   name: z.string().trim().min(3).max(180),
@@ -48,7 +49,15 @@ export const operationsRouter = router({
       const { id, ...update } = input;
       const existing = await db.select().from(residents).where(and(eq(residents.id, id), eq(residents.condominiumId, ctx.eco.condominium.id))).limit(1);
       if (!existing[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Morador não encontrado." });
-      await db.update(residents).set({ ...update, email: update.email === undefined ? undefined : update.email || null, phone: update.phone === undefined ? undefined : update.phone || null }).where(eq(residents.id, id));
+      const nextEmail = update.email === undefined ? existing[0].email : update.email || null;
+      const nextPhone = update.phone === undefined ? existing[0].phone : update.phone || null;
+      await db.update(residents).set({ ...update, email: nextEmail, phone: nextPhone }).where(eq(residents.id, id));
+      const person = await db.select().from(people).where(eq(people.residentId, id)).limit(1);
+      if (person[0]) {
+        await db.update(people).set({ name: update.name ?? existing[0].name, email: nextEmail || person[0].email, phone: nextPhone, block: update.block ?? existing[0].block, apartment: update.apartment ?? existing[0].apartment }).where(eq(people.id, person[0].id));
+      } else if (nextEmail) {
+        await db.insert(people).values({ condominiumId: ctx.eco.condominium.id, ...buildPendingResidentPerson({ id, userId: existing[0].userId, name: update.name ?? existing[0].name, email: nextEmail, phone: nextPhone, block: update.block ?? existing[0].block, apartment: update.apartment ?? existing[0].apartment }) });
+      }
       return { success: true };
     }),
   }),

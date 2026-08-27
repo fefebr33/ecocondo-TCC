@@ -1,11 +1,12 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { collections, disposalGuides, notifications, residents, rewards, redemptions } from "../../drizzle/schema";
+import { collections, disposalGuides, notificationReads, notifications, residents, rewards, redemptions } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./ecocondo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
+import { countUnreadNotifications } from "../domain/notificationRules";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 
@@ -130,12 +131,28 @@ export const analyticsRouter = router({
     list: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      return db.select().from(notifications).where(and(eq(notifications.condominiumId, ctx.eco.condominium.id), or(eq(notifications.recipientUserId, ctx.user.id), sql`${notifications.recipientUserId} IS NULL`))).orderBy(desc(notifications.createdAt));
+      const rows = await db.select({ notification: notifications, read: notificationReads }).from(notifications).leftJoin(notificationReads, and(eq(notificationReads.notificationId, notifications.id), eq(notificationReads.userId, ctx.user.id))).where(and(eq(notifications.condominiumId, ctx.eco.condominium.id), or(eq(notifications.recipientUserId, ctx.user.id), sql`${notifications.recipientUserId} IS NULL`))).orderBy(desc(notifications.createdAt));
+      return rows.map(({ notification, read }) => ({ ...notification, readAt: read?.readAt ?? notification.readAt ?? null }));
+    }),
+    unreadCount: withProfile.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
+      const rows = await db.select({ notification: notifications, read: notificationReads }).from(notifications).leftJoin(notificationReads, and(eq(notificationReads.notificationId, notifications.id), eq(notificationReads.userId, ctx.user.id))).where(and(eq(notifications.condominiumId, ctx.eco.condominium.id), or(eq(notifications.recipientUserId, ctx.user.id), sql`${notifications.recipientUserId} IS NULL`)));
+      return { count: countUnreadNotifications(rows.map((row) => row.notification.id), ctx.user.id, rows.flatMap((row) => row.read || row.notification.readAt ? [{ notificationId: row.notification.id, userId: ctx.user.id }] : [])) };
     }),
     markRead: withProfile.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      await db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.id, input.id), eq(notifications.condominiumId, ctx.eco.condominium.id), or(eq(notifications.recipientUserId, ctx.user.id), sql`${notifications.recipientUserId} IS NULL`)));
+      const visible = await db.select().from(notifications).where(and(eq(notifications.id, input.id), eq(notifications.condominiumId, ctx.eco.condominium.id), or(eq(notifications.recipientUserId, ctx.user.id), sql`${notifications.recipientUserId} IS NULL`))).limit(1);
+      if (!visible[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Notificação não encontrada." });
+      await db.insert(notificationReads).values({ notificationId: input.id, userId: ctx.user.id }).onDuplicateKeyUpdate({ set: { readAt: new Date() } });
+      return { success: true };
+    }),
+    markAllRead: withProfile.mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
+      const visible = await db.select().from(notifications).where(and(eq(notifications.condominiumId, ctx.eco.condominium.id), or(eq(notifications.recipientUserId, ctx.user.id), sql`${notifications.recipientUserId} IS NULL`)));
+      for (const item of visible) await db.insert(notificationReads).values({ notificationId: item.id, userId: ctx.user.id }).onDuplicateKeyUpdate({ set: { readAt: new Date() } });
       return { success: true };
     }),
     createCommunication: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(180), message: z.string().trim().min(3).max(2000) })).mutation(async ({ ctx, input }) => {

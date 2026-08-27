@@ -1,0 +1,1 @@
+ALTER TABLE `notifications` MODIFY COLUMN `kind` enum('coleta_agendada','coleta_concluida','lembrete_coleta','comunicado','sistema') NOT NULL;
