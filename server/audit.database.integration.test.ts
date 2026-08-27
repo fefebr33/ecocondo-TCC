@@ -60,17 +60,20 @@ describeWithDatabase("auditoria com banco isolado por transação", () => {
     expect(rows[0].afterState).toContain("1000");
   });
 
-  it("exporta somente a coleta temporária do período e a remove no rollback", async () => {
+  it("exporta somente a coleta temporária filtrada por período, bloco e categoria antes do rollback", async () => {
     const [administrators] = await connection.execute<RowDataPacket[]>("SELECT `userId`, `condominiumId` FROM `user_profiles` WHERE `role` = 'administrador' LIMIT 1");
     const administrator = administrators[0];
     expect(administrator).toBeTruthy();
     const marker = `CSV-${Date.now()}`;
+    const excludedMarker = `EXCLUIR-${Date.now()}`;
     const scheduledAt = new Date("2026-08-25T12:00:00Z");
     await connection.execute("INSERT INTO `collections` (`condominiumId`, `residentId`, `createdByUserId`, `collectorUserId`, `wasteType`, `block`, `scheduledAt`, `completedAt`, `weightGrams`, `pointsAwarded`, `status`, `notes`) VALUES (?, NULL, ?, NULL, 'reciclavel', ?, ?, ?, 2345, 2, 'concluida', ?)", [administrator.condominiumId, administrator.userId, marker, scheduledAt, scheduledAt, marker]);
+    await connection.execute("INSERT INTO `collections` (`condominiumId`, `residentId`, `createdByUserId`, `collectorUserId`, `wasteType`, `block`, `scheduledAt`, `completedAt`, `weightGrams`, `pointsAwarded`, `status`, `notes`) VALUES (?, NULL, ?, NULL, 'organico', ?, ?, ?, 3000, 0, 'concluida', ?)", [administrator.condominiumId, administrator.userId, excludedMarker, scheduledAt, scheduledAt, excludedMarker]);
     const caller = appRouter.createCaller(administratorContext(Number(administrator.userId)));
-    const csv = await caller.reports.exportCsv({ startDate: new Date("2026-08-25T00:00:00Z"), endDate: new Date("2026-08-25T23:59:59Z") });
+    const csv = await caller.reports.exportCsv({ startDate: new Date("2026-08-25T00:00:00Z"), endDate: new Date("2026-08-25T23:59:59Z"), block: marker, wasteType: "reciclavel" });
     expect(csv.content).toContain(`"${marker}"`);
     expect(csv.content).toContain('"2,35"');
     expect(csv.content).toContain('"concluida"');
+    expect(csv.content).not.toContain(excludedMarker);
   });
 });

@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { collections, disposalGuides, notificationReads, notifications, residents, rewards, redemptions, userProfiles, users } from "../../drizzle/schema";
+import { collections, disposalGuides, notificationReads, notifications, residents, rewards, redemptions, userProfiles, users, wasteTypes } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./ecocondo";
 import { router } from "../_core/trpc";
@@ -10,11 +10,24 @@ import { countUnreadNotifications } from "../domain/notificationRules";
 import { buildCollectionsCsv } from "../domain/csvExport";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
+const csvFiltersInput = z.object({
+  startDate: z.date().optional(),
+  endDate: z.date().optional(),
+  block: z.string().trim().min(1).max(32).optional(),
+  wasteType: z.enum(wasteTypes).optional(),
+}).optional();
 
 function periodConditions(condominiumId: number, period?: { startDate?: Date; endDate?: Date }) {
   const conditions = [eq(collections.condominiumId, condominiumId)];
   if (period?.startDate) conditions.push(gte(collections.scheduledAt, period.startDate));
   if (period?.endDate) conditions.push(lte(collections.scheduledAt, period.endDate));
+  return conditions;
+}
+
+function csvConditions(condominiumId: number, filters?: { startDate?: Date; endDate?: Date; block?: string; wasteType?: (typeof wasteTypes)[number] }) {
+  const conditions = periodConditions(condominiumId, filters);
+  if (filters?.block) conditions.push(eq(collections.block, filters.block));
+  if (filters?.wasteType) conditions.push(eq(collections.wasteType, filters.wasteType));
   return conditions;
 }
 
@@ -94,10 +107,10 @@ export const analyticsRouter = router({
       const bytes = await pdf.save();
       return { filename: `relatorio-ecocondo-${new Date().toISOString().slice(0, 10)}.pdf`, contentBase64: Buffer.from(bytes).toString("base64") };
     }),
-    exportCsv: administratorOnly.input(periodInput).mutation(async ({ ctx, input }) => {
+    exportCsv: administratorOnly.input(csvFiltersInput).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const records = await db.select().from(collections).where(and(...periodConditions(ctx.eco.condominium.id, input))).orderBy(desc(collections.scheduledAt));
+      const records = await db.select().from(collections).where(and(...csvConditions(ctx.eco.condominium.id, input))).orderBy(desc(collections.scheduledAt));
       const community = await db.select().from(residents).where(eq(residents.condominiumId, ctx.eco.condominium.id));
       const collectorProfiles = await db.select({ userId: userProfiles.userId, name: users.name }).from(userProfiles).leftJoin(users, eq(users.id, userProfiles.userId)).where(eq(userProfiles.condominiumId, ctx.eco.condominium.id));
       const content = buildCollectionsCsv(records.map((record) => ({
