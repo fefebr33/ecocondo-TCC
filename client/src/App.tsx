@@ -7,6 +7,7 @@ import Collections from "@/pages/Collections";
 import DisposalGuide from "@/pages/DisposalGuide";
 import Engagement from "@/pages/Engagement";
 import Home from "@/pages/Home";
+import Login from "@/pages/Login";
 import ModulePlaceholder from "@/pages/ModulePlaceholder";
 import NotFound from "@/pages/NotFound";
 import Notifications from "@/pages/Notifications";
@@ -28,6 +29,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/entrar" component={Login} />
       <Route path="/dashboard"><ProtectedRoute><Dashboard /></ProtectedRoute></Route>
       <Route path="/coletas"><ProtectedRoute><Collections /></ProtectedRoute></Route>
       <Route path="/moradores"><ProtectedRoute><Residents /></ProtectedRoute></Route>

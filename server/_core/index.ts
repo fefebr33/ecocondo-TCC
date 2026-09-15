@@ -3,13 +3,14 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
-import { registerDevLoginRoute } from "./devLogin";
+import { registerLoginRoute } from "./login";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { sendCollectionReminders } from "../scheduled/collectionReminders";
+import { runCollectionReminders, sendCollectionReminders } from "../scheduled/collectionReminders";
+
+const HOUR_MS = 60 * 60 * 1000;
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,8 +38,8 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
-  registerOAuthRoutes(app);
-  registerDevLoginRoute(app);
+  registerLoginRoute(app);
+  app.get("/api/health", (_req, res) => res.json({ ok: true, timestamp: Date.now() }));
   app.post("/api/scheduled/collection-reminders", sendCollectionReminders);
   // tRPC API
   app.use(
@@ -65,6 +66,12 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // Verifica lembretes de coleta periodicamente, sem depender de agendador externo.
+  runCollectionReminders().catch((error) => console.error("[Lembretes] falha na verificação inicial:", error));
+  setInterval(() => {
+    runCollectionReminders().catch((error) => console.error("[Lembretes] falha na verificação periódica:", error));
+  }, HOUR_MS);
 }
 
 startServer().catch(console.error);
