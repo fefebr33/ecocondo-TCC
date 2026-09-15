@@ -1,54 +1,12 @@
 {
   "version": "7",
-  "dialect": "mysql",
+  "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
-      "version": "5",
-      "when": 1787739683551,
-      "tag": "0000_lucky_shape",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "5",
-      "when": 1787740243646,
-      "tag": "0001_lyrical_boom_boom",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1787743140087,
-      "tag": "0002_remarkable_night_thrasher",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1787747009524,
-      "tag": "0003_smart_mad_thinker",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1787840714195,
-      "tag": "0004_minor_scarlet_spider",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "5",
-      "when": 1787841445941,
-      "tag": "0005_even_pyro",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "5",
-      "when": 1787865525265,
-      "tag": "0006_wonderful_wiccan",
+      "version": "6",
+      "when": 1789469826149,
+      "tag": "0000_colossal_bucky",
       "breakpoints": true
     }
   ]

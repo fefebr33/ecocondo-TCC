@@ -65,8 +65,8 @@ export const ecoRouter = router({
           phone: input.phone || null,
           block: input.block!,
           apartment: input.apartment!,
-        });
-        residentId = Number(resident[0].insertId);
+        }).returning({ id: residents.id });
+        residentId = resident[0].id;
       }
       const inserted = await db.insert(people).values({
         condominiumId: ctx.eco.condominium.id,
@@ -78,8 +78,8 @@ export const ecoRouter = router({
         apartment: input.apartment || null,
         role: input.role,
         accessStatus: "pendente",
-      });
-      return { id: Number(inserted[0].insertId), residentId };
+      }).returning({ id: people.id });
+      return { id: inserted[0].id, residentId };
     }),
     setRole: administratorOnly.input(z.object({ id: z.number().int().positive(), role: z.enum(ecoRoles) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -89,8 +89,8 @@ export const ecoRouter = router({
       if (input.role === "morador" && !target[0].residentId) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cadastre bloco e apartamento antes de atribuir o perfil de morador." });
       }
-      await db.update(people).set({ role: input.role }).where(eq(people.id, input.id));
-      if (target[0].userId) await db.update(userProfiles).set({ role: input.role, residentId: input.role === "morador" ? target[0].residentId : null }).where(eq(userProfiles.userId, target[0].userId));
+      await db.update(people).set({ role: input.role, updatedAt: new Date() }).where(eq(people.id, input.id));
+      if (target[0].userId) await db.update(userProfiles).set({ role: input.role, residentId: input.role === "morador" ? target[0].residentId : null, updatedAt: new Date() }).where(eq(userProfiles.userId, target[0].userId));
       return { success: true };
     }),
   }),
@@ -112,7 +112,7 @@ export const ecoRouter = router({
       if (!target[0] || target[0].condominiumId !== ctx.eco.condominium.id) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Perfil não encontrado no condomínio." });
       }
-      await db.update(userProfiles).set({ role: input.role }).where(eq(userProfiles.userId, input.userId));
+      await db.update(userProfiles).set({ role: input.role, updatedAt: new Date() }).where(eq(userProfiles.userId, input.userId));
       return { success: true };
     }),
   }),
@@ -127,7 +127,7 @@ export const ecoRouter = router({
     })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      await db.update(condominiums).set(input).where(eq(condominiums.id, ctx.eco.condominium.id));
+      await db.update(condominiums).set({ ...input, updatedAt: new Date() }).where(eq(condominiums.id, ctx.eco.condominium.id));
       return { success: true };
     }),
   }),

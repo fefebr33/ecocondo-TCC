@@ -27,8 +27,8 @@ async function getDefaultCondominium() {
     city: "São Paulo",
     state: "SP",
     blockCount: 4,
-  });
-  const created = await db.select().from(condominiums).where(eq(condominiums.id, Number(result[0].insertId))).limit(1);
+  }).returning({ id: condominiums.id });
+  const created = await db.select().from(condominiums).where(eq(condominiums.id, result[0].id)).limit(1);
   if (!created[0]) throw new Error("Não foi possível inicializar o condomínio.");
   return created[0];
 }
@@ -48,7 +48,7 @@ export async function getOrCreateProfile(user: User): Promise<ProfileContext> {
     const registeredByUser = await db.select().from(people).where(eq(people.userId, user.id)).limit(1);
     const registeredPerson = registeredByUser[0] ? registeredByUser : await db.select().from(people).where(and(eq(people.condominiumId, condominium[0].id), eq(people.email, emailKey))).limit(1);
     if (registeredPerson[0]) {
-      await db.update(people).set({ userId: user.id, residentId: existing[0].residentId, accessStatus: "ativo", role: existing[0].role, name: user.name || registeredPerson[0].name }).where(eq(people.id, registeredPerson[0].id));
+      await db.update(people).set({ userId: user.id, residentId: existing[0].residentId, accessStatus: "ativo", role: existing[0].role, name: user.name || registeredPerson[0].name, updatedAt: new Date() }).where(eq(people.id, registeredPerson[0].id));
     } else {
       await db.insert(people).values({
         condominiumId: condominium[0].id,
@@ -81,7 +81,7 @@ export async function getOrCreateProfile(user: User): Promise<ProfileContext> {
       : [];
     if (foundResident[0]) {
       residentId = foundResident[0].id;
-      await db.update(residents).set({ userId: user.id }).where(eq(residents.id, foundResident[0].id));
+      await db.update(residents).set({ userId: user.id, updatedAt: new Date() }).where(eq(residents.id, foundResident[0].id));
     } else {
       const created = await db.insert(residents).values({
         condominiumId: condominium.id,
@@ -90,13 +90,13 @@ export async function getOrCreateProfile(user: User): Promise<ProfileContext> {
         email: user.email || null,
         block: "A",
         apartment: "A definir",
-      });
-      residentId = Number(created[0].insertId);
+      }).returning({ id: residents.id });
+      residentId = created[0].id;
     }
   }
 
   if (pendingPerson[0]) {
-    await db.update(people).set({ userId: user.id, residentId, accessStatus: "ativo", role, name: user.name || pendingPerson[0].name }).where(eq(people.id, pendingPerson[0].id));
+    await db.update(people).set({ userId: user.id, residentId, accessStatus: "ativo", role, name: user.name || pendingPerson[0].name, updatedAt: new Date() }).where(eq(people.id, pendingPerson[0].id));
   } else {
     await db.insert(people).values({
       condominiumId: condominium.id,
@@ -114,8 +114,8 @@ export async function getOrCreateProfile(user: User): Promise<ProfileContext> {
     condominiumId: condominium.id,
     residentId,
     role,
-  });
-  const profile = await db.select().from(userProfiles).where(eq(userProfiles.id, Number(inserted[0].insertId))).limit(1);
+  }).returning({ id: userProfiles.id });
+  const profile = await db.select().from(userProfiles).where(eq(userProfiles.id, inserted[0].id)).limit(1);
   const resident = residentId ? await db.select().from(residents).where(eq(residents.id, residentId)).limit(1) : [];
   if (!profile[0]) throw new Error("Não foi possível criar o perfil de acesso.");
   return { profile: profile[0], condominium, resident: resident[0] ?? null };

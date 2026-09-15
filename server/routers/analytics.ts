@@ -136,8 +136,8 @@ export const analyticsRouter = router({
     createReward: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(140), description: z.string().trim().min(4).max(1000), pointsCost: z.number().int().min(1), stock: z.number().int().min(0).nullable() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const inserted = await db.insert(rewards).values({ condominiumId: ctx.eco.condominium.id, ...input });
-      return { id: Number(inserted[0].insertId) };
+      const inserted = await db.insert(rewards).values({ condominiumId: ctx.eco.condominium.id, ...input }).returning({ id: rewards.id });
+      return { id: inserted[0].id };
     }),
     redeem: withProfile.input(z.object({ rewardId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -149,8 +149,8 @@ export const analyticsRouter = router({
       if (reward.stock !== null && reward.stock <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta recompensa está sem estoque." });
       if (ctx.eco.resident.points < reward.pointsCost) throw new TRPCError({ code: "BAD_REQUEST", message: "Pontuação insuficiente para esta recompensa." });
       await db.insert(redemptions).values({ condominiumId: ctx.eco.condominium.id, residentId: ctx.eco.resident.id, rewardId: reward.id, pointsSpent: reward.pointsCost });
-      await db.update(residents).set({ points: ctx.eco.resident.points - reward.pointsCost }).where(eq(residents.id, ctx.eco.resident.id));
-      if (reward.stock !== null) await db.update(rewards).set({ stock: reward.stock - 1 }).where(eq(rewards.id, reward.id));
+      await db.update(residents).set({ points: ctx.eco.resident.points - reward.pointsCost, updatedAt: new Date() }).where(eq(residents.id, ctx.eco.resident.id));
+      if (reward.stock !== null) await db.update(rewards).set({ stock: reward.stock - 1, updatedAt: new Date() }).where(eq(rewards.id, reward.id));
       return { success: true };
     }),
   }),
@@ -172,21 +172,21 @@ export const analyticsRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
       const visible = await db.select().from(notifications).where(and(eq(notifications.id, input.id), eq(notifications.condominiumId, ctx.eco.condominium.id), or(eq(notifications.recipientUserId, ctx.user.id), sql`${notifications.recipientUserId} IS NULL`))).limit(1);
       if (!visible[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Notificação não encontrada." });
-      await db.insert(notificationReads).values({ notificationId: input.id, userId: ctx.user.id }).onDuplicateKeyUpdate({ set: { readAt: new Date() } });
+      await db.insert(notificationReads).values({ notificationId: input.id, userId: ctx.user.id }).onConflictDoUpdate({ target: [notificationReads.notificationId, notificationReads.userId], set: { readAt: new Date() } });
       return { success: true };
     }),
     markAllRead: withProfile.mutation(async ({ ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
       const visible = await db.select().from(notifications).where(and(eq(notifications.condominiumId, ctx.eco.condominium.id), or(eq(notifications.recipientUserId, ctx.user.id), sql`${notifications.recipientUserId} IS NULL`)));
-      for (const item of visible) await db.insert(notificationReads).values({ notificationId: item.id, userId: ctx.user.id }).onDuplicateKeyUpdate({ set: { readAt: new Date() } });
+      for (const item of visible) await db.insert(notificationReads).values({ notificationId: item.id, userId: ctx.user.id }).onConflictDoUpdate({ target: [notificationReads.notificationId, notificationReads.userId], set: { readAt: new Date() } });
       return { success: true };
     }),
     createCommunication: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(180), message: z.string().trim().min(3).max(2000) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const inserted = await db.insert(notifications).values({ condominiumId: ctx.eco.condominium.id, recipientUserId: null, kind: "comunicado", ...input });
-      return { id: Number(inserted[0].insertId) };
+      const inserted = await db.insert(notifications).values({ condominiumId: ctx.eco.condominium.id, recipientUserId: null, kind: "comunicado", ...input }).returning({ id: notifications.id });
+      return { id: inserted[0].id };
     }),
   }),
   guides: router({

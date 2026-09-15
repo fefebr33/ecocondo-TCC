@@ -63,13 +63,13 @@ export const sustainabilityRouter = router({
     create: administratorOnly.input(z.object({ block: z.string().trim().min(1).max(32), title: z.string().trim().min(3).max(140), targetKg: z.number().int().min(1).max(100000), startDate: z.date(), endDate: z.date() }).refine((input) => input.endDate >= input.startDate, { message: "A data final deve ser posterior à data inicial.", path: ["endDate"] })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const inserted = await db.insert(blockGoals).values({ condominiumId: ctx.eco.condominium.id, createdByUserId: ctx.user.id, ...input });
-      return { id: Number(inserted[0].insertId) };
+      const inserted = await db.insert(blockGoals).values({ condominiumId: ctx.eco.condominium.id, createdByUserId: ctx.user.id, ...input }).returning({ id: blockGoals.id });
+      return { id: inserted[0].id };
     }),
     toggle: administratorOnly.input(z.object({ id: z.number().int().positive(), isActive: z.boolean() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      await db.update(blockGoals).set({ isActive: input.isActive }).where(and(eq(blockGoals.id, input.id), eq(blockGoals.condominiumId, ctx.eco.condominium.id)));
+      await db.update(blockGoals).set({ isActive: input.isActive, updatedAt: new Date() }).where(and(eq(blockGoals.id, input.id), eq(blockGoals.condominiumId, ctx.eco.condominium.id)));
       return { success: true };
     }),
   }),
@@ -85,8 +85,8 @@ export const sustainabilityRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
       const image = await saveIncidentImage(input.imageDataUrl, ctx.eco.condominium.id, ctx.user.id);
-      const inserted = await db.insert(incidents).values({ condominiumId: ctx.eco.condominium.id, reporterUserId: ctx.user.id, block: ctx.eco.profile.role === "morador" && ctx.eco.resident ? ctx.eco.resident.block : input.block, wasteType: input.wasteType, location: input.location, description: input.description, imageKey: image.key, imageUrl: image.url });
-      const incidentId = Number(inserted[0].insertId);
+      const inserted = await db.insert(incidents).values({ condominiumId: ctx.eco.condominium.id, reporterUserId: ctx.user.id, block: ctx.eco.profile.role === "morador" && ctx.eco.resident ? ctx.eco.resident.block : input.block, wasteType: input.wasteType, location: input.location, description: input.description, imageKey: image.key, imageUrl: image.url }).returning({ id: incidents.id });
+      const incidentId = inserted[0].id;
       await writeAuditLog(db, {
         condominiumId: ctx.eco.condominium.id,
         actorUserId: ctx.user.id,
@@ -107,7 +107,7 @@ export const sustainabilityRouter = router({
       const resolvedAt = input.status === "resolvida" ? new Date() : null;
       const resolvedByUserId = input.status === "resolvida" ? ctx.user.id : null;
       const resolutionNote = input.resolutionNote || null;
-      await db.update(incidents).set({ status: input.status, resolutionNote, resolvedByUserId, resolvedAt }).where(and(eq(incidents.id, input.id), eq(incidents.condominiumId, ctx.eco.condominium.id)));
+      await db.update(incidents).set({ status: input.status, resolutionNote, resolvedByUserId, resolvedAt, updatedAt: new Date() }).where(and(eq(incidents.id, input.id), eq(incidents.condominiumId, ctx.eco.condominium.id)));
       await writeAuditLog(db, {
         condominiumId: ctx.eco.condominium.id,
         actorUserId: ctx.user.id,
@@ -145,8 +145,8 @@ export const sustainabilityRouter = router({
     create: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(140), description: z.string().trim().min(10).max(1600), targetDescription: z.string().trim().min(3).max(240), startDate: z.date(), endDate: z.date(), status: z.enum(campaignStatuses).default("planejada") }).refine((input) => input.endDate >= input.startDate, { message: "A data final deve ser posterior à data inicial.", path: ["endDate"] })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const inserted = await db.insert(campaigns).values({ condominiumId: ctx.eco.condominium.id, createdByUserId: ctx.user.id, ...input });
-      return { id: Number(inserted[0].insertId) };
+      const inserted = await db.insert(campaigns).values({ condominiumId: ctx.eco.condominium.id, createdByUserId: ctx.user.id, ...input }).returning({ id: campaigns.id });
+      return { id: inserted[0].id };
     }),
     join: withProfile.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -154,7 +154,7 @@ export const sustainabilityRouter = router({
       if (ctx.eco.profile.role !== "morador" || !ctx.eco.resident || ctx.eco.resident.status !== "ativo") throw new TRPCError({ code: "FORBIDDEN", message: "Apenas moradores ativos podem participar de campanhas." });
       const campaign = await db.select().from(campaigns).where(and(eq(campaigns.id, input.campaignId), eq(campaigns.condominiumId, ctx.eco.condominium.id), eq(campaigns.status, "ativa"))).limit(1);
       if (!campaign[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Campanha ativa não encontrada." });
-      await db.insert(campaignParticipants).values({ campaignId: input.campaignId, residentId: ctx.eco.resident.id }).onDuplicateKeyUpdate({ set: { joinedAt: new Date() } });
+      await db.insert(campaignParticipants).values({ campaignId: input.campaignId, residentId: ctx.eco.resident.id }).onConflictDoUpdate({ target: [campaignParticipants.campaignId, campaignParticipants.residentId], set: { joinedAt: new Date() } });
       return { success: true };
     }),
   }),
@@ -173,13 +173,13 @@ export const sustainabilityRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
       if (ctx.eco.profile.role !== "morador" || !ctx.eco.resident) throw new TRPCError({ code: "FORBIDDEN", message: "Apenas moradores podem enviar feedback." });
-      const inserted = await db.insert(collectionFeedback).values({ condominiumId: ctx.eco.condominium.id, residentId: ctx.eco.resident.id, collectionId: input.collectionId || null, rating: input.rating, message: input.message });
-      return { id: Number(inserted[0].insertId) };
+      const inserted = await db.insert(collectionFeedback).values({ condominiumId: ctx.eco.condominium.id, residentId: ctx.eco.resident.id, collectionId: input.collectionId || null, rating: input.rating, message: input.message }).returning({ id: collectionFeedback.id });
+      return { id: inserted[0].id };
     }),
     respond: administratorOnly.input(z.object({ id: z.number().int().positive(), response: z.string().trim().min(3).max(1500), status: z.enum(feedbackStatuses).default("respondido") })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      await db.update(collectionFeedback).set({ response: input.response, status: input.status, respondedByUserId: ctx.user.id, respondedAt: new Date() }).where(and(eq(collectionFeedback.id, input.id), eq(collectionFeedback.condominiumId, ctx.eco.condominium.id)));
+      await db.update(collectionFeedback).set({ response: input.response, status: input.status, respondedByUserId: ctx.user.id, respondedAt: new Date(), updatedAt: new Date() }).where(and(eq(collectionFeedback.id, input.id), eq(collectionFeedback.condominiumId, ctx.eco.condominium.id)));
       return { success: true };
     }),
   }),

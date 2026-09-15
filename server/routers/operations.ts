@@ -41,8 +41,8 @@ export const operationsRouter = router({
         ...input,
         email: input.email || null,
         phone: input.phone || null,
-      });
-      return { id: Number(inserted[0].insertId) };
+      }).returning({ id: residents.id });
+      return { id: inserted[0].id };
     }),
     update: administratorOnly.input(residentInput.partial().extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -52,10 +52,10 @@ export const operationsRouter = router({
       if (!existing[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Morador não encontrado." });
       const nextEmail = update.email === undefined ? existing[0].email : update.email || null;
       const nextPhone = update.phone === undefined ? existing[0].phone : update.phone || null;
-      await db.update(residents).set({ ...update, email: nextEmail, phone: nextPhone }).where(eq(residents.id, id));
+      await db.update(residents).set({ ...update, email: nextEmail, phone: nextPhone, updatedAt: new Date() }).where(eq(residents.id, id));
       const person = await db.select().from(people).where(eq(people.residentId, id)).limit(1);
       if (person[0]) {
-        await db.update(people).set({ name: update.name ?? existing[0].name, email: nextEmail || person[0].email, phone: nextPhone, block: update.block ?? existing[0].block, apartment: update.apartment ?? existing[0].apartment }).where(eq(people.id, person[0].id));
+        await db.update(people).set({ name: update.name ?? existing[0].name, email: nextEmail || person[0].email, phone: nextPhone, block: update.block ?? existing[0].block, apartment: update.apartment ?? existing[0].apartment, updatedAt: new Date() }).where(eq(people.id, person[0].id));
       } else if (nextEmail) {
         await db.insert(people).values({ condominiumId: ctx.eco.condominium.id, ...buildPendingResidentPerson({ id, userId: existing[0].userId, name: update.name ?? existing[0].name, email: nextEmail, phone: nextPhone, block: update.block ?? existing[0].block, apartment: update.apartment ?? existing[0].apartment }) });
       }
@@ -131,8 +131,8 @@ export const operationsRouter = router({
         block,
         scheduledAt: input.scheduledAt,
         notes: input.notes || null,
-      });
-      const collectionId = Number(inserted[0].insertId);
+      }).returning({ id: collections.id });
+      const collectionId = inserted[0].id;
       await writeAuditLog(db, {
         condominiumId: ctx.eco.condominium.id,
         actorUserId: ctx.user.id,
@@ -192,6 +192,7 @@ export const operationsRouter = router({
         completedAt,
         collectorUserId: collection.collectorUserId ?? ctx.user.id,
         notes: completion.notes,
+        updatedAt: new Date(),
       }).where(eq(collections.id, collection.id));
       await writeAuditLog(db, {
         condominiumId: ctx.eco.condominium.id,
@@ -212,7 +213,7 @@ export const operationsRouter = router({
       });
 
       if (collection.residentId && pointDelta !== 0) {
-        await db.update(residents).set({ points: sql`${residents.points} + ${pointDelta}` }).where(eq(residents.id, collection.residentId));
+        await db.update(residents).set({ points: sql`${residents.points} + ${pointDelta}`, updatedAt: new Date() }).where(eq(residents.id, collection.residentId));
       }
       if (collection.residentId) {
         const resident = await db.select().from(residents).where(eq(residents.id, collection.residentId)).limit(1);

@@ -29,7 +29,7 @@ describe("vínculo de pessoa pendente no primeiro login", () => {
     const db = {
       select: vi.fn(() => chain(responses.shift() ?? [])),
       update: vi.fn(() => ({ set: updateSet })),
-      insert: vi.fn(() => ({ values: vi.fn(async () => [{ insertId: 20 }]) })),
+      insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: vi.fn(async () => [{ id: 20 }]) })) })),
     };
     mockedGetDb.mockResolvedValue(db as never);
 

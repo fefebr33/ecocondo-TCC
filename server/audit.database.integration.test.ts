@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import mysql, { type Connection, type RowDataPacket } from "mysql2/promise";
-import { drizzle } from "drizzle-orm/mysql2";
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import { writeAuditLog } from "./audit";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
@@ -20,25 +20,32 @@ function administratorContext(userId: number) {
 }
 
 describeWithDatabase("auditoria com banco isolado por transação", () => {
-  let connection: Connection;
+  let connection: Database.Database;
   let db: ReturnType<typeof drizzle>;
 
   beforeAll(async () => {
-    connection = await mysql.createConnection(databaseUrl!);
-    db = drizzle({ client: connection });
+    connection = new Database(databaseUrl!);
+    db = drizzle(connection);
     vi.mocked(getDb).mockResolvedValue(db as any);
+
+    const hasAdministrator = connection.prepare("SELECT id FROM user_profiles WHERE role = 'administrador' LIMIT 1").get();
+    if (!hasAdministrator) {
+      const condominiumId = (connection.prepare("INSERT INTO condominiums (name, blockCount) VALUES ('Condomínio de teste', 1) RETURNING id").get() as { id: number }).id;
+      const userId = (connection.prepare("INSERT INTO users (openId, name, role) VALUES ('teste-admin-seed', 'Administrador de teste', 'admin') RETURNING id").get() as { id: number }).id;
+      connection.prepare("INSERT INTO user_profiles (userId, condominiumId, role) VALUES (?, ?, 'administrador')").run(userId, condominiumId);
+    }
   });
 
   beforeEach(async () => {
-    await connection.beginTransaction();
+    connection.exec("BEGIN");
   });
 
   afterEach(async () => {
-    await connection.rollback();
+    connection.exec("ROLLBACK");
   });
 
   afterAll(async () => {
-    await connection.end();
+    connection.close();
   });
 
   it("insere e consulta um evento sem conservar dado de teste após a transação", async () => {
@@ -53,7 +60,7 @@ describeWithDatabase("auditoria com banco isolado por transação", () => {
       beforeState: { status: "agendada" },
       afterState: { status: "concluida", weightGrams: 1000 },
     });
-    const [rows] = await connection.execute<RowDataPacket[]>("SELECT `summary`, `beforeState`, `afterState` FROM `audit_logs` WHERE `summary` = ?", [marker]);
+    const rows = connection.prepare("SELECT summary, beforeState, afterState FROM audit_logs WHERE summary = ?").all(marker) as Array<{ summary: string; beforeState: string; afterState: string }>;
     expect(rows).toHaveLength(1);
     expect(rows[0].summary).toBe(marker);
     expect(rows[0].beforeState).toContain("agendada");
@@ -61,15 +68,14 @@ describeWithDatabase("auditoria com banco isolado por transação", () => {
   });
 
   it("exporta somente a coleta temporária filtrada por período, bloco e categoria antes do rollback", async () => {
-    const [administrators] = await connection.execute<RowDataPacket[]>("SELECT `userId`, `condominiumId` FROM `user_profiles` WHERE `role` = 'administrador' LIMIT 1");
-    const administrator = administrators[0];
+    const administrator = connection.prepare("SELECT userId, condominiumId FROM user_profiles WHERE role = 'administrador' LIMIT 1").get() as { userId: number; condominiumId: number } | undefined;
     expect(administrator).toBeTruthy();
     const marker = `CSV-${Date.now()}`;
     const excludedMarker = `EXCLUIR-${Date.now()}`;
-    const scheduledAt = new Date("2026-08-25T12:00:00Z");
-    await connection.execute("INSERT INTO `collections` (`condominiumId`, `residentId`, `createdByUserId`, `collectorUserId`, `wasteType`, `block`, `scheduledAt`, `completedAt`, `weightGrams`, `pointsAwarded`, `status`, `notes`) VALUES (?, NULL, ?, NULL, 'reciclavel', ?, ?, ?, 2345, 2, 'concluida', ?)", [administrator.condominiumId, administrator.userId, marker, scheduledAt, scheduledAt, marker]);
-    await connection.execute("INSERT INTO `collections` (`condominiumId`, `residentId`, `createdByUserId`, `collectorUserId`, `wasteType`, `block`, `scheduledAt`, `completedAt`, `weightGrams`, `pointsAwarded`, `status`, `notes`) VALUES (?, NULL, ?, NULL, 'organico', ?, ?, ?, 3000, 0, 'concluida', ?)", [administrator.condominiumId, administrator.userId, excludedMarker, scheduledAt, scheduledAt, excludedMarker]);
-    const caller = appRouter.createCaller(administratorContext(Number(administrator.userId)));
+    const scheduledAt = Math.floor(new Date("2026-08-25T12:00:00Z").getTime() / 1000);
+    connection.prepare("INSERT INTO collections (condominiumId, residentId, createdByUserId, collectorUserId, wasteType, block, scheduledAt, completedAt, weightGrams, pointsAwarded, status, notes) VALUES (?, NULL, ?, NULL, 'reciclavel', ?, ?, ?, 2345, 2, 'concluida', ?)").run(administrator!.condominiumId, administrator!.userId, marker, scheduledAt, scheduledAt, marker);
+    connection.prepare("INSERT INTO collections (condominiumId, residentId, createdByUserId, collectorUserId, wasteType, block, scheduledAt, completedAt, weightGrams, pointsAwarded, status, notes) VALUES (?, NULL, ?, NULL, 'organico', ?, ?, ?, 3000, 0, 'concluida', ?)").run(administrator!.condominiumId, administrator!.userId, excludedMarker, scheduledAt, scheduledAt, excludedMarker);
+    const caller = appRouter.createCaller(administratorContext(Number(administrator!.userId)));
     const csv = await caller.reports.exportCsv({ startDate: new Date("2026-08-25T00:00:00Z"), endDate: new Date("2026-08-25T23:59:59Z"), block: marker, wasteType: "reciclavel" });
     expect(csv.content).toContain(`"${marker}"`);
     expect(csv.content).toContain('"2,35"');
