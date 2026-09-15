@@ -8,31 +8,31 @@ describe("persistência isolada da auditoria", () => {
       insert: () => ({ values: async (value: Record<string, unknown>) => { stored.push(value); return [{ insertId: 1 }]; } }),
     };
     await writeAuditLog(isolatedDb, {
-      condominiumId: 7,
-      actorUserId: 12,
-      entityType: "coleta",
-      entityId: 25,
-      action: "coleta_atualizada",
-      summary: "Coleta atualizada para o status concluida.",
-      beforeState: collectionAuditState({ status: "agendada", weightGrams: null, pointsAwarded: 0, collectorUserId: null, scheduledAt: new Date("2026-08-20T10:00:00Z"), completedAt: null, notes: null }),
-      afterState: { status: "concluida", weightGrams: 1200, pointsAwarded: 1 },
+      condominioId: 7,
+      autorId: 12,
+      tipoEntidade: "coleta",
+      entidadeId: 25,
+      acao: "coleta_atualizada",
+      resumo: "Coleta atualizada para o status concluida.",
+      estadoAnterior: collectionAuditState({ status: "agendada", pesoGramas: null, pontosConcedidos: 0, coletorId: null, agendadaPara: new Date("2026-08-20T10:00:00Z"), concluidaEm: null, observacoes: null }),
+      estadoNovo: { status: "concluida", pesoGramas: 1200, pontosConcedidos: 1 },
     });
     expect(stored).toHaveLength(1);
-    expect(stored[0]).toMatchObject({ condominiumId: 7, actorUserId: 12, entityType: "coleta", entityId: 25, action: "coleta_atualizada" });
-    expect(String(stored[0].beforeState)).toContain("agendada");
-    expect(String(stored[0].afterState)).toContain("1200");
+    expect(stored[0]).toMatchObject({ condominioId: 7, autorId: 12, tipoEntidade: "coleta", entidadeId: 25, acao: "coleta_atualizada" });
+    expect(String(stored[0].estadoAnterior)).toContain("agendada");
+    expect(String(stored[0].estadoNovo)).toContain("1200");
   });
 
   it("preserva os dados relevantes da ocorrência antes da resolução", () => {
-    expect(incidentAuditState({ status: "aberta", block: "B", wasteType: "perigoso", location: "Sala de descarte", description: "Pilha descartada incorretamente", resolutionNote: null, resolvedByUserId: null, resolvedAt: null })).toEqual({
+    expect(incidentAuditState({ status: "aberta", bloco: "B", tipoResiduo: "perigoso", local: "Sala de descarte", descricao: "Pilha descartada incorretamente", notaResolucao: null, resolvidoPorId: null, resolvidaEm: null })).toEqual({
       status: "aberta",
-      block: "B",
-      wasteType: "perigoso",
-      location: "Sala de descarte",
-      description: "Pilha descartada incorretamente",
-      resolutionNote: null,
-      resolvedByUserId: null,
-      resolvedAt: null,
+      bloco: "B",
+      tipoResiduo: "perigoso",
+      local: "Sala de descarte",
+      descricao: "Pilha descartada incorretamente",
+      notaResolucao: null,
+      resolvidoPorId: null,
+      resolvidaEm: null,
     });
   });
 });

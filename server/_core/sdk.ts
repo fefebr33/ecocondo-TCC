@@ -93,12 +93,12 @@ class SDKServer {
     const user = await db.getUserByOpenId(session.openId);
     if (!user) throw ForbiddenError("Usuário não encontrado.");
 
-    await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
+    await db.upsertUser({ idExterno: user.idExterno, ultimoAcesso: new Date() });
 
     return user;
   }
 }
 
-export type AuthenticatedUser = import("../../drizzle/schema").User;
+export type AuthenticatedUser = import("../../drizzle/schema").Usuario;
 
 export const sdk = new SDKServer();

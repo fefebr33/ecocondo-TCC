@@ -7,7 +7,7 @@ describe("regras de cadastro unificado", () => {
   });
 
   it("prepara um cadastro de morador pendente ou ativo conforme o vínculo existente", () => {
-    expect(buildPendingResidentPerson({ id: 9, userId: null, name: "Ana", email: "ANA@EXEMPLO.COM", phone: null, block: "B", apartment: "22" })).toMatchObject({ residentId: 9, email: "ana@exemplo.com", role: "morador", accessStatus: "pendente" });
-    expect(buildPendingResidentPerson({ id: 10, userId: 4, name: "Bruno", email: "bruno@exemplo.com", phone: "11999999999", block: "A", apartment: "10" })).toMatchObject({ userId: 4, accessStatus: "ativo" });
+    expect(buildPendingResidentPerson({ id: 9, usuarioId: null, nome: "Ana", email: "ANA@EXEMPLO.COM", telefone: null, bloco: "B", apartamento: "22" })).toMatchObject({ moradorId: 9, email: "ana@exemplo.com", papel: "morador", statusAcesso: "pendente" });
+    expect(buildPendingResidentPerson({ id: 10, usuarioId: 4, nome: "Bruno", email: "bruno@exemplo.com", telefone: "11999999999", bloco: "A", apartamento: "10" })).toMatchObject({ usuarioId: 4, statusAcesso: "ativo" });
   });
 });

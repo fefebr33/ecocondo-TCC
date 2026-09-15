@@ -1,57 +1,57 @@
-import { auditLogs, auditEntityTypes } from "../drizzle/schema";
+import { logsAuditoria, tiposEntidadeAuditoria } from "../drizzle/schema";
 
-type AuditEntityType = (typeof auditEntityTypes)[number];
+type TipoEntidadeAuditoria = (typeof tiposEntidadeAuditoria)[number];
 
-export type AuditLogEntry = {
-  condominiumId: number;
-  actorUserId: number;
-  entityType: AuditEntityType;
-  entityId: number;
-  action: string;
-  summary: string;
-  beforeState?: Record<string, unknown> | null;
-  afterState?: Record<string, unknown> | null;
+export type RegistroAuditoria = {
+  condominioId: number;
+  autorId: number;
+  tipoEntidade: TipoEntidadeAuditoria;
+  entidadeId: number;
+  acao: string;
+  resumo: string;
+  estadoAnterior?: Record<string, unknown> | null;
+  estadoNovo?: Record<string, unknown> | null;
 };
 
-function serializeState(value: Record<string, unknown> | null | undefined) {
-  if (!value) return null;
-  return JSON.stringify(value, (_key, item) => item instanceof Date ? item.toISOString() : item);
+function serializarEstado(valor: Record<string, unknown> | null | undefined) {
+  if (!valor) return null;
+  return JSON.stringify(valor, (_chave, item) => (item instanceof Date ? item.toISOString() : item));
 }
 
-export async function writeAuditLog(db: any, entry: AuditLogEntry) {
-  await db.insert(auditLogs).values({
-    condominiumId: entry.condominiumId,
-    actorUserId: entry.actorUserId,
-    entityType: entry.entityType,
-    entityId: entry.entityId,
-    action: entry.action,
-    summary: entry.summary,
-    beforeState: serializeState(entry.beforeState),
-    afterState: serializeState(entry.afterState),
+export async function writeAuditLog(db: any, registro: RegistroAuditoria) {
+  await db.insert(logsAuditoria).values({
+    condominioId: registro.condominioId,
+    autorId: registro.autorId,
+    tipoEntidade: registro.tipoEntidade,
+    entidadeId: registro.entidadeId,
+    acao: registro.acao,
+    resumo: registro.resumo,
+    estadoAnterior: serializarEstado(registro.estadoAnterior),
+    estadoNovo: serializarEstado(registro.estadoNovo),
   });
 }
 
-export function collectionAuditState(record: { status: string; weightGrams: number | null; pointsAwarded: number; collectorUserId: number | null; scheduledAt: Date; completedAt: Date | null; notes: string | null }) {
+export function collectionAuditState(registro: { status: string; pesoGramas: number | null; pontosConcedidos: number; coletorId: number | null; agendadaPara: Date; concluidaEm: Date | null; observacoes: string | null }) {
   return {
-    status: record.status,
-    weightGrams: record.weightGrams,
-    pointsAwarded: record.pointsAwarded,
-    collectorUserId: record.collectorUserId,
-    scheduledAt: record.scheduledAt,
-    completedAt: record.completedAt,
-    notes: record.notes,
+    status: registro.status,
+    pesoGramas: registro.pesoGramas,
+    pontosConcedidos: registro.pontosConcedidos,
+    coletorId: registro.coletorId,
+    agendadaPara: registro.agendadaPara,
+    concluidaEm: registro.concluidaEm,
+    observacoes: registro.observacoes,
   };
 }
 
-export function incidentAuditState(record: { status: string; block: string; wasteType: string; location: string; description: string; resolutionNote: string | null; resolvedByUserId: number | null; resolvedAt: Date | null }) {
+export function incidentAuditState(registro: { status: string; bloco: string; tipoResiduo: string; local: string; descricao: string; notaResolucao: string | null; resolvidoPorId: number | null; resolvidaEm: Date | null }) {
   return {
-    status: record.status,
-    block: record.block,
-    wasteType: record.wasteType,
-    location: record.location,
-    description: record.description,
-    resolutionNote: record.resolutionNote,
-    resolvedByUserId: record.resolvedByUserId,
-    resolvedAt: record.resolvedAt,
+    status: registro.status,
+    bloco: registro.bloco,
+    tipoResiduo: registro.tipoResiduo,
+    local: registro.local,
+    descricao: registro.descricao,
+    notaResolucao: registro.notaResolucao,
+    resolvidoPorId: registro.resolvidoPorId,
+    resolvidaEm: registro.resolvidaEm,
   };
 }

@@ -7,292 +7,292 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-const now = sql`(unixepoch())`;
+const agora = sql`(unixepoch())`;
 
 /** Tabela central de identidade dos usuários autenticados. */
-export const users = sqliteTable("users", {
+export const usuarios = sqliteTable("usuarios", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  openId: text("openId").notNull().unique(),
-  name: text("name"),
+  idExterno: text("id_externo").notNull().unique(),
+  nome: text("nome"),
   email: text("email"),
-  loginMethod: text("loginMethod"),
-  role: text("role", { enum: ["user", "admin"] }).default("user").notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
-  lastSignedIn: integer("lastSignedIn", { mode: "timestamp" }).default(now).notNull(),
+  metodoLogin: text("metodo_login"),
+  papel: text("papel", { enum: ["usuario", "administrador"] }).default("usuario").notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
+  ultimoAcesso: integer("ultimo_acesso", { mode: "timestamp" }).default(agora).notNull(),
 });
 
-export const condominiums = sqliteTable("condominiums", {
+export const condominios = sqliteTable("condominios", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull(),
-  address: text("address"),
-  city: text("city"),
-  state: text("state"),
-  blockCount: integer("blockCount").default(1).notNull(),
-  isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  nome: text("nome").notNull(),
+  endereco: text("endereco"),
+  cidade: text("cidade"),
+  estado: text("estado"),
+  quantidadeBlocos: integer("quantidade_blocos").default(1).notNull(),
+  ativo: integer("ativo", { mode: "boolean" }).default(true).notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 });
 
-export const ecoRoles = ["administrador", "coletor", "morador"] as const;
-export const accessStatuses = ["pendente", "ativo"] as const;
-export const residentStatuses = ["ativo", "inativo"] as const;
-export const wasteTypes = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"] as const;
-export const collectionStatuses = ["agendada", "em_andamento", "concluida", "cancelada", "ocorrencia"] as const;
-export const notificationKinds = ["coleta_agendada", "coleta_concluida", "lembrete_coleta", "comunicado", "sistema"] as const;
-export const auditEntityTypes = ["coleta", "ocorrencia"] as const;
-export const redemptionStatuses = ["solicitado", "aprovado", "entregue", "cancelado"] as const;
-export const incidentStatuses = ["aberta", "em_analise", "resolvida"] as const;
-export const campaignStatuses = ["planejada", "ativa", "encerrada"] as const;
-export const feedbackStatuses = ["novo", "respondido", "arquivado"] as const;
+export const papeisEco = ["administrador", "coletor", "morador"] as const;
+export const statusAcesso = ["pendente", "ativo"] as const;
+export const statusMorador = ["ativo", "inativo"] as const;
+export const tiposResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"] as const;
+export const statusColeta = ["agendada", "em_andamento", "concluida", "cancelada", "ocorrencia"] as const;
+export const tiposNotificacao = ["coleta_agendada", "coleta_concluida", "lembrete_coleta", "comunicado", "sistema"] as const;
+export const tiposEntidadeAuditoria = ["coleta", "ocorrencia"] as const;
+export const statusResgate = ["solicitado", "aprovado", "entregue", "cancelado"] as const;
+export const statusOcorrencia = ["aberta", "em_analise", "resolvida"] as const;
+export const statusCampanha = ["planejada", "ativa", "encerrada"] as const;
+export const statusAvaliacao = ["nova", "respondida", "arquivada"] as const;
 
-export const residents = sqliteTable("residents", {
+export const moradores = sqliteTable("moradores", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  userId: integer("userId"),
-  name: text("name").notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  usuarioId: integer("usuario_id"),
+  nome: text("nome").notNull(),
   email: text("email"),
-  phone: text("phone"),
-  block: text("block").notNull(),
-  apartment: text("apartment").notNull(),
-  status: text("status", { enum: residentStatuses }).default("ativo").notNull(),
-  points: integer("points").default(0).notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  telefone: text("telefone"),
+  bloco: text("bloco").notNull(),
+  apartamento: text("apartamento").notNull(),
+  status: text("status", { enum: statusMorador }).default("ativo").notNull(),
+  pontos: integer("pontos").default(0).notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  index("residents_condominium_idx").on(table.condominiumId),
-  uniqueIndex("residents_user_unique").on(table.userId),
+  index("moradores_condominio_idx").on(table.condominioId),
+  uniqueIndex("moradores_usuario_unique").on(table.usuarioId),
 ]);
 
-export const userProfiles = sqliteTable("user_profiles", {
+export const perfisAcesso = sqliteTable("perfis_acesso", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: integer("userId").notNull(),
-  condominiumId: integer("condominiumId").notNull(),
-  residentId: integer("residentId"),
-  role: text("role", { enum: ecoRoles }).default("morador").notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  usuarioId: integer("usuario_id").notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  moradorId: integer("morador_id"),
+  papel: text("papel", { enum: papeisEco }).default("morador").notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  uniqueIndex("user_profiles_user_unique").on(table.userId),
-  index("user_profiles_condominium_idx").on(table.condominiumId),
+  uniqueIndex("perfis_acesso_usuario_unique").on(table.usuarioId),
+  index("perfis_acesso_condominio_idx").on(table.condominioId),
 ]);
 
-export const people = sqliteTable("people", {
+export const pessoas = sqliteTable("pessoas", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  userId: integer("userId"),
-  residentId: integer("residentId"),
-  name: text("name").notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  usuarioId: integer("usuario_id"),
+  moradorId: integer("morador_id"),
+  nome: text("nome").notNull(),
   email: text("email").notNull(),
-  phone: text("phone"),
-  block: text("block"),
-  apartment: text("apartment"),
-  role: text("role", { enum: ecoRoles }).default("morador").notNull(),
-  accessStatus: text("accessStatus", { enum: accessStatuses }).default("pendente").notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  telefone: text("telefone"),
+  bloco: text("bloco"),
+  apartamento: text("apartamento"),
+  papel: text("papel", { enum: papeisEco }).default("morador").notNull(),
+  statusAcesso: text("status_acesso", { enum: statusAcesso }).default("pendente").notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  uniqueIndex("people_condominium_email_unique").on(table.condominiumId, table.email),
-  uniqueIndex("people_user_unique").on(table.userId),
-  index("people_condominium_idx").on(table.condominiumId),
+  uniqueIndex("pessoas_condominio_email_unique").on(table.condominioId, table.email),
+  uniqueIndex("pessoas_usuario_unique").on(table.usuarioId),
+  index("pessoas_condominio_idx").on(table.condominioId),
 ]);
 
-export const collections = sqliteTable("collections", {
+export const coletas = sqliteTable("coletas", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  residentId: integer("residentId"),
-  createdByUserId: integer("createdByUserId").notNull(),
-  collectorUserId: integer("collectorUserId"),
-  wasteType: text("wasteType", { enum: wasteTypes }).notNull(),
-  block: text("block").notNull(),
-  scheduledAt: integer("scheduledAt", { mode: "timestamp" }).notNull(),
-  completedAt: integer("completedAt", { mode: "timestamp" }),
-  weightGrams: integer("weightGrams"),
-  pointsAwarded: integer("pointsAwarded").default(0).notNull(),
-  status: text("status", { enum: collectionStatuses }).default("agendada").notNull(),
-  notes: text("notes"),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  moradorId: integer("morador_id"),
+  criadoPorId: integer("criado_por_id").notNull(),
+  coletorId: integer("coletor_id"),
+  tipoResiduo: text("tipo_residuo", { enum: tiposResiduo }).notNull(),
+  bloco: text("bloco").notNull(),
+  agendadaPara: integer("agendada_para", { mode: "timestamp" }).notNull(),
+  concluidaEm: integer("concluida_em", { mode: "timestamp" }),
+  pesoGramas: integer("peso_gramas"),
+  pontosConcedidos: integer("pontos_concedidos").default(0).notNull(),
+  status: text("status", { enum: statusColeta }).default("agendada").notNull(),
+  observacoes: text("observacoes"),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  index("collections_condominium_idx").on(table.condominiumId),
-  index("collections_status_idx").on(table.status),
-  index("collections_scheduled_idx").on(table.scheduledAt),
-  index("collections_condominium_scheduled_idx").on(table.condominiumId, table.scheduledAt),
-  index("collections_condominium_status_scheduled_idx").on(table.condominiumId, table.status, table.scheduledAt),
-  index("collections_condominium_block_scheduled_idx").on(table.condominiumId, table.block, table.scheduledAt),
+  index("coletas_condominio_idx").on(table.condominioId),
+  index("coletas_status_idx").on(table.status),
+  index("coletas_agendada_idx").on(table.agendadaPara),
+  index("coletas_condominio_agendada_idx").on(table.condominioId, table.agendadaPara),
+  index("coletas_condominio_status_agendada_idx").on(table.condominioId, table.status, table.agendadaPara),
+  index("coletas_condominio_bloco_agendada_idx").on(table.condominioId, table.bloco, table.agendadaPara),
 ]);
 
-export const auditLogs = sqliteTable("audit_logs", {
+export const logsAuditoria = sqliteTable("logs_auditoria", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  actorUserId: integer("actorUserId").notNull(),
-  entityType: text("entityType", { enum: auditEntityTypes }).notNull(),
-  entityId: integer("entityId").notNull(),
-  action: text("action").notNull(),
-  summary: text("summary").notNull(),
-  beforeState: text("beforeState"),
-  afterState: text("afterState"),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  autorId: integer("autor_id").notNull(),
+  tipoEntidade: text("tipo_entidade", { enum: tiposEntidadeAuditoria }).notNull(),
+  entidadeId: integer("entidade_id").notNull(),
+  acao: text("acao").notNull(),
+  resumo: text("resumo").notNull(),
+  estadoAnterior: text("estado_anterior"),
+  estadoNovo: text("estado_novo"),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  index("audit_logs_condominium_created_idx").on(table.condominiumId, table.createdAt),
-  index("audit_logs_entity_idx").on(table.entityType, table.entityId),
-  index("audit_logs_actor_created_idx").on(table.actorUserId, table.createdAt),
+  index("logs_auditoria_condominio_criado_idx").on(table.condominioId, table.criadoEm),
+  index("logs_auditoria_entidade_idx").on(table.tipoEntidade, table.entidadeId),
+  index("logs_auditoria_autor_criado_idx").on(table.autorId, table.criadoEm),
 ]);
 
-export const notifications = sqliteTable("notifications", {
+export const notificacoes = sqliteTable("notificacoes", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  recipientUserId: integer("recipientUserId"),
-  collectionId: integer("collectionId"),
-  kind: text("kind", { enum: notificationKinds }).notNull(),
-  title: text("title").notNull(),
-  message: text("message").notNull(),
-  readAt: integer("readAt", { mode: "timestamp" }),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  destinatarioId: integer("destinatario_id"),
+  coletaId: integer("coleta_id"),
+  tipo: text("tipo", { enum: tiposNotificacao }).notNull(),
+  titulo: text("titulo").notNull(),
+  mensagem: text("mensagem").notNull(),
+  lidaEm: integer("lida_em", { mode: "timestamp" }),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  index("notifications_recipient_idx").on(table.recipientUserId),
-  index("notifications_condominium_idx").on(table.condominiumId),
+  index("notificacoes_destinatario_idx").on(table.destinatarioId),
+  index("notificacoes_condominio_idx").on(table.condominioId),
 ]);
 
-export const notificationReads = sqliteTable("notification_reads", {
+export const notificacoesLidas = sqliteTable("notificacoes_lidas", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  notificationId: integer("notificationId").notNull(),
-  userId: integer("userId").notNull(),
-  readAt: integer("readAt", { mode: "timestamp" }).default(now).notNull(),
+  notificacaoId: integer("notificacao_id").notNull(),
+  usuarioId: integer("usuario_id").notNull(),
+  lidaEm: integer("lida_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  uniqueIndex("notification_reads_notification_user_unique").on(table.notificationId, table.userId),
-  index("notification_reads_user_idx").on(table.userId),
+  uniqueIndex("notificacoes_lidas_notificacao_usuario_unique").on(table.notificacaoId, table.usuarioId),
+  index("notificacoes_lidas_usuario_idx").on(table.usuarioId),
 ]);
 
-export const rewards = sqliteTable("rewards", {
+export const recompensas = sqliteTable("recompensas", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  pointsCost: integer("pointsCost").notNull(),
-  stock: integer("stock"),
-  isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
-}, (table) => [index("rewards_condominium_idx").on(table.condominiumId)]);
+  condominioId: integer("condominio_id").notNull(),
+  titulo: text("titulo").notNull(),
+  descricao: text("descricao").notNull(),
+  custoPontos: integer("custo_pontos").notNull(),
+  estoque: integer("estoque"),
+  ativo: integer("ativo", { mode: "boolean" }).default(true).notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
+}, (table) => [index("recompensas_condominio_idx").on(table.condominioId)]);
 
-export const redemptions = sqliteTable("redemptions", {
+export const resgates = sqliteTable("resgates", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  residentId: integer("residentId").notNull(),
-  rewardId: integer("rewardId").notNull(),
-  pointsSpent: integer("pointsSpent").notNull(),
-  status: text("status", { enum: redemptionStatuses }).default("solicitado").notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  moradorId: integer("morador_id").notNull(),
+  recompensaId: integer("recompensa_id").notNull(),
+  pontosGastos: integer("pontos_gastos").notNull(),
+  status: text("status", { enum: statusResgate }).default("solicitado").notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  index("redemptions_resident_idx").on(table.residentId),
-  index("redemptions_condominium_idx").on(table.condominiumId),
+  index("resgates_morador_idx").on(table.moradorId),
+  index("resgates_condominio_idx").on(table.condominioId),
 ]);
 
-export const disposalGuides = sqliteTable("disposal_guides", {
+export const guiasDescarte = sqliteTable("guias_descarte", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  wasteType: text("wasteType", { enum: wasteTypes }).notNull(),
-  title: text("title").notNull(),
-  acceptedItems: text("acceptedItems").notNull(),
-  rejectedItems: text("rejectedItems").notNull(),
-  instructions: text("instructions").notNull(),
-  isPublished: integer("isPublished", { mode: "boolean" }).default(true).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  tipoResiduo: text("tipo_residuo", { enum: tiposResiduo }).notNull(),
+  titulo: text("titulo").notNull(),
+  itensAceitos: text("itens_aceitos").notNull(),
+  itensRejeitados: text("itens_rejeitados").notNull(),
+  instrucoes: text("instrucoes").notNull(),
+  publicado: integer("publicado", { mode: "boolean" }).default(true).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  uniqueIndex("guides_condominium_waste_unique").on(table.condominiumId, table.wasteType),
+  uniqueIndex("guias_condominio_residuo_unique").on(table.condominioId, table.tipoResiduo),
 ]);
 
-export const blockGoals = sqliteTable("block_goals", {
+export const metasBloco = sqliteTable("metas_bloco", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  block: text("block").notNull(),
-  title: text("title").notNull(),
-  targetKg: integer("targetKg").notNull(),
-  startDate: integer("startDate", { mode: "timestamp" }).notNull(),
-  endDate: integer("endDate", { mode: "timestamp" }).notNull(),
-  createdByUserId: integer("createdByUserId").notNull(),
-  isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  bloco: text("bloco").notNull(),
+  titulo: text("titulo").notNull(),
+  metaKg: integer("meta_kg").notNull(),
+  dataInicio: integer("data_inicio", { mode: "timestamp" }).notNull(),
+  dataFim: integer("data_fim", { mode: "timestamp" }).notNull(),
+  criadoPorId: integer("criado_por_id").notNull(),
+  ativo: integer("ativo", { mode: "boolean" }).default(true).notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  index("block_goals_condominium_idx").on(table.condominiumId),
-  index("block_goals_period_idx").on(table.startDate, table.endDate),
+  index("metas_bloco_condominio_idx").on(table.condominioId),
+  index("metas_bloco_periodo_idx").on(table.dataInicio, table.dataFim),
 ]);
 
-export const incidents = sqliteTable("incidents", {
+export const ocorrencias = sqliteTable("ocorrencias", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  reporterUserId: integer("reporterUserId").notNull(),
-  block: text("block").notNull(),
-  wasteType: text("wasteType", { enum: wasteTypes }).notNull(),
-  location: text("location").notNull(),
-  description: text("description").notNull(),
-  imageKey: text("imageKey"),
-  imageUrl: text("imageUrl"),
-  status: text("status", { enum: incidentStatuses }).default("aberta").notNull(),
-  resolutionNote: text("resolutionNote"),
-  resolvedByUserId: integer("resolvedByUserId"),
-  resolvedAt: integer("resolvedAt", { mode: "timestamp" }),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  relatorId: integer("relator_id").notNull(),
+  bloco: text("bloco").notNull(),
+  tipoResiduo: text("tipo_residuo", { enum: tiposResiduo }).notNull(),
+  local: text("local").notNull(),
+  descricao: text("descricao").notNull(),
+  chaveImagem: text("chave_imagem"),
+  urlImagem: text("url_imagem"),
+  status: text("status", { enum: statusOcorrencia }).default("aberta").notNull(),
+  notaResolucao: text("nota_resolucao"),
+  resolvidoPorId: integer("resolvido_por_id"),
+  resolvidaEm: integer("resolvida_em", { mode: "timestamp" }),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  index("incidents_condominium_idx").on(table.condominiumId),
-  index("incidents_status_idx").on(table.status),
-  index("incidents_condominium_status_created_idx").on(table.condominiumId, table.status, table.createdAt),
+  index("ocorrencias_condominio_idx").on(table.condominioId),
+  index("ocorrencias_status_idx").on(table.status),
+  index("ocorrencias_condominio_status_criado_idx").on(table.condominioId, table.status, table.criadoEm),
 ]);
 
-export const campaigns = sqliteTable("campaigns", {
+export const campanhas = sqliteTable("campanhas", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  targetDescription: text("targetDescription").notNull(),
-  startDate: integer("startDate", { mode: "timestamp" }).notNull(),
-  endDate: integer("endDate", { mode: "timestamp" }).notNull(),
-  status: text("status", { enum: campaignStatuses }).default("planejada").notNull(),
-  createdByUserId: integer("createdByUserId").notNull(),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  titulo: text("titulo").notNull(),
+  descricao: text("descricao").notNull(),
+  descricaoMeta: text("descricao_meta").notNull(),
+  dataInicio: integer("data_inicio", { mode: "timestamp" }).notNull(),
+  dataFim: integer("data_fim", { mode: "timestamp" }).notNull(),
+  status: text("status", { enum: statusCampanha }).default("planejada").notNull(),
+  criadoPorId: integer("criado_por_id").notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  index("campaigns_condominium_idx").on(table.condominiumId),
-  index("campaigns_period_idx").on(table.startDate, table.endDate),
+  index("campanhas_condominio_idx").on(table.condominioId),
+  index("campanhas_periodo_idx").on(table.dataInicio, table.dataFim),
 ]);
 
-export const campaignParticipants = sqliteTable("campaign_participants", {
+export const participantesCampanha = sqliteTable("participantes_campanha", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  campaignId: integer("campaignId").notNull(),
-  residentId: integer("residentId").notNull(),
-  joinedAt: integer("joinedAt", { mode: "timestamp" }).default(now).notNull(),
+  campanhaId: integer("campanha_id").notNull(),
+  moradorId: integer("morador_id").notNull(),
+  entrouEm: integer("entrou_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  uniqueIndex("campaign_participant_unique").on(table.campaignId, table.residentId),
-  index("campaign_participants_resident_idx").on(table.residentId),
+  uniqueIndex("participante_campanha_unique").on(table.campanhaId, table.moradorId),
+  index("participantes_campanha_morador_idx").on(table.moradorId),
 ]);
 
-export const collectionFeedback = sqliteTable("collection_feedback", {
+export const avaliacoesColeta = sqliteTable("avaliacoes_coleta", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  condominiumId: integer("condominiumId").notNull(),
-  residentId: integer("residentId").notNull(),
-  collectionId: integer("collectionId"),
-  rating: integer("rating").notNull(),
-  message: text("message").notNull(),
-  status: text("status", { enum: feedbackStatuses }).default("novo").notNull(),
-  response: text("response"),
-  respondedByUserId: integer("respondedByUserId"),
-  respondedAt: integer("respondedAt", { mode: "timestamp" }),
-  createdAt: integer("createdAt", { mode: "timestamp" }).default(now).notNull(),
-  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(now).notNull(),
+  condominioId: integer("condominio_id").notNull(),
+  moradorId: integer("morador_id").notNull(),
+  coletaId: integer("coleta_id"),
+  nota: integer("nota").notNull(),
+  mensagem: text("mensagem").notNull(),
+  status: text("status", { enum: statusAvaliacao }).default("nova").notNull(),
+  resposta: text("resposta"),
+  respondidoPorId: integer("respondido_por_id"),
+  respondidaEm: integer("respondida_em", { mode: "timestamp" }),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
-  index("feedback_condominium_idx").on(table.condominiumId),
-  index("feedback_resident_idx").on(table.residentId),
-  index("feedback_status_idx").on(table.status),
+  index("avaliacoes_condominio_idx").on(table.condominioId),
+  index("avaliacoes_morador_idx").on(table.moradorId),
+  index("avaliacoes_status_idx").on(table.status),
 ]);
 
-export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
-export type EcoProfile = typeof userProfiles.$inferSelect;
-export type Resident = typeof residents.$inferSelect;
-export type Condominium = typeof condominiums.$inferSelect;
-export type Collection = typeof collections.$inferSelect;
-export type Person = typeof people.$inferSelect;
+export type Usuario = typeof usuarios.$inferSelect;
+export type NovoUsuario = typeof usuarios.$inferInsert;
+export type PerfilAcesso = typeof perfisAcesso.$inferSelect;
+export type Morador = typeof moradores.$inferSelect;
+export type Condominio = typeof condominios.$inferSelect;
+export type Coleta = typeof coletas.$inferSelect;
+export type Pessoa = typeof pessoas.$inferSelect;

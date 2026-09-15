@@ -1,11 +1,11 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "cc6c14ba-05a0-49fb-8cc1-fda134ac14a0",
+  "id": "d915ff81-fa87-455e-89cc-df743c8b6de8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "audit_logs": {
-      "name": "audit_logs",
+    "avaliacoes_coleta": {
+      "name": "avaliacoes_coleta",
       "columns": {
         "id": {
           "name": "id",
@@ -14,64 +14,80 @@
           "notNull": true,
           "autoincrement": true
         },
-        "condominiumId": {
-          "name": "condominiumId",
+        "condominio_id": {
+          "name": "condominio_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "actorUserId": {
-          "name": "actorUserId",
+        "morador_id": {
+          "name": "morador_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "entityType": {
-          "name": "entityType",
-          "type": "text",
+        "coleta_id": {
+          "name": "coleta_id",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
-        "entityId": {
-          "name": "entityId",
+        "nota": {
+          "name": "nota",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "action": {
-          "name": "action",
+        "mensagem": {
+          "name": "mensagem",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "summary": {
-          "name": "summary",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": "'nova'"
         },
-        "beforeState": {
-          "name": "beforeState",
+        "resposta": {
+          "name": "resposta",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "afterState": {
-          "name": "afterState",
-          "type": "text",
+        "respondido_por_id": {
+          "name": "respondido_por_id",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "createdAt": {
-          "name": "createdAt",
+        "respondida_em": {
+          "name": "respondida_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -80,27 +96,24 @@
         }
       },
       "indexes": {
-        "audit_logs_condominium_created_idx": {
-          "name": "audit_logs_condominium_created_idx",
+        "avaliacoes_condominio_idx": {
+          "name": "avaliacoes_condominio_idx",
           "columns": [
-            "condominiumId",
-            "createdAt"
+            "condominio_id"
           ],
           "isUnique": false
         },
-        "audit_logs_entity_idx": {
-          "name": "audit_logs_entity_idx",
+        "avaliacoes_morador_idx": {
+          "name": "avaliacoes_morador_idx",
           "columns": [
-            "entityType",
-            "entityId"
+            "morador_id"
           ],
           "isUnique": false
         },
-        "audit_logs_actor_created_idx": {
-          "name": "audit_logs_actor_created_idx",
+        "avaliacoes_status_idx": {
+          "name": "avaliacoes_status_idx",
           "columns": [
-            "actorUserId",
-            "createdAt"
+            "status"
           ],
           "isUnique": false
         }
@@ -110,8 +123,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "block_goals": {
-      "name": "block_goals",
+    "campanhas": {
+      "name": "campanhas",
       "columns": {
         "id": {
           "name": "id",
@@ -120,204 +133,43 @@
           "notNull": true,
           "autoincrement": true
         },
-        "condominiumId": {
-          "name": "condominiumId",
+        "condominio_id": {
+          "name": "condominio_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "block": {
-          "name": "block",
+        "titulo": {
+          "name": "titulo",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "title": {
-          "name": "title",
+        "descricao": {
+          "name": "descricao",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "targetKg": {
-          "name": "targetKg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "startDate": {
-          "name": "startDate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "endDate": {
-          "name": "endDate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "createdByUserId": {
-          "name": "createdByUserId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "isActive": {
-          "name": "isActive",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "block_goals_condominium_idx": {
-          "name": "block_goals_condominium_idx",
-          "columns": [
-            "condominiumId"
-          ],
-          "isUnique": false
-        },
-        "block_goals_period_idx": {
-          "name": "block_goals_period_idx",
-          "columns": [
-            "startDate",
-            "endDate"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "campaign_participants": {
-      "name": "campaign_participants",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "campaignId": {
-          "name": "campaignId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "residentId": {
-          "name": "residentId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "joinedAt": {
-          "name": "joinedAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "campaign_participant_unique": {
-          "name": "campaign_participant_unique",
-          "columns": [
-            "campaignId",
-            "residentId"
-          ],
-          "isUnique": true
-        },
-        "campaign_participants_resident_idx": {
-          "name": "campaign_participants_resident_idx",
-          "columns": [
-            "residentId"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "campaigns": {
-      "name": "campaigns",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "condominiumId": {
-          "name": "condominiumId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "title": {
-          "name": "title",
+        "descricao_meta": {
+          "name": "descricao_meta",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "targetDescription": {
-          "name": "targetDescription",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "startDate": {
-          "name": "startDate",
+        "data_inicio": {
+          "name": "data_inicio",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "endDate": {
-          "name": "endDate",
+        "data_fim": {
+          "name": "data_fim",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -331,23 +183,23 @@
           "autoincrement": false,
           "default": "'planejada'"
         },
-        "createdByUserId": {
-          "name": "createdByUserId",
+        "criado_por_id": {
+          "name": "criado_por_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "createdAt": {
-          "name": "createdAt",
+        "criado_em": {
+          "name": "criado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "(unixepoch())"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "atualizado_em": {
+          "name": "atualizado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -356,18 +208,18 @@
         }
       },
       "indexes": {
-        "campaigns_condominium_idx": {
-          "name": "campaigns_condominium_idx",
+        "campanhas_condominio_idx": {
+          "name": "campanhas_condominio_idx",
           "columns": [
-            "condominiumId"
+            "condominio_id"
           ],
           "isUnique": false
         },
-        "campaigns_period_idx": {
-          "name": "campaigns_period_idx",
+        "campanhas_periodo_idx": {
+          "name": "campanhas_periodo_idx",
           "columns": [
-            "startDate",
-            "endDate"
+            "data_inicio",
+            "data_fim"
           ],
           "isUnique": false
         }
@@ -377,8 +229,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "collection_feedback": {
-      "name": "collection_feedback",
+    "coletas": {
+      "name": "coletas",
       "columns": {
         "id": {
           "name": "id",
@@ -387,190 +239,71 @@
           "notNull": true,
           "autoincrement": true
         },
-        "condominiumId": {
-          "name": "condominiumId",
+        "condominio_id": {
+          "name": "condominio_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "residentId": {
-          "name": "residentId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "collectionId": {
-          "name": "collectionId",
+        "morador_id": {
+          "name": "morador_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "rating": {
-          "name": "rating",
+        "criado_por_id": {
+          "name": "criado_por_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "message": {
-          "name": "message",
+        "coletor_id": {
+          "name": "coletor_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tipo_residuo": {
+          "name": "tipo_residuo",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'novo'"
-        },
-        "response": {
-          "name": "response",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "respondedByUserId": {
-          "name": "respondedByUserId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "respondedAt": {
-          "name": "respondedAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "feedback_condominium_idx": {
-          "name": "feedback_condominium_idx",
-          "columns": [
-            "condominiumId"
-          ],
-          "isUnique": false
-        },
-        "feedback_resident_idx": {
-          "name": "feedback_resident_idx",
-          "columns": [
-            "residentId"
-          ],
-          "isUnique": false
-        },
-        "feedback_status_idx": {
-          "name": "feedback_status_idx",
-          "columns": [
-            "status"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "collections": {
-      "name": "collections",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "condominiumId": {
-          "name": "condominiumId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "residentId": {
-          "name": "residentId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdByUserId": {
-          "name": "createdByUserId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "collectorUserId": {
-          "name": "collectorUserId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "wasteType": {
-          "name": "wasteType",
+        "bloco": {
+          "name": "bloco",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "block": {
-          "name": "block",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "scheduledAt": {
-          "name": "scheduledAt",
+        "agendada_para": {
+          "name": "agendada_para",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "completedAt": {
-          "name": "completedAt",
+        "concluida_em": {
+          "name": "concluida_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "weightGrams": {
-          "name": "weightGrams",
+        "peso_gramas": {
+          "name": "peso_gramas",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "pointsAwarded": {
-          "name": "pointsAwarded",
+        "pontos_concedidos": {
+          "name": "pontos_concedidos",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -585,23 +318,23 @@
           "autoincrement": false,
           "default": "'agendada'"
         },
-        "notes": {
-          "name": "notes",
+        "observacoes": {
+          "name": "observacoes",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "createdAt": {
-          "name": "createdAt",
+        "criado_em": {
+          "name": "criado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "(unixepoch())"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "atualizado_em": {
+          "name": "atualizado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -610,50 +343,50 @@
         }
       },
       "indexes": {
-        "collections_condominium_idx": {
-          "name": "collections_condominium_idx",
+        "coletas_condominio_idx": {
+          "name": "coletas_condominio_idx",
           "columns": [
-            "condominiumId"
+            "condominio_id"
           ],
           "isUnique": false
         },
-        "collections_status_idx": {
-          "name": "collections_status_idx",
+        "coletas_status_idx": {
+          "name": "coletas_status_idx",
           "columns": [
             "status"
           ],
           "isUnique": false
         },
-        "collections_scheduled_idx": {
-          "name": "collections_scheduled_idx",
+        "coletas_agendada_idx": {
+          "name": "coletas_agendada_idx",
           "columns": [
-            "scheduledAt"
+            "agendada_para"
           ],
           "isUnique": false
         },
-        "collections_condominium_scheduled_idx": {
-          "name": "collections_condominium_scheduled_idx",
+        "coletas_condominio_agendada_idx": {
+          "name": "coletas_condominio_agendada_idx",
           "columns": [
-            "condominiumId",
-            "scheduledAt"
+            "condominio_id",
+            "agendada_para"
           ],
           "isUnique": false
         },
-        "collections_condominium_status_scheduled_idx": {
-          "name": "collections_condominium_status_scheduled_idx",
+        "coletas_condominio_status_agendada_idx": {
+          "name": "coletas_condominio_status_agendada_idx",
           "columns": [
-            "condominiumId",
+            "condominio_id",
             "status",
-            "scheduledAt"
+            "agendada_para"
           ],
           "isUnique": false
         },
-        "collections_condominium_block_scheduled_idx": {
-          "name": "collections_condominium_block_scheduled_idx",
+        "coletas_condominio_bloco_agendada_idx": {
+          "name": "coletas_condominio_bloco_agendada_idx",
           "columns": [
-            "condominiumId",
-            "block",
-            "scheduledAt"
+            "condominio_id",
+            "bloco",
+            "agendada_para"
           ],
           "isUnique": false
         }
@@ -663,8 +396,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "condominiums": {
-      "name": "condominiums",
+    "condominios": {
+      "name": "condominios",
       "columns": {
         "id": {
           "name": "id",
@@ -673,60 +406,60 @@
           "notNull": true,
           "autoincrement": true
         },
-        "name": {
-          "name": "name",
+        "nome": {
+          "name": "nome",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "address": {
-          "name": "address",
+        "endereco": {
+          "name": "endereco",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "city": {
-          "name": "city",
+        "cidade": {
+          "name": "cidade",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "state": {
-          "name": "state",
+        "estado": {
+          "name": "estado",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "blockCount": {
-          "name": "blockCount",
+        "quantidade_blocos": {
+          "name": "quantidade_blocos",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 1
         },
-        "isActive": {
-          "name": "isActive",
+        "ativo": {
+          "name": "ativo",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": true
         },
-        "createdAt": {
-          "name": "createdAt",
+        "criado_em": {
+          "name": "criado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "(unixepoch())"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "atualizado_em": {
+          "name": "atualizado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -740,8 +473,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "disposal_guides": {
-      "name": "disposal_guides",
+    "guias_descarte": {
+      "name": "guias_descarte",
       "columns": {
         "id": {
           "name": "id",
@@ -750,58 +483,58 @@
           "notNull": true,
           "autoincrement": true
         },
-        "condominiumId": {
-          "name": "condominiumId",
+        "condominio_id": {
+          "name": "condominio_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "wasteType": {
-          "name": "wasteType",
+        "tipo_residuo": {
+          "name": "tipo_residuo",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "title": {
-          "name": "title",
+        "titulo": {
+          "name": "titulo",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "acceptedItems": {
-          "name": "acceptedItems",
+        "itens_aceitos": {
+          "name": "itens_aceitos",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "rejectedItems": {
-          "name": "rejectedItems",
+        "itens_rejeitados": {
+          "name": "itens_rejeitados",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "instructions": {
-          "name": "instructions",
+        "instrucoes": {
+          "name": "instrucoes",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "isPublished": {
-          "name": "isPublished",
+        "publicado": {
+          "name": "publicado",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": true
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "atualizado_em": {
+          "name": "atualizado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -810,11 +543,11 @@
         }
       },
       "indexes": {
-        "guides_condominium_waste_unique": {
-          "name": "guides_condominium_waste_unique",
+        "guias_condominio_residuo_unique": {
+          "name": "guias_condominio_residuo_unique",
           "columns": [
-            "condominiumId",
-            "wasteType"
+            "condominio_id",
+            "tipo_residuo"
           ],
           "isUnique": true
         }
@@ -824,8 +557,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "incidents": {
-      "name": "incidents",
+    "logs_auditoria": {
+      "name": "logs_auditoria",
       "columns": {
         "id": {
           "name": "id",
@@ -834,101 +567,64 @@
           "notNull": true,
           "autoincrement": true
         },
-        "condominiumId": {
-          "name": "condominiumId",
+        "condominio_id": {
+          "name": "condominio_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "reporterUserId": {
-          "name": "reporterUserId",
+        "autor_id": {
+          "name": "autor_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "block": {
-          "name": "block",
+        "tipo_entidade": {
+          "name": "tipo_entidade",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "wasteType": {
-          "name": "wasteType",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "location": {
-          "name": "location",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "imageKey": {
-          "name": "imageKey",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "imageUrl": {
-          "name": "imageUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'aberta'"
-        },
-        "resolutionNote": {
-          "name": "resolutionNote",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "resolvedByUserId": {
-          "name": "resolvedByUserId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "resolvedAt": {
-          "name": "resolvedAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
+        "entidade_id": {
+          "name": "entidade_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
+          "autoincrement": false
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "acao": {
+          "name": "acao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resumo": {
+          "name": "resumo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "estado_anterior": {
+          "name": "estado_anterior",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "estado_novo": {
+          "name": "estado_novo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "criado_em": {
+          "name": "criado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -937,26 +633,27 @@
         }
       },
       "indexes": {
-        "incidents_condominium_idx": {
-          "name": "incidents_condominium_idx",
+        "logs_auditoria_condominio_criado_idx": {
+          "name": "logs_auditoria_condominio_criado_idx",
           "columns": [
-            "condominiumId"
+            "condominio_id",
+            "criado_em"
           ],
           "isUnique": false
         },
-        "incidents_status_idx": {
-          "name": "incidents_status_idx",
+        "logs_auditoria_entidade_idx": {
+          "name": "logs_auditoria_entidade_idx",
           "columns": [
-            "status"
+            "tipo_entidade",
+            "entidade_id"
           ],
           "isUnique": false
         },
-        "incidents_condominium_status_created_idx": {
-          "name": "incidents_condominium_status_created_idx",
+        "logs_auditoria_autor_criado_idx": {
+          "name": "logs_auditoria_autor_criado_idx",
           "columns": [
-            "condominiumId",
-            "status",
-            "createdAt"
+            "autor_id",
+            "criado_em"
           ],
           "isUnique": false
         }
@@ -966,8 +663,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "notification_reads": {
-      "name": "notification_reads",
+    "metas_bloco": {
+      "name": "metas_bloco",
       "columns": {
         "id": {
           "name": "id",
@@ -976,22 +673,73 @@
           "notNull": true,
           "autoincrement": true
         },
-        "notificationId": {
-          "name": "notificationId",
+        "condominio_id": {
+          "name": "condominio_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "userId": {
-          "name": "userId",
+        "bloco": {
+          "name": "bloco",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "titulo": {
+          "name": "titulo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "meta_kg": {
+          "name": "meta_kg",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "readAt": {
-          "name": "readAt",
+        "data_inicio": {
+          "name": "data_inicio",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "data_fim": {
+          "name": "data_fim",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ativo": {
+          "name": "ativo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1000,18 +748,18 @@
         }
       },
       "indexes": {
-        "notification_reads_notification_user_unique": {
-          "name": "notification_reads_notification_user_unique",
+        "metas_bloco_condominio_idx": {
+          "name": "metas_bloco_condominio_idx",
           "columns": [
-            "notificationId",
-            "userId"
+            "condominio_id"
           ],
-          "isUnique": true
+          "isUnique": false
         },
-        "notification_reads_user_idx": {
-          "name": "notification_reads_user_idx",
+        "metas_bloco_periodo_idx": {
+          "name": "metas_bloco_periodo_idx",
           "columns": [
-            "userId"
+            "data_inicio",
+            "data_fim"
           ],
           "isUnique": false
         }
@@ -1021,8 +769,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "notifications": {
-      "name": "notifications",
+    "moradores": {
+      "name": "moradores",
       "columns": {
         "id": {
           "name": "id",
@@ -1031,323 +779,22 @@
           "notNull": true,
           "autoincrement": true
         },
-        "condominiumId": {
-          "name": "condominiumId",
+        "condominio_id": {
+          "name": "condominio_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "recipientUserId": {
-          "name": "recipientUserId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "collectionId": {
-          "name": "collectionId",
+        "usuario_id": {
+          "name": "usuario_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "readAt": {
-          "name": "readAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "notifications_recipient_idx": {
-          "name": "notifications_recipient_idx",
-          "columns": [
-            "recipientUserId"
-          ],
-          "isUnique": false
-        },
-        "notifications_condominium_idx": {
-          "name": "notifications_condominium_idx",
-          "columns": [
-            "condominiumId"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "people": {
-      "name": "people",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "condominiumId": {
-          "name": "condominiumId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "userId": {
-          "name": "userId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "residentId": {
-          "name": "residentId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "phone": {
-          "name": "phone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "block": {
-          "name": "block",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "apartment": {
-          "name": "apartment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'morador'"
-        },
-        "accessStatus": {
-          "name": "accessStatus",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pendente'"
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "people_condominium_email_unique": {
-          "name": "people_condominium_email_unique",
-          "columns": [
-            "condominiumId",
-            "email"
-          ],
-          "isUnique": true
-        },
-        "people_user_unique": {
-          "name": "people_user_unique",
-          "columns": [
-            "userId"
-          ],
-          "isUnique": true
-        },
-        "people_condominium_idx": {
-          "name": "people_condominium_idx",
-          "columns": [
-            "condominiumId"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "redemptions": {
-      "name": "redemptions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "condominiumId": {
-          "name": "condominiumId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "residentId": {
-          "name": "residentId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "rewardId": {
-          "name": "rewardId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "pointsSpent": {
-          "name": "pointsSpent",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'solicitado'"
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "redemptions_resident_idx": {
-          "name": "redemptions_resident_idx",
-          "columns": [
-            "residentId"
-          ],
-          "isUnique": false
-        },
-        "redemptions_condominium_idx": {
-          "name": "redemptions_condominium_idx",
-          "columns": [
-            "condominiumId"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "residents": {
-      "name": "residents",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "condominiumId": {
-          "name": "condominiumId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "userId": {
-          "name": "userId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
+        "nome": {
+          "name": "nome",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1360,22 +807,22 @@
           "notNull": false,
           "autoincrement": false
         },
-        "phone": {
-          "name": "phone",
+        "telefone": {
+          "name": "telefone",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "block": {
-          "name": "block",
+        "bloco": {
+          "name": "bloco",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "apartment": {
-          "name": "apartment",
+        "apartamento": {
+          "name": "apartamento",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1389,24 +836,24 @@
           "autoincrement": false,
           "default": "'ativo'"
         },
-        "points": {
-          "name": "points",
+        "pontos": {
+          "name": "pontos",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 0
         },
-        "createdAt": {
-          "name": "createdAt",
+        "criado_em": {
+          "name": "criado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "(unixepoch())"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "atualizado_em": {
+          "name": "atualizado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1415,17 +862,17 @@
         }
       },
       "indexes": {
-        "residents_condominium_idx": {
-          "name": "residents_condominium_idx",
+        "moradores_condominio_idx": {
+          "name": "moradores_condominio_idx",
           "columns": [
-            "condominiumId"
+            "condominio_id"
           ],
           "isUnique": false
         },
-        "residents_user_unique": {
-          "name": "residents_user_unique",
+        "moradores_usuario_unique": {
+          "name": "moradores_usuario_unique",
           "columns": [
-            "userId"
+            "usuario_id"
           ],
           "isUnique": true
         }
@@ -1435,8 +882,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "rewards": {
-      "name": "rewards",
+    "notificacoes": {
+      "name": "notificacoes",
       "columns": {
         "id": {
           "name": "id",
@@ -1445,59 +892,57 @@
           "notNull": true,
           "autoincrement": true
         },
-        "condominiumId": {
-          "name": "condominiumId",
+        "condominio_id": {
+          "name": "condominio_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "pointsCost": {
-          "name": "pointsCost",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "stock": {
-          "name": "stock",
+        "destinatario_id": {
+          "name": "destinatario_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "isActive": {
-          "name": "isActive",
+        "coleta_id": {
+          "name": "coleta_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
+          "notNull": false,
+          "autoincrement": false
         },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "integer",
+        "tipo": {
+          "name": "tipo",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
+          "autoincrement": false
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "titulo": {
+          "name": "titulo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mensagem": {
+          "name": "mensagem",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "lida_em": {
+          "name": "lida_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "criado_em": {
+          "name": "criado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1506,10 +951,17 @@
         }
       },
       "indexes": {
-        "rewards_condominium_idx": {
-          "name": "rewards_condominium_idx",
+        "notificacoes_destinatario_idx": {
+          "name": "notificacoes_destinatario_idx",
           "columns": [
-            "condominiumId"
+            "destinatario_id"
+          ],
+          "isUnique": false
+        },
+        "notificacoes_condominio_idx": {
+          "name": "notificacoes_condominio_idx",
+          "columns": [
+            "condominio_id"
           ],
           "isUnique": false
         }
@@ -1519,8 +971,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "user_profiles": {
-      "name": "user_profiles",
+    "notificacoes_lidas": {
+      "name": "notificacoes_lidas",
       "columns": {
         "id": {
           "name": "id",
@@ -1529,45 +981,297 @@
           "notNull": true,
           "autoincrement": true
         },
-        "userId": {
-          "name": "userId",
+        "notificacao_id": {
+          "name": "notificacao_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "condominiumId": {
-          "name": "condominiumId",
+        "usuario_id": {
+          "name": "usuario_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "residentId": {
-          "name": "residentId",
+        "lida_em": {
+          "name": "lida_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "notificacoes_lidas_notificacao_usuario_unique": {
+          "name": "notificacoes_lidas_notificacao_usuario_unique",
+          "columns": [
+            "notificacao_id",
+            "usuario_id"
+          ],
+          "isUnique": true
+        },
+        "notificacoes_lidas_usuario_idx": {
+          "name": "notificacoes_lidas_usuario_idx",
+          "columns": [
+            "usuario_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "ocorrencias": {
+      "name": "ocorrencias",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "relator_id": {
+          "name": "relator_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bloco": {
+          "name": "bloco",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tipo_residuo": {
+          "name": "tipo_residuo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "local": {
+          "name": "local",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "chave_imagem": {
+          "name": "chave_imagem",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "url_imagem": {
+          "name": "url_imagem",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'aberta'"
+        },
+        "nota_resolucao": {
+          "name": "nota_resolucao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resolvido_por_id": {
+          "name": "resolvido_por_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "role": {
-          "name": "role",
+        "resolvida_em": {
+          "name": "resolvida_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "ocorrencias_condominio_idx": {
+          "name": "ocorrencias_condominio_idx",
+          "columns": [
+            "condominio_id"
+          ],
+          "isUnique": false
+        },
+        "ocorrencias_status_idx": {
+          "name": "ocorrencias_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "ocorrencias_condominio_status_criado_idx": {
+          "name": "ocorrencias_condominio_status_criado_idx",
+          "columns": [
+            "condominio_id",
+            "status",
+            "criado_em"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "participantes_campanha": {
+      "name": "participantes_campanha",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "campanha_id": {
+          "name": "campanha_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "morador_id": {
+          "name": "morador_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "entrou_em": {
+          "name": "entrou_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "participante_campanha_unique": {
+          "name": "participante_campanha_unique",
+          "columns": [
+            "campanha_id",
+            "morador_id"
+          ],
+          "isUnique": true
+        },
+        "participantes_campanha_morador_idx": {
+          "name": "participantes_campanha_morador_idx",
+          "columns": [
+            "morador_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "perfis_acesso": {
+      "name": "perfis_acesso",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "morador_id": {
+          "name": "morador_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "papel": {
+          "name": "papel",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "'morador'"
         },
-        "createdAt": {
-          "name": "createdAt",
+        "criado_em": {
+          "name": "criado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "(unixepoch())"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "atualizado_em": {
+          "name": "atualizado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1576,17 +1280,17 @@
         }
       },
       "indexes": {
-        "user_profiles_user_unique": {
-          "name": "user_profiles_user_unique",
+        "perfis_acesso_usuario_unique": {
+          "name": "perfis_acesso_usuario_unique",
           "columns": [
-            "userId"
+            "usuario_id"
           ],
           "isUnique": true
         },
-        "user_profiles_condominium_idx": {
-          "name": "user_profiles_condominium_idx",
+        "perfis_acesso_condominio_idx": {
+          "name": "perfis_acesso_condominio_idx",
           "columns": [
-            "condominiumId"
+            "condominio_id"
           ],
           "isUnique": false
         }
@@ -1596,8 +1300,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "users": {
-      "name": "users",
+    "pessoas": {
+      "name": "pessoas",
       "columns": {
         "id": {
           "name": "id",
@@ -1606,15 +1310,311 @@
           "notNull": true,
           "autoincrement": true
         },
-        "openId": {
-          "name": "openId",
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "morador_id": {
+          "name": "morador_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nome": {
+          "name": "nome",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "name": {
-          "name": "name",
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "telefone": {
+          "name": "telefone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bloco": {
+          "name": "bloco",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "apartamento": {
+          "name": "apartamento",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "papel": {
+          "name": "papel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'morador'"
+        },
+        "status_acesso": {
+          "name": "status_acesso",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pendente'"
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "pessoas_condominio_email_unique": {
+          "name": "pessoas_condominio_email_unique",
+          "columns": [
+            "condominio_id",
+            "email"
+          ],
+          "isUnique": true
+        },
+        "pessoas_usuario_unique": {
+          "name": "pessoas_usuario_unique",
+          "columns": [
+            "usuario_id"
+          ],
+          "isUnique": true
+        },
+        "pessoas_condominio_idx": {
+          "name": "pessoas_condominio_idx",
+          "columns": [
+            "condominio_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "recompensas": {
+      "name": "recompensas",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "titulo": {
+          "name": "titulo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "custo_pontos": {
+          "name": "custo_pontos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "estoque": {
+          "name": "estoque",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ativo": {
+          "name": "ativo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "recompensas_condominio_idx": {
+          "name": "recompensas_condominio_idx",
+          "columns": [
+            "condominio_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "resgates": {
+      "name": "resgates",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "morador_id": {
+          "name": "morador_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recompensa_id": {
+          "name": "recompensa_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pontos_gastos": {
+          "name": "pontos_gastos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'solicitado'"
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "resgates_morador_idx": {
+          "name": "resgates_morador_idx",
+          "columns": [
+            "morador_id"
+          ],
+          "isUnique": false
+        },
+        "resgates_condominio_idx": {
+          "name": "resgates_condominio_idx",
+          "columns": [
+            "condominio_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "usuarios": {
+      "name": "usuarios",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "id_externo": {
+          "name": "id_externo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nome": {
+          "name": "nome",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1627,39 +1627,39 @@
           "notNull": false,
           "autoincrement": false
         },
-        "loginMethod": {
-          "name": "loginMethod",
+        "metodo_login": {
+          "name": "metodo_login",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "role": {
-          "name": "role",
+        "papel": {
+          "name": "papel",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'user'"
+          "default": "'usuario'"
         },
-        "createdAt": {
-          "name": "createdAt",
+        "criado_em": {
+          "name": "criado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "(unixepoch())"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "atualizado_em": {
+          "name": "atualizado_em",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "(unixepoch())"
         },
-        "lastSignedIn": {
-          "name": "lastSignedIn",
+        "ultimo_acesso": {
+          "name": "ultimo_acesso",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1668,10 +1668,10 @@
         }
       },
       "indexes": {
-        "users_openId_unique": {
-          "name": "users_openId_unique",
+        "usuarios_id_externo_unique": {
+          "name": "usuarios_id_externo_unique",
           "columns": [
-            "openId"
+            "id_externo"
           ],
           "isUnique": true
         }

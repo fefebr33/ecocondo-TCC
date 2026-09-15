@@ -4,7 +4,7 @@ vi.mock("../db", () => ({ getDb: vi.fn() }));
 vi.mock("../_core/env", () => ({ ENV: { ownerOpenId: "owner" } }));
 
 import { getDb } from "../db";
-import { getOrCreateProfile } from "./ecocondo";
+import { obterOuCriarPerfil } from "./ecocondo";
 
 const mockedGetDb = vi.mocked(getDb);
 
@@ -20,11 +20,11 @@ describe("vínculo de pessoa pendente no primeiro login", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("ativa o perfil de morador existente quando o e-mail autenticado coincide", async () => {
-    const condominium = { id: 1, name: "Condomínio", address: null, city: null, state: null, blockCount: 1, isActive: true, createdAt: new Date(), updatedAt: new Date() };
-    const pendingPerson = { id: 8, condominiumId: 1, userId: null, residentId: 3, name: "Ana", email: "ana@exemplo.com", phone: null, block: "A", apartment: "12", role: "morador", accessStatus: "pendente", createdAt: new Date(), updatedAt: new Date() };
-    const resident = { id: 3, condominiumId: 1, userId: null, name: "Ana", email: "ana@exemplo.com", phone: null, block: "A", apartment: "12", status: "ativo", points: 0, createdAt: new Date(), updatedAt: new Date() };
-    const profile = { id: 20, userId: 5, condominiumId: 1, residentId: 3, role: "morador", createdAt: new Date(), updatedAt: new Date() };
-    const responses = [[], [condominium], [pendingPerson], [resident], [profile], [resident]];
+    const condominio = { id: 1, nome: "Condomínio", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() };
+    const pessoaPendente = { id: 8, condominioId: 1, usuarioId: null, moradorId: 3, nome: "Ana", email: "ana@exemplo.com", telefone: null, bloco: "A", apartamento: "12", papel: "morador", statusAcesso: "pendente", criadoEm: new Date(), atualizadoEm: new Date() };
+    const morador = { id: 3, condominioId: 1, usuarioId: null, nome: "Ana", email: "ana@exemplo.com", telefone: null, bloco: "A", apartamento: "12", status: "ativo", pontos: 0, criadoEm: new Date(), atualizadoEm: new Date() };
+    const perfil = { id: 20, usuarioId: 5, condominioId: 1, moradorId: 3, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() };
+    const responses = [[], [condominio], [pessoaPendente], [morador], [perfil], [morador]];
     const updateSet = vi.fn(() => ({ where: vi.fn(async () => undefined) }));
     const db = {
       select: vi.fn(() => chain(responses.shift() ?? [])),
@@ -33,10 +33,10 @@ describe("vínculo de pessoa pendente no primeiro login", () => {
     };
     mockedGetDb.mockResolvedValue(db as never);
 
-    const result = await getOrCreateProfile({ id: 5, openId: "ana-id", name: "Ana", email: " ANA@EXEMPLO.COM ", loginMethod: "test", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    const result = await obterOuCriarPerfil({ id: 5, idExterno: "ana-id", nome: "Ana", email: " ANA@EXEMPLO.COM ", metodoLogin: "test", papel: "usuario", criadoEm: new Date(), atualizadoEm: new Date(), ultimoAcesso: new Date() });
 
-    expect(result.profile).toMatchObject({ role: "morador", residentId: 3 });
-    expect(result.resident).toMatchObject({ id: 3, name: "Ana" });
-    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ userId: 5, residentId: 3, accessStatus: "ativo", role: "morador" }));
+    expect(result.perfil).toMatchObject({ papel: "morador", moradorId: 3 });
+    expect(result.morador).toMatchObject({ id: 3, nome: "Ana" });
+    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ usuarioId: 5, moradorId: 3, statusAcesso: "ativo", papel: "morador" }));
   });
 });

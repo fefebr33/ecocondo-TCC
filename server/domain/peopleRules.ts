@@ -2,16 +2,16 @@ export function normalizeAccessEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-export function buildPendingResidentPerson(resident: { id: number; userId: number | null; name: string; email: string; phone: string | null; block: string; apartment: string }) {
+export function buildPendingResidentPerson(morador: { id: number; usuarioId: number | null; nome: string; email: string; telefone: string | null; bloco: string; apartamento: string }) {
   return {
-    userId: resident.userId,
-    residentId: resident.id,
-    name: resident.name,
-    email: normalizeAccessEmail(resident.email),
-    phone: resident.phone,
-    block: resident.block,
-    apartment: resident.apartment,
-    role: "morador" as const,
-    accessStatus: resident.userId ? "ativo" as const : "pendente" as const,
+    usuarioId: morador.usuarioId,
+    moradorId: morador.id,
+    nome: morador.nome,
+    email: normalizeAccessEmail(morador.email),
+    telefone: morador.telefone,
+    bloco: morador.bloco,
+    apartamento: morador.apartamento,
+    papel: "morador" as const,
+    statusAcesso: morador.usuarioId ? ("ativo" as const) : ("pendente" as const),
   };
 }

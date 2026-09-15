@@ -1,98 +1,98 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "../../shared/const";
 import { eq } from "drizzle-orm";
 import type { Express, Request, Response } from "express";
-import * as userDb from "../db";
+import * as bancoUsuarios from "../db";
 import { getDb } from "../db";
-import { condominiums, ecoRoles, people, residents, userProfiles } from "../../drizzle/schema";
+import { condominios, papeisEco, pessoas, moradores, perfisAcesso } from "../../drizzle/schema";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 
-type EcoRole = (typeof ecoRoles)[number];
+type PapelEco = (typeof papeisEco)[number];
 
-const DEMO_ACCOUNTS: Record<EcoRole, { openId: string; name: string; email: string }> = {
-  administrador: { openId: "demo-administrador", name: "Ana Administradora", email: "admin@ecocondo.local" },
-  coletor: { openId: "demo-coletor", name: "Carlos Coletor", email: "coletor@ecocondo.local" },
-  morador: { openId: "demo-morador", name: "Marina Moradora", email: "morador@ecocondo.local" },
+const CONTAS_DEMONSTRACAO: Record<PapelEco, { idExterno: string; nome: string; email: string }> = {
+  administrador: { idExterno: "demo-administrador", nome: "Ana Administradora", email: "admin@ecocondo.local" },
+  coletor: { idExterno: "demo-coletor", nome: "Carlos Coletor", email: "coletor@ecocondo.local" },
+  morador: { idExterno: "demo-morador", nome: "Marina Moradora", email: "morador@ecocondo.local" },
 };
 
-async function ensureCondominium() {
+async function garantirCondominio() {
   const db = await getDb();
-  const existing = await db.select().from(condominiums).limit(1);
-  if (existing[0]) return existing[0];
-  const inserted = await db.insert(condominiums).values({
-    name: "Condomínio Parque das Flores",
-    city: "São Paulo",
-    state: "SP",
-    blockCount: 4,
-  }).returning({ id: condominiums.id });
-  return { id: inserted[0].id };
+  const existente = await db.select().from(condominios).limit(1);
+  if (existente[0]) return existente[0];
+  const inserido = await db.insert(condominios).values({
+    nome: "Condomínio Parque das Flores",
+    cidade: "São Paulo",
+    estado: "SP",
+    quantidadeBlocos: 4,
+  }).returning({ id: condominios.id });
+  return { id: inserido[0].id };
 }
 
 /** Login local de demonstração — cria/reaproveita uma conta fixa por perfil, sem depender de nenhum serviço externo. */
 export function registerLoginRoute(app: Express) {
   app.get("/api/auth/entrar", async (req: Request, res: Response) => {
-    const roleParam = req.query.role;
-    const role: EcoRole = ecoRoles.includes(roleParam as EcoRole) ? (roleParam as EcoRole) : "morador";
-    const account = DEMO_ACCOUNTS[role];
+    const papelParam = req.query.role;
+    const papel: PapelEco = papeisEco.includes(papelParam as PapelEco) ? (papelParam as PapelEco) : "morador";
+    const conta = CONTAS_DEMONSTRACAO[papel];
     const db = await getDb();
 
-    await userDb.upsertUser({
-      openId: account.openId,
-      name: account.name,
-      email: account.email,
-      loginMethod: "demo",
-      role: role === "administrador" ? "admin" : "user",
-      lastSignedIn: new Date(),
+    await bancoUsuarios.upsertUser({
+      idExterno: conta.idExterno,
+      nome: conta.nome,
+      email: conta.email,
+      metodoLogin: "demo",
+      papel: papel === "administrador" ? "administrador" : "usuario",
+      ultimoAcesso: new Date(),
     });
-    const user = await userDb.getUserByOpenId(account.openId);
-    if (!user) {
+    const usuario = await bancoUsuarios.getUserByOpenId(conta.idExterno);
+    if (!usuario) {
       res.status(500).json({ error: "Não foi possível criar o usuário de demonstração." });
       return;
     }
 
-    const condominium = await ensureCondominium();
+    const condominio = await garantirCondominio();
 
-    let residentId: number | null = null;
-    if (role === "morador") {
-      const existingResident = await db.select().from(residents).where(eq(residents.userId, user.id)).limit(1);
-      if (existingResident[0]) {
-        residentId = existingResident[0].id;
+    let moradorId: number | null = null;
+    if (papel === "morador") {
+      const moradorExistente = await db.select().from(moradores).where(eq(moradores.usuarioId, usuario.id)).limit(1);
+      if (moradorExistente[0]) {
+        moradorId = moradorExistente[0].id;
       } else {
-        const insertedResident = await db.insert(residents).values({
-          condominiumId: condominium.id,
-          userId: user.id,
-          name: account.name,
-          email: account.email,
-          block: "A",
-          apartment: "101",
-        }).returning({ id: residents.id });
-        residentId = insertedResident[0].id;
+        const moradorInserido = await db.insert(moradores).values({
+          condominioId: condominio.id,
+          usuarioId: usuario.id,
+          nome: conta.nome,
+          email: conta.email,
+          bloco: "A",
+          apartamento: "101",
+        }).returning({ id: moradores.id });
+        moradorId = moradorInserido[0].id;
       }
     }
 
-    const existingProfile = await db.select().from(userProfiles).where(eq(userProfiles.userId, user.id)).limit(1);
-    if (existingProfile[0]) {
-      await db.update(userProfiles).set({ role, residentId, updatedAt: new Date() }).where(eq(userProfiles.userId, user.id));
+    const perfilExistente = await db.select().from(perfisAcesso).where(eq(perfisAcesso.usuarioId, usuario.id)).limit(1);
+    if (perfilExistente[0]) {
+      await db.update(perfisAcesso).set({ papel, moradorId, atualizadoEm: new Date() }).where(eq(perfisAcesso.usuarioId, usuario.id));
     } else {
-      await db.insert(userProfiles).values({ userId: user.id, condominiumId: condominium.id, residentId, role });
+      await db.insert(perfisAcesso).values({ usuarioId: usuario.id, condominioId: condominio.id, moradorId, papel });
     }
 
-    const existingPerson = await db.select().from(people).where(eq(people.userId, user.id)).limit(1);
-    if (existingPerson[0]) {
-      await db.update(people).set({ role, residentId, accessStatus: "ativo", updatedAt: new Date() }).where(eq(people.userId, user.id));
+    const pessoaExistente = await db.select().from(pessoas).where(eq(pessoas.usuarioId, usuario.id)).limit(1);
+    if (pessoaExistente[0]) {
+      await db.update(pessoas).set({ papel, moradorId, statusAcesso: "ativo", atualizadoEm: new Date() }).where(eq(pessoas.usuarioId, usuario.id));
     } else {
-      await db.insert(people).values({
-        condominiumId: condominium.id,
-        userId: user.id,
-        residentId,
-        name: account.name,
-        email: account.email,
-        role,
-        accessStatus: "ativo",
+      await db.insert(pessoas).values({
+        condominioId: condominio.id,
+        usuarioId: usuario.id,
+        moradorId,
+        nome: conta.nome,
+        email: conta.email,
+        papel,
+        statusAcesso: "ativo",
       });
     }
 
-    const sessionToken = await sdk.createSessionToken(account.openId, { name: account.name, expiresInMs: ONE_YEAR_MS });
+    const sessionToken = await sdk.createSessionToken(conta.idExterno, { name: conta.nome, expiresInMs: ONE_YEAR_MS });
     res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(req), maxAge: ONE_YEAR_MS });
     res.redirect(302, "/dashboard");
   });

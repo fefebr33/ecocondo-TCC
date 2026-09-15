@@ -1,19 +1,19 @@
 import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  blockGoals,
-  campaignParticipants,
-  campaignStatuses,
-  campaigns,
-  collectionFeedback,
-  collectionStatuses,
-  collections,
-  feedbackStatuses,
-  incidentStatuses,
-  incidents,
-  people,
-  residents,
-  wasteTypes,
+  metasBloco,
+  participantesCampanha,
+  statusCampanha,
+  campanhas,
+  avaliacoesColeta,
+  statusColeta,
+  coletas,
+  statusAvaliacao,
+  statusOcorrencia,
+  ocorrencias,
+  pessoas,
+  moradores,
+  tiposResiduo,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { storagePut } from "../storage";
@@ -26,20 +26,24 @@ import { incidentAuditState, writeAuditLog } from "../audit";
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 const incidentInput = z.object({
   block: z.string().trim().min(1).max(32),
-  wasteType: z.enum(wasteTypes),
+  wasteType: z.enum(tiposResiduo),
   location: z.string().trim().min(3).max(180),
   description: z.string().trim().min(5).max(1600),
   imageDataUrl: z.string().max(5_500_000).nullable().optional(),
 });
 
-function getPeriodConditions(condominiumId: number, period?: { startDate?: Date; endDate?: Date }) {
-  const conditions = [eq(collections.condominiumId, condominiumId)];
-  if (period?.startDate) conditions.push(gte(collections.scheduledAt, period.startDate));
-  if (period?.endDate) conditions.push(lte(collections.scheduledAt, period.endDate));
-  return conditions;
+function condicoesPeriodo(condominioId: number, periodo?: { startDate?: Date; endDate?: Date }) {
+  const condicoes = [eq(coletas.condominioId, condominioId)];
+  if (periodo?.startDate) condicoes.push(gte(coletas.agendadaPara, periodo.startDate));
+  if (periodo?.endDate) condicoes.push(lte(coletas.agendadaPara, periodo.endDate));
+  return condicoes;
 }
 
-async function saveIncidentImage(imageDataUrl: string | null | undefined, condominiumId: number, userId: number) {
+function paraRegroSustentabilidade(registro: typeof coletas.$inferSelect) {
+  return { block: registro.bloco, status: registro.status, scheduledAt: registro.agendadaPara, weightGrams: registro.pesoGramas, wasteType: registro.tipoResiduo };
+}
+
+async function saveIncidentImage(imageDataUrl: string | null | undefined, condominioId: number, usuarioId: number) {
   if (!imageDataUrl) return { key: null, url: null };
   const match = imageDataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)$/);
   if (!match) throw new TRPCError({ code: "BAD_REQUEST", message: "Envie uma imagem PNG, JPEG ou WebP válida." });
@@ -47,168 +51,162 @@ async function saveIncidentImage(imageDataUrl: string | null | undefined, condom
   const extension = subtype === "jpeg" ? "jpg" : subtype;
   const bytes = Buffer.from(match[2], "base64");
   if (bytes.length > 4 * 1024 * 1024) throw new TRPCError({ code: "BAD_REQUEST", message: "A imagem deve ter no máximo 4 MB." });
-  const key = `incidents/${condominiumId}/${userId}/${Date.now()}.${extension}`;
+  const key = `ocorrencias/${condominioId}/${usuarioId}/${Date.now()}.${extension}`;
   return storagePut(key, bytes, `image/${subtype}`);
 }
 
 export const sustainabilityRouter = router({
-  goals: router({
-    list: withProfile.query(async ({ ctx }) => {
+  metas: router({
+    listar: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const goals = await db.select().from(blockGoals).where(eq(blockGoals.condominiumId, ctx.eco.condominium.id)).orderBy(desc(blockGoals.endDate));
-      const records = await db.select().from(collections).where(and(eq(collections.condominiumId, ctx.eco.condominium.id), eq(collections.status, "concluida")));
-      return goals.map((goal) => ({ ...goal, ...calculateGoalProgress(goal, records) }));
+      const metas = await db.select().from(metasBloco).where(eq(metasBloco.condominioId, ctx.eco.condominio.id)).orderBy(desc(metasBloco.dataFim));
+      const registros = await db.select().from(coletas).where(and(eq(coletas.condominioId, ctx.eco.condominio.id), eq(coletas.status, "concluida")));
+      const registrosConvertidos = registros.map(paraRegroSustentabilidade);
+      return metas.map((meta) => ({ ...meta, ...calculateGoalProgress({ block: meta.bloco, targetKg: meta.metaKg, startDate: meta.dataInicio, endDate: meta.dataFim }, registrosConvertidos) }));
     }),
-    create: administratorOnly.input(z.object({ block: z.string().trim().min(1).max(32), title: z.string().trim().min(3).max(140), targetKg: z.number().int().min(1).max(100000), startDate: z.date(), endDate: z.date() }).refine((input) => input.endDate >= input.startDate, { message: "A data final deve ser posterior à data inicial.", path: ["endDate"] })).mutation(async ({ ctx, input }) => {
+    criar: administratorOnly.input(z.object({ block: z.string().trim().min(1).max(32), title: z.string().trim().min(3).max(140), targetKg: z.number().int().min(1).max(100000), startDate: z.date(), endDate: z.date() }).refine((input) => input.endDate >= input.startDate, { message: "A data final deve ser posterior à data inicial.", path: ["endDate"] })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const inserted = await db.insert(blockGoals).values({ condominiumId: ctx.eco.condominium.id, createdByUserId: ctx.user.id, ...input }).returning({ id: blockGoals.id });
-      return { id: inserted[0].id };
+      const inserida = await db.insert(metasBloco).values({ condominioId: ctx.eco.condominio.id, criadoPorId: ctx.user.id, bloco: input.block, titulo: input.title, metaKg: input.targetKg, dataInicio: input.startDate, dataFim: input.endDate }).returning({ id: metasBloco.id });
+      return { id: inserida[0].id };
     }),
-    toggle: administratorOnly.input(z.object({ id: z.number().int().positive(), isActive: z.boolean() })).mutation(async ({ ctx, input }) => {
+    alternar: administratorOnly.input(z.object({ id: z.number().int().positive(), isActive: z.boolean() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      await db.update(blockGoals).set({ isActive: input.isActive, updatedAt: new Date() }).where(and(eq(blockGoals.id, input.id), eq(blockGoals.condominiumId, ctx.eco.condominium.id)));
+      await db.update(metasBloco).set({ ativo: input.isActive, atualizadoEm: new Date() }).where(and(eq(metasBloco.id, input.id), eq(metasBloco.condominioId, ctx.eco.condominio.id)));
       return { success: true };
     }),
   }),
-  incidents: router({
-    list: withProfile.query(async ({ ctx }) => {
+  ocorrencias: router({
+    listar: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const conditions = [eq(incidents.condominiumId, ctx.eco.condominium.id)];
-      if (ctx.eco.profile.role === "morador") conditions.push(eq(incidents.reporterUserId, ctx.user.id));
-      return db.select().from(incidents).where(and(...conditions)).orderBy(desc(incidents.createdAt));
+      const condicoes = [eq(ocorrencias.condominioId, ctx.eco.condominio.id)];
+      if (ctx.eco.perfil.papel === "morador") condicoes.push(eq(ocorrencias.relatorId, ctx.user.id));
+      return db.select().from(ocorrencias).where(and(...condicoes)).orderBy(desc(ocorrencias.criadoEm));
     }),
-    create: withProfile.input(incidentInput).mutation(async ({ ctx, input }) => {
+    criar: withProfile.input(incidentInput).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const image = await saveIncidentImage(input.imageDataUrl, ctx.eco.condominium.id, ctx.user.id);
-      const inserted = await db.insert(incidents).values({ condominiumId: ctx.eco.condominium.id, reporterUserId: ctx.user.id, block: ctx.eco.profile.role === "morador" && ctx.eco.resident ? ctx.eco.resident.block : input.block, wasteType: input.wasteType, location: input.location, description: input.description, imageKey: image.key, imageUrl: image.url }).returning({ id: incidents.id });
-      const incidentId = inserted[0].id;
+      const imagem = await saveIncidentImage(input.imageDataUrl, ctx.eco.condominio.id, ctx.user.id);
+      const bloco = ctx.eco.perfil.papel === "morador" && ctx.eco.morador ? ctx.eco.morador.bloco : input.block;
+      const inserida = await db.insert(ocorrencias).values({ condominioId: ctx.eco.condominio.id, relatorId: ctx.user.id, bloco, tipoResiduo: input.wasteType, local: input.location, descricao: input.description, chaveImagem: imagem.key, urlImagem: imagem.url }).returning({ id: ocorrencias.id });
+      const ocorrenciaId = inserida[0].id;
       await writeAuditLog(db, {
-        condominiumId: ctx.eco.condominium.id,
-        actorUserId: ctx.user.id,
-        entityType: "ocorrencia",
-        entityId: incidentId,
-        action: "ocorrencia_criada",
-        summary: `Ocorrência de ${input.wasteType} registrada no bloco ${ctx.eco.profile.role === "morador" && ctx.eco.resident ? ctx.eco.resident.block : input.block}.`,
-        afterState: { status: "aberta", block: ctx.eco.profile.role === "morador" && ctx.eco.resident ? ctx.eco.resident.block : input.block, wasteType: input.wasteType, location: input.location, description: input.description, hasImage: Boolean(image.key) },
+        condominioId: ctx.eco.condominio.id,
+        autorId: ctx.user.id,
+        tipoEntidade: "ocorrencia",
+        entidadeId: ocorrenciaId,
+        acao: "ocorrencia_criada",
+        resumo: `Ocorrência de ${input.wasteType} registrada no bloco ${bloco}.`,
+        estadoNovo: { status: "aberta", bloco, tipoResiduo: input.wasteType, local: input.location, descricao: input.description, hasImage: Boolean(imagem.key) },
       });
-      return { id: incidentId };
+      return { id: ocorrenciaId };
     }),
-    updateStatus: administratorOnly.input(z.object({ id: z.number().int().positive(), status: z.enum(incidentStatuses), resolutionNote: z.string().trim().max(1600).nullable().optional() })).mutation(async ({ ctx, input }) => {
+    atualizarStatus: administratorOnly.input(z.object({ id: z.number().int().positive(), status: z.enum(statusOcorrencia), resolutionNote: z.string().trim().max(1600).nullable().optional() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const found = await db.select().from(incidents).where(and(eq(incidents.id, input.id), eq(incidents.condominiumId, ctx.eco.condominium.id))).limit(1);
-      const incident = found[0];
-      if (!incident) throw new TRPCError({ code: "NOT_FOUND", message: "Ocorrência não encontrada." });
-      const resolvedAt = input.status === "resolvida" ? new Date() : null;
-      const resolvedByUserId = input.status === "resolvida" ? ctx.user.id : null;
-      const resolutionNote = input.resolutionNote || null;
-      await db.update(incidents).set({ status: input.status, resolutionNote, resolvedByUserId, resolvedAt, updatedAt: new Date() }).where(and(eq(incidents.id, input.id), eq(incidents.condominiumId, ctx.eco.condominium.id)));
+      const encontrada = await db.select().from(ocorrencias).where(and(eq(ocorrencias.id, input.id), eq(ocorrencias.condominioId, ctx.eco.condominio.id))).limit(1);
+      const ocorrencia = encontrada[0];
+      if (!ocorrencia) throw new TRPCError({ code: "NOT_FOUND", message: "Ocorrência não encontrada." });
+      const resolvidaEm = input.status === "resolvida" ? new Date() : null;
+      const resolvidoPorId = input.status === "resolvida" ? ctx.user.id : null;
+      const notaResolucao = input.resolutionNote || null;
+      await db.update(ocorrencias).set({ status: input.status, notaResolucao, resolvidoPorId, resolvidaEm, atualizadoEm: new Date() }).where(and(eq(ocorrencias.id, input.id), eq(ocorrencias.condominioId, ctx.eco.condominio.id)));
+      const estadoAnterior = incidentAuditState({ status: ocorrencia.status, bloco: ocorrencia.bloco, tipoResiduo: ocorrencia.tipoResiduo, local: ocorrencia.local, descricao: ocorrencia.descricao, notaResolucao: ocorrencia.notaResolucao, resolvidoPorId: ocorrencia.resolvidoPorId, resolvidaEm: ocorrencia.resolvidaEm });
       await writeAuditLog(db, {
-        condominiumId: ctx.eco.condominium.id,
-        actorUserId: ctx.user.id,
-        entityType: "ocorrencia",
-        entityId: incident.id,
-        action: "ocorrencia_atualizada",
-        summary: `Ocorrência atualizada para o status ${input.status}.`,
-        beforeState: incidentAuditState(incident),
-        afterState: { ...incidentAuditState(incident), status: input.status, resolutionNote, resolvedByUserId, resolvedAt },
+        condominioId: ctx.eco.condominio.id,
+        autorId: ctx.user.id,
+        tipoEntidade: "ocorrencia",
+        entidadeId: ocorrencia.id,
+        acao: "ocorrencia_atualizada",
+        resumo: `Ocorrência atualizada para o status ${input.status}.`,
+        estadoAnterior,
+        estadoNovo: { ...estadoAnterior, status: input.status, notaResolucao, resolvidoPorId, resolvidaEm },
       });
       return { success: true };
     }),
   }),
-  calendar: router({
-    events: withProfile.input(periodInput).query(async ({ ctx, input }) => {
+  calendario: router({
+    eventos: withProfile.input(periodInput).query(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const conditions = getPeriodConditions(ctx.eco.condominium.id, input);
-      if (ctx.eco.profile.role === "morador") {
-        if (!ctx.eco.resident) return [];
-        conditions.push(eq(collections.residentId, ctx.eco.resident.id));
+      const condicoes = condicoesPeriodo(ctx.eco.condominio.id, input);
+      if (ctx.eco.perfil.papel === "morador") {
+        if (!ctx.eco.morador) return [];
+        condicoes.push(eq(coletas.moradorId, ctx.eco.morador.id));
       }
-      const records = await db.select().from(collections).where(and(...conditions)).orderBy(asc(collections.scheduledAt));
-      return records.map((record) => ({ id: record.id, scheduledAt: record.scheduledAt, wasteType: record.wasteType, block: record.block, status: record.status, isReminder: record.status === "agendada" || record.status === "em_andamento" }));
+      const registros = await db.select().from(coletas).where(and(...condicoes)).orderBy(asc(coletas.agendadaPara));
+      return registros.map((registro) => ({ id: registro.id, scheduledAt: registro.agendadaPara, wasteType: registro.tipoResiduo, block: registro.bloco, status: registro.status, isReminder: registro.status === "agendada" || registro.status === "em_andamento" }));
     }),
   }),
-  campaigns: router({
-    list: withProfile.query(async ({ ctx }) => {
+  campanhas: router({
+    listar: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const rows = await db.select().from(campaigns).where(eq(campaigns.condominiumId, ctx.eco.condominium.id)).orderBy(desc(campaigns.startDate));
-      const participants = await db.select().from(campaignParticipants);
-      return rows.map((campaign) => ({ ...campaign, participantCount: participants.filter((item) => item.campaignId === campaign.id).length, joined: ctx.eco.resident ? participants.some((item) => item.campaignId === campaign.id && item.residentId === ctx.eco.resident?.id) : false }));
+      const linhas = await db.select().from(campanhas).where(eq(campanhas.condominioId, ctx.eco.condominio.id)).orderBy(desc(campanhas.dataInicio));
+      const participantes = await db.select().from(participantesCampanha);
+      return linhas.map((campanha) => ({ ...campanha, participantCount: participantes.filter((item) => item.campanhaId === campanha.id).length, joined: ctx.eco.morador ? participantes.some((item) => item.campanhaId === campanha.id && item.moradorId === ctx.eco.morador?.id) : false }));
     }),
-    create: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(140), description: z.string().trim().min(10).max(1600), targetDescription: z.string().trim().min(3).max(240), startDate: z.date(), endDate: z.date(), status: z.enum(campaignStatuses).default("planejada") }).refine((input) => input.endDate >= input.startDate, { message: "A data final deve ser posterior à data inicial.", path: ["endDate"] })).mutation(async ({ ctx, input }) => {
+    criar: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(140), description: z.string().trim().min(10).max(1600), targetDescription: z.string().trim().min(3).max(240), startDate: z.date(), endDate: z.date(), status: z.enum(statusCampanha).default("planejada") }).refine((input) => input.endDate >= input.startDate, { message: "A data final deve ser posterior à data inicial.", path: ["endDate"] })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const inserted = await db.insert(campaigns).values({ condominiumId: ctx.eco.condominium.id, createdByUserId: ctx.user.id, ...input }).returning({ id: campaigns.id });
-      return { id: inserted[0].id };
+      const inserida = await db.insert(campanhas).values({ condominioId: ctx.eco.condominio.id, criadoPorId: ctx.user.id, titulo: input.title, descricao: input.description, descricaoMeta: input.targetDescription, dataInicio: input.startDate, dataFim: input.endDate, status: input.status }).returning({ id: campanhas.id });
+      return { id: inserida[0].id };
     }),
-    join: withProfile.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    participar: withProfile.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      if (ctx.eco.profile.role !== "morador" || !ctx.eco.resident || ctx.eco.resident.status !== "ativo") throw new TRPCError({ code: "FORBIDDEN", message: "Apenas moradores ativos podem participar de campanhas." });
-      const campaign = await db.select().from(campaigns).where(and(eq(campaigns.id, input.campaignId), eq(campaigns.condominiumId, ctx.eco.condominium.id), eq(campaigns.status, "ativa"))).limit(1);
-      if (!campaign[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Campanha ativa não encontrada." });
-      await db.insert(campaignParticipants).values({ campaignId: input.campaignId, residentId: ctx.eco.resident.id }).onConflictDoUpdate({ target: [campaignParticipants.campaignId, campaignParticipants.residentId], set: { joinedAt: new Date() } });
+      if (ctx.eco.perfil.papel !== "morador" || !ctx.eco.morador || ctx.eco.morador.status !== "ativo") throw new TRPCError({ code: "FORBIDDEN", message: "Apenas moradores ativos podem participar de campanhas." });
+      const campanha = await db.select().from(campanhas).where(and(eq(campanhas.id, input.campaignId), eq(campanhas.condominioId, ctx.eco.condominio.id), eq(campanhas.status, "ativa"))).limit(1);
+      if (!campanha[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Campanha ativa não encontrada." });
+      await db.insert(participantesCampanha).values({ campanhaId: input.campaignId, moradorId: ctx.eco.morador.id }).onConflictDoUpdate({ target: [participantesCampanha.campanhaId, participantesCampanha.moradorId], set: { entrouEm: new Date() } });
       return { success: true };
     }),
   }),
-  feedback: router({
-    list: withProfile.query(async ({ ctx }) => {
+  avaliacoes: router({
+    listar: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const conditions = [eq(collectionFeedback.condominiumId, ctx.eco.condominium.id)];
-      if (ctx.eco.profile.role === "morador") {
-        if (!ctx.eco.resident) return [];
-        conditions.push(eq(collectionFeedback.residentId, ctx.eco.resident.id));
+      const condicoes = [eq(avaliacoesColeta.condominioId, ctx.eco.condominio.id)];
+      if (ctx.eco.perfil.papel === "morador") {
+        if (!ctx.eco.morador) return [];
+        condicoes.push(eq(avaliacoesColeta.moradorId, ctx.eco.morador.id));
       }
-      return db.select().from(collectionFeedback).where(and(...conditions)).orderBy(desc(collectionFeedback.createdAt));
+      return db.select().from(avaliacoesColeta).where(and(...condicoes)).orderBy(desc(avaliacoesColeta.criadoEm));
     }),
-    create: withProfile.input(z.object({ collectionId: z.number().int().positive().nullable().optional(), rating: z.number().int().min(1).max(5), message: z.string().trim().min(5).max(1500) })).mutation(async ({ ctx, input }) => {
+    criar: withProfile.input(z.object({ collectionId: z.number().int().positive().nullable().optional(), rating: z.number().int().min(1).max(5), message: z.string().trim().min(5).max(1500) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      if (ctx.eco.profile.role !== "morador" || !ctx.eco.resident) throw new TRPCError({ code: "FORBIDDEN", message: "Apenas moradores podem enviar feedback." });
-      const inserted = await db.insert(collectionFeedback).values({ condominiumId: ctx.eco.condominium.id, residentId: ctx.eco.resident.id, collectionId: input.collectionId || null, rating: input.rating, message: input.message }).returning({ id: collectionFeedback.id });
-      return { id: inserted[0].id };
+      if (ctx.eco.perfil.papel !== "morador" || !ctx.eco.morador) throw new TRPCError({ code: "FORBIDDEN", message: "Apenas moradores podem enviar feedback." });
+      const inserida = await db.insert(avaliacoesColeta).values({ condominioId: ctx.eco.condominio.id, moradorId: ctx.eco.morador.id, coletaId: input.collectionId || null, nota: input.rating, mensagem: input.message }).returning({ id: avaliacoesColeta.id });
+      return { id: inserida[0].id };
     }),
-    respond: administratorOnly.input(z.object({ id: z.number().int().positive(), response: z.string().trim().min(3).max(1500), status: z.enum(feedbackStatuses).default("respondido") })).mutation(async ({ ctx, input }) => {
+    responder: administratorOnly.input(z.object({ id: z.number().int().positive(), response: z.string().trim().min(3).max(1500), status: z.enum(statusAvaliacao).default("respondida") })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      await db.update(collectionFeedback).set({ response: input.response, status: input.status, respondedByUserId: ctx.user.id, respondedAt: new Date(), updatedAt: new Date() }).where(and(eq(collectionFeedback.id, input.id), eq(collectionFeedback.condominiumId, ctx.eco.condominium.id)));
+      await db.update(avaliacoesColeta).set({ resposta: input.response, status: input.status, respondidoPorId: ctx.user.id, respondidaEm: new Date(), atualizadoEm: new Date() }).where(and(eq(avaliacoesColeta.id, input.id), eq(avaliacoesColeta.condominioId, ctx.eco.condominio.id)));
       return { success: true };
     }),
   }),
-  compliance: router({
-    overview: administratorOnly.query(async ({ ctx }) => {
+  conformidade: router({
+    visaoGeral: administratorOnly.query(async ({ ctx }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const [allResidents, allPeople, records, openIncidents, allFeedback] = await Promise.all([
-        db.select().from(residents).where(eq(residents.condominiumId, ctx.eco.condominium.id)),
-        db.select().from(people).where(eq(people.condominiumId, ctx.eco.condominium.id)),
-        db.select().from(collections).where(eq(collections.condominiumId, ctx.eco.condominium.id)),
-        db.select().from(incidents).where(and(eq(incidents.condominiumId, ctx.eco.condominium.id), or(eq(incidents.status, "aberta"), eq(incidents.status, "em_analise")))),
-        db.select().from(collectionFeedback).where(and(eq(collectionFeedback.condominiumId, ctx.eco.condominium.id), eq(collectionFeedback.status, "novo"))),
+      const [todosMoradores, todasPessoas, registros, ocorrenciasAbertas, todasAvaliacoes] = await Promise.all([
+        db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id)),
+        db.select().from(pessoas).where(eq(pessoas.condominioId, ctx.eco.condominio.id)),
+        db.select().from(coletas).where(eq(coletas.condominioId, ctx.eco.condominio.id)),
+        db.select().from(ocorrencias).where(and(eq(ocorrencias.condominioId, ctx.eco.condominio.id), or(eq(ocorrencias.status, "aberta"), eq(ocorrencias.status, "em_analise")))),
+        db.select().from(avaliacoesColeta).where(and(eq(avaliacoesColeta.condominioId, ctx.eco.condominio.id), eq(avaliacoesColeta.status, "nova"))),
       ]);
-      return calculateComplianceOverview({ residents: allResidents, people: allPeople, collections: records, openIncidents: openIncidents.length, pendingFeedback: allFeedback.length, now: new Date() });
+      return calculateComplianceOverview({
+        residents: todosMoradores.map((morador) => ({ email: morador.email })),
+        people: todasPessoas.map((pessoa) => ({ accessStatus: pessoa.statusAcesso })),
+        collections: registros.map(paraRegroSustentabilidade),
+        openIncidents: ocorrenciasAbertas.length,
+        pendingFeedback: todasAvaliacoes.length,
+        now: new Date(),
+      });
     }),
   }),
-  comparison: router({
-    byBlock: administratorOnly.input(periodInput).query(async ({ ctx, input }) => {
+  comparacao: router({
+    porBloco: administratorOnly.input(periodInput).query(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const records = await db.select().from(collections).where(and(...getPeriodConditions(ctx.eco.condominium.id, input)));
-      return compareBlocks(records);
+      const registros = await db.select().from(coletas).where(and(...condicoesPeriodo(ctx.eco.condominio.id, input)));
+      return compareBlocks(registros.map(paraRegroSustentabilidade));
     }),
-    timeline: administratorOnly.input(periodInput).query(async ({ ctx, input }) => {
+    linhaDoTempo: administratorOnly.input(periodInput).query(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
-      const records = await db.select().from(collections).where(and(...getPeriodConditions(ctx.eco.condominium.id, input)));
-      return compareBlocksOverTime(records);
+      const registros = await db.select().from(coletas).where(and(...condicoesPeriodo(ctx.eco.condominio.id, input)));
+      return compareBlocksOverTime(registros.map(paraRegroSustentabilidade));
     }),
   }),
 });

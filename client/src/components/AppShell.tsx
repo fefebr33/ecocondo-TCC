@@ -51,7 +51,7 @@ const navigation: NavItem[] = [
 ];
 
 function resolveRole(role?: string): EcoRole {
-  if (role === "admin") return "administrador";
+  if (role === "administrador") return "administrador";
   return "morador";
 }
 
@@ -113,8 +113,8 @@ function Navigation({ role, onNavigate }: { role: EcoRole; onNavigate?: () => vo
 export default function AppShell({ children }: { children: ReactNode }) {
   const { loading, user, logout } = useAuth();
   const [isDrawerOpen, setDrawerOpen] = useState(false);
-  const profileQuery = trpc.profile.me.useQuery(undefined, { enabled: Boolean(user) });
-  const unreadNotifications = trpc.notifications.unreadCount.useQuery(undefined, { enabled: Boolean(user) });
+  const profileQuery = trpc.perfil.meuPerfil.useQuery(undefined, { enabled: Boolean(user) });
+  const unreadNotifications = trpc.notificacoes.contagemNaoLidas.useQuery(undefined, { enabled: Boolean(user) });
 
   if (loading) {
     return <div className="min-h-screen bg-[#f6f8f6]" aria-busy="true" />;
@@ -134,12 +134,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const role = (profileQuery.data?.role as EcoRole | undefined) ?? resolveRole(user.role);
-  const initials = (user.name || "Usuário")
+  const role = (profileQuery.data?.role as EcoRole | undefined) ?? resolveRole(user.papel);
+  const initials = (user.nome || "Usuário")
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
-    .map((part) => part[0])
+    .map((part: string) => part[0])
     .join("")
     .toUpperCase();
 
@@ -163,7 +163,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </Button>
             <div className="hidden sm:block">
               <p className="text-xs font-medium text-muted-foreground">Condomínio</p>
-              <p className="truncate text-sm font-semibold tracking-[-0.02em]">{profileQuery.data?.condominium.name || "Carregando condomínio"}</p>
+              <p className="truncate text-sm font-semibold tracking-[-0.02em]">{profileQuery.data?.condominium.nome || "Carregando condomínio"}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -177,7 +177,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 <AvatarFallback className="bg-[#e8f4ed] text-xs font-bold text-[#0b6145]">{initials}</AvatarFallback>
               </Avatar>
               <div className="hidden min-w-0 sm:block">
-                <p className="max-w-[155px] truncate text-sm font-semibold leading-4">{user.name || "Usuário EcoCondo"}</p>
+                <p className="max-w-[155px] truncate text-sm font-semibold leading-4">{user.nome || "Usuário EcoCondo"}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{formatRole(role)}</p>
               </div>
               <Button variant="ghost" size="icon" className="hidden h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive sm:inline-flex" onClick={logout} aria-label="Sair da conta">

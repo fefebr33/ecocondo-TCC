@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import { InsertUser, users } from "../drizzle/schema";
+import { NovoUsuario, usuarios } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -21,69 +21,67 @@ export async function getDb() {
   return _db;
 }
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
+export async function upsertUser(usuario: NovoUsuario): Promise<void> {
+  if (!usuario.idExterno) {
+    throw new Error("idExterno é obrigatório para salvar o usuário");
   }
 
   const db = await getDb();
 
   try {
-    const values: InsertUser = {
-      openId: user.openId,
+    const valores: NovoUsuario = {
+      idExterno: usuario.idExterno,
     };
-    const updateSet: Record<string, unknown> = {};
+    const conjuntoAtualizacao: Record<string, unknown> = {};
 
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
+    const camposTexto = ["nome", "email", "metodoLogin"] as const;
+    type CampoTexto = (typeof camposTexto)[number];
 
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
+    const atribuirSeInformado = (campo: CampoTexto) => {
+      const valor = usuario[campo];
+      if (valor === undefined) return;
+      const normalizado = valor ?? null;
+      valores[campo] = normalizado;
+      conjuntoAtualizacao[campo] = normalizado;
     };
 
-    textFields.forEach(assignNullable);
+    camposTexto.forEach(atribuirSeInformado);
 
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
+    if (usuario.ultimoAcesso !== undefined) {
+      valores.ultimoAcesso = usuario.ultimoAcesso;
+      conjuntoAtualizacao.ultimoAcesso = usuario.ultimoAcesso;
     }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = "admin";
-      updateSet.role = "admin";
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
+    if (usuario.papel !== undefined) {
+      valores.papel = usuario.papel;
+      conjuntoAtualizacao.papel = usuario.papel;
+    } else if (usuario.idExterno === ENV.ownerOpenId) {
+      valores.papel = "administrador";
+      conjuntoAtualizacao.papel = "administrador";
     }
 
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
+    if (!valores.ultimoAcesso) {
+      valores.ultimoAcesso = new Date();
     }
 
-    const existing = await db.select().from(users).where(eq(users.openId, values.openId)).limit(1);
-    if (existing[0]) {
-      await db.update(users).set(updateSet).where(eq(users.openId, values.openId));
+    if (Object.keys(conjuntoAtualizacao).length === 0) {
+      conjuntoAtualizacao.ultimoAcesso = new Date();
+    }
+
+    const existente = await db.select().from(usuarios).where(eq(usuarios.idExterno, valores.idExterno)).limit(1);
+    if (existente[0]) {
+      await db.update(usuarios).set(conjuntoAtualizacao).where(eq(usuarios.idExterno, valores.idExterno));
     } else {
-      await db.insert(users).values(values);
+      await db.insert(usuarios).values(valores);
     }
   } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
+    console.error("[Banco de dados] Falha ao salvar usuário:", error);
     throw error;
   }
 }
 
-export async function getUserByOpenId(openId: string) {
+export async function getUserByOpenId(idExterno: string) {
   const db = await getDb();
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const resultado = await db.select().from(usuarios).where(eq(usuarios.idExterno, idExterno)).limit(1);
 
-  return result.length > 0 ? result[0] : undefined;
+  return resultado.length > 0 ? resultado[0] : undefined;
 }
-
-// TODO: add feature queries here as your schema grows.
