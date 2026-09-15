@@ -11,7 +11,7 @@ let _db: ReturnType<typeof drizzle> | null = null;
 // Banco local em arquivo (SQLite) — sem depender de nenhum servidor externo.
 export async function getDb() {
   if (!_db) {
-    const file = ENV.databaseUrl || "./data/ecocondo.db";
+    const file = path.resolve(ENV.databaseUrl || "./data/ecocondo.db");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const sqlite = new Database(file);
     sqlite.pragma("journal_mode = WAL");
