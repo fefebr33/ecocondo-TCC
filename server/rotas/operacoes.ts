@@ -8,6 +8,7 @@ import { router } from "../_core/trpc";
 import { prepareCollectionCompletion, resolveCollectorAssignment } from "../dominio/regrasColeta";
 import { buildPendingResidentPerson } from "../dominio/regrasPessoas";
 import { collectionAuditState, writeAuditLog } from "../audit";
+import { salvarImagemBase64 } from "../storage";
 import {
   LIMITE_PESO_POR_COLETA_GRAMAS,
   LimiteAntifraudeExcedidoError,
@@ -183,6 +184,7 @@ export const operationsRouter = router({
       status: z.enum(statusColeta),
       weightGrams: z.number().int().min(0).max(LIMITE_PESO_POR_COLETA_GRAMAS).nullable().optional(),
       notes: z.string().trim().max(1200).nullable().optional(),
+      imageDataUrl: z.string().max(5_500_000).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       const encontrada = await db.select().from(coletas).where(and(eq(coletas.id, input.id), eq(coletas.condominioId, ctx.eco.condominio.id))).limit(1);
@@ -196,6 +198,18 @@ export const operationsRouter = router({
         );
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Não foi possível concluir a coleta." });
+      }
+
+      if (input.status === "concluida" && !coleta.chaveFoto && !input.imageDataUrl) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Anexe uma foto da coleta para concluir." });
+      }
+      let foto: { key: string | null; url: string | null } = { key: coleta.chaveFoto, url: coleta.urlFoto };
+      if (input.imageDataUrl) {
+        try {
+          foto = await salvarImagemBase64(input.imageDataUrl, `coletas/${ctx.eco.condominio.id}/${coleta.id}`);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Não foi possível salvar a foto da coleta." });
+        }
       }
 
       let moradorBeneficiado = null;
@@ -236,6 +250,8 @@ export const operationsRouter = router({
         concluidaEm,
         coletorId: coleta.coletorId ?? ctx.user.id,
         observacoes: conclusao.notes,
+        chaveFoto: foto.key,
+        urlFoto: foto.url,
         atualizadoEm: new Date(),
       }).where(eq(coletas.id, coleta.id));
       await writeAuditLog(db, {

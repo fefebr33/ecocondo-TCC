@@ -35,3 +35,16 @@ export async function storageGet(relKey: string): Promise<{ key: string; url: st
 export async function storageGetSignedUrl(relKey: string): Promise<string> {
   return `/uploads/${normalizeKey(relKey)}`;
 }
+
+/** Decodifica uma imagem enviada como data URL (ex.: "data:image/webp;base64,...") e salva no armazenamento local. */
+export async function salvarImagemBase64(imageDataUrl: string | null | undefined, prefixoChave: string) {
+  if (!imageDataUrl) return { key: null as string | null, url: null as string | null };
+  const match = imageDataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) throw new Error("Envie uma imagem PNG, JPEG ou WebP válida.");
+  const subtype = match[1] === "jpg" ? "jpeg" : match[1];
+  const extension = subtype === "jpeg" ? "jpg" : subtype;
+  const bytes = Buffer.from(match[2], "base64");
+  if (bytes.length > 4 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 4 MB.");
+  const key = `${prefixoChave}/${Date.now()}.${extension}`;
+  return storagePut(key, bytes, `image/${subtype}`);
+}

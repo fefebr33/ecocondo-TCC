@@ -116,6 +116,9 @@ export const coletas = sqliteTable("coletas", {
   pontosConcedidos: integer("pontos_concedidos").default(0).notNull(),
   status: text("status", { enum: statusColeta }).default("agendada").notNull(),
   observacoes: text("observacoes"),
+  /** Comprovação fotográfica anexada ao concluir a coleta (proteção antifraude). */
+  chaveFoto: text("chave_foto"),
+  urlFoto: text("url_foto"),
   criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
   atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [

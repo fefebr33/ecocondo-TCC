@@ -16,7 +16,7 @@ import {
   tiposResiduo,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { storagePut } from "../storage";
+import { salvarImagemBase64 } from "../storage";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -44,15 +44,11 @@ function paraRegroSustentabilidade(registro: typeof coletas.$inferSelect) {
 }
 
 async function saveIncidentImage(imageDataUrl: string | null | undefined, condominioId: number, usuarioId: number) {
-  if (!imageDataUrl) return { key: null, url: null };
-  const match = imageDataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)$/);
-  if (!match) throw new TRPCError({ code: "BAD_REQUEST", message: "Envie uma imagem PNG, JPEG ou WebP válida." });
-  const subtype = match[1] === "jpg" ? "jpeg" : match[1];
-  const extension = subtype === "jpeg" ? "jpg" : subtype;
-  const bytes = Buffer.from(match[2], "base64");
-  if (bytes.length > 4 * 1024 * 1024) throw new TRPCError({ code: "BAD_REQUEST", message: "A imagem deve ter no máximo 4 MB." });
-  const key = `ocorrencias/${condominioId}/${usuarioId}/${Date.now()}.${extension}`;
-  return storagePut(key, bytes, `image/${subtype}`);
+  try {
+    return await salvarImagemBase64(imageDataUrl, `ocorrencias/${condominioId}/${usuarioId}`);
+  } catch (error) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Não foi possível salvar a imagem." });
+  }
 }
 
 export const sustainabilityRouter = router({
