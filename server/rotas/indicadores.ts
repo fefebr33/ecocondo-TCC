@@ -3,11 +3,11 @@ import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, recompensas, resgates, perfisAcesso, usuarios, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { administratorOnly, withProfile } from "./ecocondo";
+import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { countUnreadNotifications } from "../domain/notificationRules";
-import { buildCollectionsCsv } from "../domain/csvExport";
+import { countUnreadNotifications } from "../dominio/regrasNotificacao";
+import { buildCollectionsCsv } from "../dominio/exportacaoCsv";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 const csvFiltersInput = z.object({

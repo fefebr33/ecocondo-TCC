@@ -2,23 +2,23 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AppShell from "@/components/AppShell";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import Dashboard from "@/pages/Dashboard";
-import Collections from "@/pages/Collections";
-import DisposalGuide from "@/pages/DisposalGuide";
-import Engagement from "@/pages/Engagement";
-import Podio from "@/pages/Podio";
-import Home from "@/pages/Home";
-import Login from "@/pages/Login";
-import ModulePlaceholder from "@/pages/ModulePlaceholder";
-import NotFound from "@/pages/NotFound";
-import Notifications from "@/pages/Notifications";
-import People from "@/pages/People";
-import Residents from "@/pages/Residents";
-import Reports from "@/pages/Reports";
-import Settings from "@/pages/Settings";
-import Sustainability from "@/pages/Sustainability";
-import Community from "@/pages/Community";
-import Audit from "@/pages/Audit";
+import Painel from "@/paginas/Painel";
+import Coletas from "@/paginas/Coletas";
+import GuiaDescarte from "@/paginas/GuiaDescarte";
+import Engajamento from "@/paginas/Engajamento";
+import Podio from "@/paginas/Podio";
+import Inicio from "@/paginas/Inicio";
+import Entrar from "@/paginas/Entrar";
+import EmDesenvolvimento from "@/paginas/EmDesenvolvimento";
+import NaoEncontrado from "@/paginas/NaoEncontrado";
+import Notificacoes from "@/paginas/Notificacoes";
+import Pessoas from "@/paginas/Pessoas";
+import Moradores from "@/paginas/Moradores";
+import Relatorios from "@/paginas/Relatorios";
+import Configuracoes from "@/paginas/Configuracoes";
+import Sustentabilidade from "@/paginas/Sustentabilidade";
+import Comunidade from "@/paginas/Comunidade";
+import Auditoria from "@/paginas/Auditoria";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -29,23 +29,23 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/entrar" component={Login} />
-      <Route path="/dashboard"><ProtectedRoute><Dashboard /></ProtectedRoute></Route>
-      <Route path="/coletas"><ProtectedRoute><Collections /></ProtectedRoute></Route>
-      <Route path="/moradores"><ProtectedRoute><Residents /></ProtectedRoute></Route>
-      <Route path="/pessoas"><ProtectedRoute><People /></ProtectedRoute></Route>
-      <Route path="/relatorios"><ProtectedRoute><Reports /></ProtectedRoute></Route>
-      <Route path="/auditoria"><ProtectedRoute><Audit /></ProtectedRoute></Route>
-      <Route path="/engajamento"><ProtectedRoute><Engagement /></ProtectedRoute></Route>
+      <Route path="/" component={Inicio} />
+      <Route path="/entrar" component={Entrar} />
+      <Route path="/dashboard"><ProtectedRoute><Painel /></ProtectedRoute></Route>
+      <Route path="/coletas"><ProtectedRoute><Coletas /></ProtectedRoute></Route>
+      <Route path="/moradores"><ProtectedRoute><Moradores /></ProtectedRoute></Route>
+      <Route path="/pessoas"><ProtectedRoute><Pessoas /></ProtectedRoute></Route>
+      <Route path="/relatorios"><ProtectedRoute><Relatorios /></ProtectedRoute></Route>
+      <Route path="/auditoria"><ProtectedRoute><Auditoria /></ProtectedRoute></Route>
+      <Route path="/engajamento"><ProtectedRoute><Engajamento /></ProtectedRoute></Route>
       <Route path="/podio"><ProtectedRoute><Podio /></ProtectedRoute></Route>
-      <Route path="/guia"><ProtectedRoute><DisposalGuide /></ProtectedRoute></Route>
-      <Route path="/notificacoes"><ProtectedRoute><Notifications /></ProtectedRoute></Route>
-      <Route path="/ambiental"><ProtectedRoute><Sustainability /></ProtectedRoute></Route>
-      <Route path="/comunidade"><ProtectedRoute><Community /></ProtectedRoute></Route>
-      <Route path="/configuracoes"><ProtectedRoute><Settings /></ProtectedRoute></Route>
-      <Route path="/404" component={NotFound} />
-      <Route component={NotFound} />
+      <Route path="/guia"><ProtectedRoute><GuiaDescarte /></ProtectedRoute></Route>
+      <Route path="/notificacoes"><ProtectedRoute><Notificacoes /></ProtectedRoute></Route>
+      <Route path="/ambiental"><ProtectedRoute><Sustentabilidade /></ProtectedRoute></Route>
+      <Route path="/comunidade"><ProtectedRoute><Comunidade /></ProtectedRoute></Route>
+      <Route path="/configuracoes"><ProtectedRoute><Configuracoes /></ProtectedRoute></Route>
+      <Route path="/404" component={NaoEncontrado} />
+      <Route component={NaoEncontrado} />
     </Switch>
   );
 }

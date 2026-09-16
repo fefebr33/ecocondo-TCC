@@ -4,7 +4,7 @@ vi.mock("../db/ecocondo", () => ({ obterOuCriarPerfil: vi.fn() }));
 vi.mock("../db", () => ({ getDb: vi.fn() }));
 
 import { obterOuCriarPerfil } from "../db/ecocondo";
-import { appRouter } from "../routers";
+import { appRouter } from "../rotas";
 import type { TrpcContext } from "../_core/context";
 
 const mockProfile = vi.mocked(obterOuCriarPerfil);

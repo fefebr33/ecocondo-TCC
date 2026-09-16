@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateComplianceOverview, calculateGoalProgress, compareBlocks, compareBlocksOverTime } from "./sustainabilityRules";
+import { calculateComplianceOverview, calculateGoalProgress, compareBlocks, compareBlocksOverTime } from "./regrasSustentabilidade";
 
 const records = [
   { block: "A", status: "concluida", scheduledAt: new Date("2026-08-10T12:00:00Z"), weightGrams: 2400, wasteType: "reciclavel" },

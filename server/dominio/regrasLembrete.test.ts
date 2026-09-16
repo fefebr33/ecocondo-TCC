@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reminderRecipients } from "./reminderRules";
+import { reminderRecipients } from "./regrasLembrete";
 
 describe("destinatários de lembrete de coleta", () => {
   it("deduplica morador e coletor e não recria notificações já entregues", () => {

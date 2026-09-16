@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { coletas, notificacoes, moradores } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { reminderRecipients } from "../domain/reminderRules";
+import { reminderRecipients } from "../dominio/regrasLembrete";
 import { sdk } from "../_core/sdk";
 
 /** Cria uma única notificação de lembrete para cada destinatário nas 24h anteriores à coleta. */

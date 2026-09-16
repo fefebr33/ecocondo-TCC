@@ -4,7 +4,7 @@ import { z } from "zod";
 import { condominios, papeisEco, pessoas, moradores, perfisAcesso, usuarios } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { obterOuCriarPerfil } from "../db/ecocondo";
-import { buildPendingResidentPerson } from "../domain/peopleRules";
+import { buildPendingResidentPerson } from "../dominio/regrasPessoas";
 import { protectedProcedure, router } from "../_core/trpc";
 
 export const withProfile = protectedProcedure.use(async ({ ctx, next }) => {

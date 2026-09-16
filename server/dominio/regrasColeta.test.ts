@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateCollectionPoints, prepareCollectionCompletion, resolveCollectorAssignment } from "./collectionRules";
+import { calculateCollectionPoints, prepareCollectionCompletion, resolveCollectorAssignment } from "./regrasColeta";
 
 describe("calculateCollectionPoints", () => {
   it("concede um ponto por quilograma completo em coleta reciclável concluída", () => {

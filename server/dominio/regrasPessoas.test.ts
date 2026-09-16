@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPendingResidentPerson, normalizeAccessEmail } from "./peopleRules";
+import { buildPendingResidentPerson, normalizeAccessEmail } from "./regrasPessoas";
 
 describe("regras de cadastro unificado", () => {
   it("normaliza o e-mail usado para reconhecer o primeiro acesso", () => {

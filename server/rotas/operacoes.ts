@@ -3,10 +3,10 @@ import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { coletas, statusColeta, notificacoes, pessoas, moradores, statusMorador, perfisAcesso, usuarios, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { administratorOnly, staffOnly, withProfile } from "./ecocondo";
+import { administratorOnly, staffOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
-import { prepareCollectionCompletion, resolveCollectorAssignment } from "../domain/collectionRules";
-import { buildPendingResidentPerson } from "../domain/peopleRules";
+import { prepareCollectionCompletion, resolveCollectorAssignment } from "../dominio/regrasColeta";
+import { buildPendingResidentPerson } from "../dominio/regrasPessoas";
 import { collectionAuditState, writeAuditLog } from "../audit";
 import {
   LIMITE_PESO_POR_COLETA_GRAMAS,
@@ -15,7 +15,7 @@ import {
   verificarLimiteDiarioMorador,
   verificarLimitePorColeta,
   verificarSegregacaoDeFuncao,
-} from "../domain/antifraude";
+} from "../dominio/antifraude";
 
 const moradorInput = z.object({
   name: z.string().trim().min(3).max(180),

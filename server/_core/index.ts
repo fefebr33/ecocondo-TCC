@@ -5,7 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerLoginRoute } from "./login";
 import { registerStorageProxy } from "./storageProxy";
-import { appRouter } from "../routers";
+import { appRouter } from "../rotas";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runCollectionReminders, sendCollectionReminders } from "../scheduled/collectionReminders";

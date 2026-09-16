@@ -2,7 +2,7 @@ import { and, eq, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { coletas, condominios, moradores } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { administratorOnly, withProfile } from "./ecocondo";
+import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 
 const periodos = ["mensal", "semestral", "anual"] as const;

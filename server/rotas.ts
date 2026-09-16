@@ -1,12 +1,12 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { publicProcedure, router } from "./_core/trpc";
-import { ecoRouter } from "./routers/ecocondo";
-import { operationsRouter } from "./routers/operations";
-import { analyticsRouter } from "./routers/analytics";
-import { sustainabilityRouter } from "./routers/sustainability";
-import { auditRouter } from "./routers/audit";
-import { podioRouter } from "./routers/podio";
+import { ecoRouter } from "./rotas/nucleo";
+import { operationsRouter } from "./rotas/operacoes";
+import { analyticsRouter } from "./rotas/indicadores";
+import { sustainabilityRouter } from "./rotas/sustentabilidade";
+import { auditRouter } from "./rotas/auditoria";
+import { podioRouter } from "./rotas/podio";
 
 export const appRouter = router({
   auth: router({

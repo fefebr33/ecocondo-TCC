@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCollectionsCsv } from "./csvExport";
+import { buildCollectionsCsv } from "./exportacaoCsv";
 
 describe("exportação CSV de coletas", () => {
   it("gera cabeçalho compatível com Excel, formata quilogramas e protege texto delimitado", () => {

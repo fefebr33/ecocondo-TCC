@@ -17,10 +17,10 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { storagePut } from "../storage";
-import { administratorOnly, withProfile } from "./ecocondo";
+import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { calculateComplianceOverview, calculateGoalProgress, compareBlocks, compareBlocksOverTime } from "../domain/sustainabilityRules";
+import { calculateComplianceOverview, calculateGoalProgress, compareBlocks, compareBlocksOverTime } from "../dominio/regrasSustentabilidade";
 import { incidentAuditState, writeAuditLog } from "../audit";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();

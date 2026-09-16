@@ -2,7 +2,7 @@ import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { tiposEntidadeAuditoria, logsAuditoria, usuarios } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { administratorOnly } from "./ecocondo";
+import { administratorOnly } from "./nucleo";
 import { router } from "../_core/trpc";
 
 const entradaListagemAuditoria = z.object({

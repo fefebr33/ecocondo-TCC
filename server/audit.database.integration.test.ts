@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { writeAuditLog } from "./audit";
-import { appRouter } from "./routers";
+import { appRouter } from "./rotas";
 import type { TrpcContext } from "./_core/context";
 import { getDb } from "./db";
 
