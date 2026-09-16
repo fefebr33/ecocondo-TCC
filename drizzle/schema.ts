@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   index,
   integer,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -30,6 +31,10 @@ export const condominios = sqliteTable("condominios", {
   estado: text("estado"),
   quantidadeBlocos: integer("quantidade_blocos").default(1).notNull(),
   ativo: integer("ativo", { mode: "boolean" }).default(true).notNull(),
+  /** Percentual de desconto sugerido para o pódio de reciclagem (aplicação manual pelo síndico). */
+  descontoPodioMensalPercentual: real("desconto_podio_mensal_percentual"),
+  descontoPodioSemestralPercentual: real("desconto_podio_semestral_percentual"),
+  descontoPodioAnualPercentual: real("desconto_podio_anual_percentual"),
   criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
   atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 });

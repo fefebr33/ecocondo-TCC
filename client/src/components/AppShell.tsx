@@ -20,6 +20,7 @@ import {
   Menu,
   Recycle,
   Settings,
+  Trophy,
   UsersRound,
   X,
 } from "lucide-react";
@@ -43,6 +44,7 @@ const navigation: NavItem[] = [
   { href: "/relatorios", label: "Relatórios", icon: ClipboardList, roles: ["administrador"] },
   { href: "/auditoria", label: "Auditoria", icon: History, roles: ["administrador"] },
   { href: "/engajamento", label: "Engajamento", icon: Gift, roles: ["administrador", "morador"] },
+  { href: "/podio", label: "Pódio de reciclagem", icon: Trophy, roles: ["administrador", "coletor", "morador"] },
   { href: "/guia", label: "Guia de descarte", icon: BookOpenCheck, roles: ["administrador", "coletor", "morador"] },
   { href: "/notificacoes", label: "Notificações", icon: Bell, roles: ["administrador", "coletor", "morador"] },
   { href: "/ambiental", label: "Gestão ambiental", icon: Camera, roles: ["administrador", "coletor", "morador"] },

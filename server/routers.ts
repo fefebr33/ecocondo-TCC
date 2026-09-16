@@ -6,6 +6,7 @@ import { operationsRouter } from "./routers/operations";
 import { analyticsRouter } from "./routers/analytics";
 import { sustainabilityRouter } from "./routers/sustainability";
 import { auditRouter } from "./routers/audit";
+import { podioRouter } from "./routers/podio";
 
 export const appRouter = router({
   auth: router({
@@ -24,6 +25,7 @@ export const appRouter = router({
   ...analyticsRouter._def.record,
   ...sustainabilityRouter._def.record,
   ...auditRouter._def.record,
+  ...podioRouter._def.record,
 
   // TODO: add feature routers here, e.g.
   // todo: router({

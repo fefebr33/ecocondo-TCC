@@ -8,6 +8,14 @@ import { router } from "../_core/trpc";
 import { prepareCollectionCompletion, resolveCollectorAssignment } from "../domain/collectionRules";
 import { buildPendingResidentPerson } from "../domain/peopleRules";
 import { collectionAuditState, writeAuditLog } from "../audit";
+import {
+  LIMITE_PESO_POR_COLETA_GRAMAS,
+  LimiteAntifraudeExcedidoError,
+  ehPesoAnomalo,
+  verificarLimiteDiarioMorador,
+  verificarLimitePorColeta,
+  verificarSegregacaoDeFuncao,
+} from "../domain/antifraude";
 
 const moradorInput = z.object({
   name: z.string().trim().min(3).max(180),
@@ -173,7 +181,7 @@ export const operationsRouter = router({
     atualizarStatus: staffOnly.input(z.object({
       id: z.number().int().positive(),
       status: z.enum(statusColeta),
-      weightGrams: z.number().int().min(0).max(500000).nullable().optional(),
+      weightGrams: z.number().int().min(0).max(LIMITE_PESO_POR_COLETA_GRAMAS).nullable().optional(),
       notes: z.string().trim().max(1200).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -189,6 +197,34 @@ export const operationsRouter = router({
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Não foi possível concluir a coleta." });
       }
+
+      let moradorBeneficiado = null;
+      if (coleta.moradorId) {
+        const encontrado = await db.select().from(moradores).where(eq(moradores.id, coleta.moradorId)).limit(1);
+        moradorBeneficiado = encontrado[0] ?? null;
+      }
+      let pesoAnomalo = false;
+      if (input.status === "concluida" && conclusao.weightGrams) {
+        try {
+          verificarSegregacaoDeFuncao(ctx.user.id, moradorBeneficiado?.usuarioId);
+          verificarLimitePorColeta(conclusao.weightGrams);
+          if (coleta.moradorId) {
+            const inicioDoDia = new Date();
+            inicioDoDia.setHours(0, 0, 0, 0);
+            const concluidasHoje = await db.select().from(coletas).where(and(eq(coletas.moradorId, coleta.moradorId), eq(coletas.status, "concluida"), gte(coletas.concluidaEm, inicioDoDia)));
+            const pesoJaConcluidoHoje = concluidasHoje.filter((registro) => registro.id !== coleta.id).reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
+            verificarLimiteDiarioMorador(pesoJaConcluidoHoje, conclusao.weightGrams);
+            const historico = await db.select().from(coletas).where(and(eq(coletas.moradorId, coleta.moradorId), eq(coletas.status, "concluida"))).orderBy(desc(coletas.concluidaEm)).limit(10);
+            const pesosHistoricos = historico.filter((registro) => registro.id !== coleta.id).map((registro) => registro.pesoGramas ?? 0);
+            const mediaHistorica = pesosHistoricos.length ? pesosHistoricos.reduce((soma, peso) => soma + peso, 0) / pesosHistoricos.length : 0;
+            pesoAnomalo = ehPesoAnomalo(conclusao.weightGrams, mediaHistorica);
+          }
+        } catch (error) {
+          if (error instanceof LimiteAntifraudeExcedidoError) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+          throw error;
+        }
+      }
+
       const novoPeso = conclusao.weightGrams;
       const novosPontos = conclusao.pointsAwarded;
       const deltaPontos = novosPontos - coleta.pontosConcedidos;
@@ -219,6 +255,17 @@ export const operationsRouter = router({
           observacoes: conclusao.notes,
         },
       });
+      if (pesoAnomalo) {
+        await writeAuditLog(db, {
+          condominioId: ctx.eco.condominio.id,
+          autorId: ctx.user.id,
+          tipoEntidade: "coleta",
+          entidadeId: coleta.id,
+          acao: "coleta_sinalizada_suspeita",
+          resumo: `Peso informado (${((novoPeso ?? 0) / 1000).toFixed(1)} kg) muito acima do histórico do morador. Revisar manualmente.`,
+          estadoNovo: { pesoGramas: novoPeso, moradorId: coleta.moradorId },
+        });
+      }
 
       if (coleta.moradorId && deltaPontos !== 0) {
         await db.update(moradores).set({ pontos: sql`${moradores.pontos} + ${deltaPontos}`, atualizadoEm: new Date() }).where(eq(moradores.id, coleta.moradorId));

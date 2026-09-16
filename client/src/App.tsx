@@ -6,6 +6,7 @@ import Dashboard from "@/pages/Dashboard";
 import Collections from "@/pages/Collections";
 import DisposalGuide from "@/pages/DisposalGuide";
 import Engagement from "@/pages/Engagement";
+import Podio from "@/pages/Podio";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import ModulePlaceholder from "@/pages/ModulePlaceholder";
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/relatorios"><ProtectedRoute><Reports /></ProtectedRoute></Route>
       <Route path="/auditoria"><ProtectedRoute><Audit /></ProtectedRoute></Route>
       <Route path="/engajamento"><ProtectedRoute><Engagement /></ProtectedRoute></Route>
+      <Route path="/podio"><ProtectedRoute><Podio /></ProtectedRoute></Route>
       <Route path="/guia"><ProtectedRoute><DisposalGuide /></ProtectedRoute></Route>
       <Route path="/notificacoes"><ProtectedRoute><Notifications /></ProtectedRoute></Route>
       <Route path="/ambiental"><ProtectedRoute><Sustainability /></ProtectedRoute></Route>
