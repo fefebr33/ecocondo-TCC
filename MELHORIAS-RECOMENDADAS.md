@@ -1,13 +1,22 @@
 # Melhorias recomendadas para o EcoCondo
 
-Este documento reúne sugestões de evolução do sistema. Nada aqui foi implementado — é uma lista de referência para decidir prioridades depois, inclusive para a seção de "trabalhos futuros" do TCC.
+Este documento reúne sugestões de evolução do sistema. Os itens marcados com ✅ já foram implementados (ver `TCC_EcoCondo_Felipe_Rueda.docx`, Seção 5.25); os demais seguem como lista de referência para decidir prioridades depois, inclusive para a seção de "trabalhos futuros" do TCC.
+
+## Já implementadas
+
+- ✅ **Comprovação fotográfica da coleta.** Foto obrigatória ao concluir uma coleta, reaproveitando `server/storage.ts`.
+- ✅ **Registro de aplicação do desconto.** Botão "marcar desconto como aplicado" no pódio, gravando data, percentual, observação e quem aplicou (`podio.marcarDescontoAplicado`).
+- ✅ **Segunda aprovação para pesos muito altos.** Pesos sinalizados como suspeitos ficam com os pontos retidos até um segundo administrador aprovar ou rejeitar (`coletas.decidirAprovacaoPeso`).
+- ✅ **Certificado trimestral de sustentabilidade em PDF**, por bloco, com equivalências ambientais (`certificados.gerarTrimestral`).
+- ✅ **Meta pessoal do morador**, no mesmo padrão das metas por bloco (`metaPessoal.*`).
+- ✅ **Métricas compartilháveis** (árvores poupadas, litros de água, CO2 evitado) no painel, na meta pessoal e nos certificados.
+- ✅ **Relatório anual automático**, gerado e notificado a todos os administradores em janeiro (`scheduled/annualReport`).
+- ✅ **Coleta recorrente por bloco** ("toda terça, bloco B"), gerada automaticamente (`scheduled/recurringCollections`).
+- ✅ **QR code por apartamento**, escaneado ou digitado pelo coletor para identificar o morador (`moradores.codigoQr`/`porCodigo`).
 
 ## Reciclagem, pódio e antifraude
 
-- **Comprovação fotográfica da coleta.** Exigir uma foto anexada ao concluir uma coleta (já existe upload de foto para ocorrências em `server/storage.ts`; dá para reaproveitar). Reforça a credibilidade do peso lançado e complementa as proteções antifraude já implementadas.
-- **Registro de aplicação do desconto.** Hoje o pódio só sugere o percentual; nada fica registrado quando o síndico efetivamente aplica o desconto na cobrança. Um botão simples "marcar desconto como aplicado" (gravando data, valor e quem aplicou) fecharia o ciclo de auditoria sem automatizar a parte financeira.
 - **Histórico de pódios encerrados.** Guardar um retrato do ranking ao final de cada mês/semestre/ano, em vez de recalcular sempre por data corrente. Evita que o pódio de um período passado mude se dados forem corrigidos depois, e permite mostrar "campeões anteriores".
-- **Segunda aprovação para pesos muito altos.** Hoje uma coleta sinalizada como suspeita (peso muito acima do histórico) só aparece na auditoria depois de já ter sido confirmada. Poderia exigir que, ao invés de bloquear ou só sinalizar, pesos acima de um limite fiquem pendentes de uma segunda confirmação por outro administrador antes de contar pontos.
 - **Notificação por e-mail real.** O sistema de notificações hoje é só interno (dentro do app). Enviar e-mail (ou WhatsApp) nos eventos importantes — coleta concluída, pódio fechado, desconto sugerido — aumenta o engajamento sem depender do morador abrir o app.
 
 ## Segurança e confiabilidade
