@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { AlertTriangle, Camera, ClipboardCheck, Flag, ImagePlus, Leaf, Target } from "lucide-react";
+import { AlertTriangle, Award, Camera, ClipboardCheck, Droplets, Flag, ImagePlus, Leaf, Target, TreePine } from "lucide-react";
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
@@ -46,6 +46,25 @@ export default function Sustainability() {
   const toggleGoal = trpc.metas.alternar.useMutation({ onSuccess: refresh, onError: (error) => toast.error(error.message) });
   const createIncident = trpc.ocorrencias.criar.useMutation({ onSuccess: () => { toast.success("Ocorrência registrada para acompanhamento."); refresh(); setIncident({ block: "A", wasteType: "reciclavel", location: "Área de descarte", description: "", imageDataUrl: "" }); }, onError: (error) => toast.error(error.message) });
   const updateIncident = trpc.ocorrencias.atualizarStatus.useMutation({ onSuccess: () => { toast.success("Tratamento da ocorrência atualizado."); refresh(); }, onError: (error) => toast.error(error.message) });
+
+  const isMorador = profile.data?.role === "morador";
+  const summary = trpc.dashboard.resumo.useQuery();
+  const myGoals = trpc.metaPessoal.minhas.useQuery(undefined, { enabled: isMorador });
+  const certificates = trpc.certificados.listar.useQuery();
+  const [personalGoal, setPersonalGoal] = useState({ targetKg: "10", startDate: dateValue(), endDate: dateValue(30) });
+  const definePersonalGoal = trpc.metaPessoal.definir.useMutation({
+    onSuccess: () => { toast.success("Meta pessoal definida."); void utils.metaPessoal.minhas.invalidate(); },
+    onError: (error) => toast.error(error.message),
+  });
+  const onPersonalGoalSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    definePersonalGoal.mutate({ targetKg: Number(personalGoal.targetKg), startDate: new Date(`${personalGoal.startDate}T00:00:00`), endDate: new Date(`${personalGoal.endDate}T23:59:59`) });
+  };
+  const [certificateBlock, setCertificateBlock] = useState("A");
+  const generateCertificate = trpc.certificados.gerarTrimestral.useMutation({
+    onSuccess: () => { toast.success("Certificado trimestral gerado."); void utils.certificados.listar.invalidate(); },
+    onError: (error) => toast.error(error.message),
+  });
 
   const complianceCards = useMemo(() => compliance.data ? [
     { label: "Acessos pendentes", value: compliance.data.pendingAccess, icon: ClipboardCheck, tone: "amber" },
@@ -96,5 +115,52 @@ export default function Sustainability() {
       <article className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6"><div className="flex items-center justify-between"><div><p className="font-semibold">Ocorrências registradas</p><p className="mt-1 text-sm text-muted-foreground">Acompanhamento de descarte inadequado e providências.</p></div><Badge variant="outline">{incidents.data?.length ?? 0}</Badge></div><div className="mt-5 grid gap-3">{incidents.data?.length ? incidents.data.map((item) => <div key={item.id} className="rounded-2xl border border-[#e4ece7] p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.local}</p><p className="mt-1 text-sm text-muted-foreground">Bloco {item.bloco} · {wasteLabels[item.tipoResiduo]}</p></div><Badge className={`border-0 ${item.status === "resolvida" ? "bg-[#e8f4ed] text-[#0a7048]" : "bg-[#fff2e9] text-[#bf5627]"}`}>{item.status.replace("_", " ")}</Badge></div><p className="mt-3 text-sm leading-6 text-muted-foreground">{item.descricao}</p>{item.urlImagem && <img src={item.urlImagem} alt={`Evidência da ocorrência em ${item.local}`} className="mt-3 max-h-40 w-full rounded-xl border border-[#e2ebe5] object-cover" />}{isAdmin && item.status !== "resolvida" && <div className="mt-3 flex gap-2"><Input aria-label={`Providência para ocorrência ${item.id}`} value={resolution[item.id] ?? ""} onChange={(event) => setResolution({ ...resolution, [item.id]: event.target.value })} placeholder="Providência adotada" /><Button size="sm" onClick={() => updateIncident.mutate({ id: item.id, status: "resolvida", resolutionNote: resolution[item.id] || null })} disabled={updateIncident.isPending} className="rounded-xl bg-[#0f7350] text-white">Resolver</Button></div>}</div>) : <p className="rounded-2xl bg-[#f6faf7] p-5 text-sm leading-6 text-muted-foreground">Nenhuma ocorrência registrada neste momento.</p>}</div></article>
     </section>
     {isAdmin && <section className="mt-6 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]"><ClipboardCheck className="h-5 w-5" /></span><div><h2 className="font-semibold">Comparativo entre blocos</h2><p className="text-sm text-muted-foreground">Use a comparação para orientar campanhas e metas, não para expor moradores individualmente.</p></div></div>{comparison.data?.length ? <><div className="mt-5 h-72 rounded-2xl bg-[#fbfdfc] p-3"><ResponsiveContainer width="100%" height="100%"><BarChart data={comparison.data.map((item) => ({ ...item, label: `Bloco ${item.block}` }))} margin={{ top: 12, right: 12, left: -14, bottom: 2 }}><CartesianGrid vertical={false} stroke="#e5eee8" /><XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#587064" }} /><YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#587064" }} unit=" kg" /><Tooltip cursor={{ fill: "#eef7f1" }} formatter={(value: number) => [`${value} kg`, ""]} contentStyle={{ borderRadius: 14, border: "1px solid #dce8e0", boxShadow: "0 12px 30px -18px rgba(4,66,42,.45)" }} /><Legend wrapperStyle={{ fontSize: 12 }} /><Bar dataKey="totalKg" name="Total coletado" fill="#75b98e" radius={[6, 6, 0, 0]} /><Bar dataKey="recyclableKg" name="Recicláveis" fill="#0f7350" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>{timeline.data?.length ? <div className="mt-5 h-72 rounded-2xl bg-[#fbfdfc] p-3"><ResponsiveContainer width="100%" height="100%"><LineChart data={timeline.data.map((item) => ({ ...item, label: new Date(`${item.period}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "numeric" }) }))} margin={{ top: 12, right: 12, left: -14, bottom: 2 }}><CartesianGrid vertical={false} stroke="#e5eee8" /><XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#587064" }} /><YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#587064" }} unit=" kg" /><Tooltip formatter={(value: number) => [`${value} kg`, ""]} contentStyle={{ borderRadius: 14, border: "1px solid #dce8e0", boxShadow: "0 12px 30px -18px rgba(4,66,42,.45)" }} /><Legend wrapperStyle={{ fontSize: 12 }} />{comparison.data.map((item, index) => <Line key={item.block} type="monotone" dataKey={item.block} name={`Bloco ${item.block}`} stroke={["#0f7350", "#d49a33", "#4d83b7", "#bd5c53"][index % 4]} strokeWidth={3} dot={{ r: 4 }} />)}</LineChart></ResponsiveContainer></div> : null}<div className="mt-5 overflow-x-auto"><table className="w-full min-w-[580px] text-left text-sm"><thead className="border-b border-[#e5ede8] text-[11px] tracking-[.08em] text-muted-foreground uppercase"><tr><th className="pb-3 font-bold">Bloco</th><th className="pb-3 font-bold">Total</th><th className="pb-3 font-bold">Recicláveis</th><th className="pb-3 font-bold">Coletas</th><th className="pb-3 font-bold">Taxa</th></tr></thead><tbody>{comparison.data.map((row) => <tr key={row.block} className="border-b border-[#edf2ef]"><td className="py-4 font-semibold">Bloco {row.block}</td><td className="py-4">{row.totalKg} kg</td><td className="py-4">{row.recyclableKg} kg</td><td className="py-4">{row.collectionCount}</td><td className="py-4"><Badge className="border-0 bg-[#e8f4ed] text-[#0a7048] hover:bg-[#e8f4ed]">{row.recyclingRate ?? "—"}{row.recyclingRate !== null ? "%" : ""}</Badge></td></tr>)}</tbody></table></div></> : <p className="mt-5 rounded-2xl bg-[#f6faf7] p-5 text-center text-sm text-muted-foreground">Conclua coletas para gerar o comparativo e os gráficos por bloco.</p>}</section>}
+
+    <section className="mt-6 rounded-[24px] border border-[#dce8e0] bg-[#103f2e] p-5 text-white shadow-[0_16px_34px_-28px_rgba(4,66,42,.45)] sm:p-6">
+      <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white/10"><TreePine className="h-5 w-5 text-[#91d7ae]" /></span><div><p className="text-[11px] font-bold tracking-[.12em] text-[#a8dfbc] uppercase">Impacto em números fáceis de compartilhar</p><h2 className="mt-1 text-lg font-semibold">O que os recicláveis já significam</h2></div></div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <span className="rounded-2xl bg-white/10 p-4"><TreePine className="h-4 w-4 text-[#91d7ae]" /><b className="mt-2 block text-2xl">{summary.data?.equivalencias.arvoresPoupadas ?? 0}</b><span className="text-sm text-[#c6e4d1]">árvore(s) poupada(s)</span></span>
+        <span className="rounded-2xl bg-white/10 p-4"><Droplets className="h-4 w-4 text-[#91d7ae]" /><b className="mt-2 block text-2xl">{(summary.data?.equivalencias.litrosAguaPoupados ?? 0).toLocaleString("pt-BR")}</b><span className="text-sm text-[#c6e4d1]">litros de água poupados</span></span>
+        <span className="rounded-2xl bg-white/10 p-4"><Leaf className="h-4 w-4 text-[#91d7ae]" /><b className="mt-2 block text-2xl">{(summary.data?.equivalencias.co2EvitadoKg ?? 0).toLocaleString("pt-BR")} kg</b><span className="text-sm text-[#c6e4d1]">de CO₂e evitados</span></span>
+      </div>
+      <p className="mt-4 text-xs leading-5 text-[#a8dfbc]">Estimativas educativas com base no peso reciclado registrado{isMorador ? " por você" : " pelo condomínio"}, usando fatores aproximados de referência (não substituem um inventário formal de ciclo de vida).</p>
+    </section>
+
+    {isMorador && (
+      <section className="mt-6 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
+        <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#eef7f1] text-[#0f7350]"><Target className="h-5 w-5" /></span><div><p className="font-semibold">Minha meta pessoal</p><p className="text-sm text-muted-foreground">Defina quanto você quer reciclar no período e acompanhe seu próprio progresso.</p></div></div>
+        <form onSubmit={onPersonalGoalSubmit} className="mt-4 grid gap-3 rounded-2xl bg-[#f5faf7] p-4 sm:grid-cols-3">
+          <Input aria-label="Meta pessoal em quilogramas" type="number" min="0.5" step="0.5" value={personalGoal.targetKg} onChange={(event) => setPersonalGoal({ ...personalGoal, targetKg: event.target.value })} required />
+          <Input aria-label="Início da meta pessoal" type="date" value={personalGoal.startDate} onChange={(event) => setPersonalGoal({ ...personalGoal, startDate: event.target.value })} required />
+          <Input aria-label="Fim da meta pessoal" type="date" value={personalGoal.endDate} onChange={(event) => setPersonalGoal({ ...personalGoal, endDate: event.target.value })} required />
+          <Button type="submit" disabled={definePersonalGoal.isPending} className="rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243] sm:col-span-3">Definir nova meta</Button>
+        </form>
+        <div className="mt-5 grid gap-3">
+          {myGoals.data?.length ? myGoals.data.filter((item) => item.ativo).map((item) => (
+            <div key={item.id} className="rounded-2xl border border-[#e0ebe4] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">{formatDate(item.dataInicio)} a {formatDate(item.dataFim)}</p><Badge className={`border-0 ${item.atingida ? "bg-[#e8f4ed] text-[#0a7048]" : "bg-[#f0f5f2] text-muted-foreground"} hover:bg-inherit`}>{item.coletadoKg} / {item.metaKg} kg</Badge></div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e8efeb]"><div className="h-full rounded-full bg-[#0f7350] transition-all" style={{ width: `${item.progresso}%` }} /></div>
+              <p className="mt-2 text-xs text-muted-foreground">{item.progresso}% da meta{item.atingida ? " · Meta atingida! 🎉" : ""} · equivale a {item.equivalencias.arvoresPoupadas} árvore(s) poupada(s)</p>
+            </div>
+          )) : <p className="rounded-2xl bg-[#f6faf7] p-5 text-sm leading-6 text-muted-foreground">Você ainda não definiu uma meta pessoal.</p>}
+        </div>
+      </section>
+    )}
+
+    <section className="mt-6 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
+      <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff3df] text-[#af7726]"><Award className="h-5 w-5" /></span><div><p className="font-semibold">Certificados trimestrais de sustentabilidade</p><p className="text-sm text-muted-foreground">Reconhecimento em PDF por bloco, com base no peso reciclado no trimestre encerrado.</p></div></div>
+      {isAdmin && <form onSubmit={(event) => { event.preventDefault(); generateCertificate.mutate({ block: certificateBlock, useCurrentQuarter: false }); }} className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl bg-[#f5faf7] p-4">
+        <label className="grid gap-1.5 text-xs font-semibold">Bloco<Input value={certificateBlock} onChange={(event) => setCertificateBlock(event.target.value)} className="h-10 w-28 rounded-xl bg-white" required /></label>
+        <Button type="submit" disabled={generateCertificate.isPending} className="h-10 rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]">{generateCertificate.isPending ? "Gerando..." : "Gerar certificado do trimestre encerrado"}</Button>
+      </form>}
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        {certificates.data?.length ? certificates.data.map((item) => (
+          <a key={item.id} href={item.urlArquivo} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-2xl border border-[#e5eee8] bg-[#fbfdfc] px-4 py-3 text-sm hover:border-[#0f7350]">
+            <span><b className="block font-semibold">Bloco {item.bloco} · {item.trimestre}</b><span className="text-xs text-muted-foreground">{item.pesoKg} kg reciclados</span></span>
+            <Badge className="border-0 bg-[#fff3df] text-[#af7726] hover:bg-[#fff3df]">Baixar PDF</Badge>
+          </a>
+        )) : <p className="rounded-2xl bg-[#f6faf7] p-5 text-sm leading-6 text-muted-foreground sm:col-span-2">Nenhum certificado gerado ainda.</p>}
+      </div>
+    </section>
   </div>;
 }

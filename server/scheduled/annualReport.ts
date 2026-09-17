@@ -24,7 +24,7 @@ async function gerarPdfRelatorioAnual(condominioNome: string, ano: number, total
     ["Coletas concluídas", `${coletasConcluidas}`],
     ["Árvores poupadas (estimativa)", `${equivalencias.arvoresPoupadas}`],
     ["Água poupada (estimativa)", `${equivalencias.litrosAguaPoupados.toLocaleString("pt-BR")} litros`],
-    ["CO₂ evitado (estimativa)", `${equivalencias.co2EvitadoKg.toLocaleString("pt-BR")} kg CO₂e`],
+    ["CO2 evitado (estimativa)", `${equivalencias.co2EvitadoKg.toLocaleString("pt-BR")} kg CO2e`],
   ];
   let y = 690;
   linhas.forEach(([rotulo, valor]) => { desenhar(rotulo, 54, y, 11); desenhar(valor, 350, y, 11, true, rgb(0.04, 0.39, 0.25)); y -= 31; });

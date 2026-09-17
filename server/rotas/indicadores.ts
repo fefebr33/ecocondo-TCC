@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, recompensas, resgates, perfisAcesso, usuarios, tiposResiduo } from "../../drizzle/schema";
+import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, recompensas, resgates, perfisAcesso, relatoriosAnuais, usuarios, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
@@ -94,14 +94,14 @@ export const analyticsRouter = router({
         ["Taxa de reciclagem", relatorio.recyclingRate === null ? "Sem dados" : `${relatorio.recyclingRate}%`],
         ["Coletas concluídas", `${relatorio.completedCount}`],
         ["Ocorrências", `${relatorio.occurrenceCount}`],
-        ["CO₂ evitado (estimativa)", `${relatorio.co2EstimateKg.toLocaleString("pt-BR")} kg CO₂e`],
+        ["CO2 evitado (estimativa)", `${relatorio.co2EstimateKg.toLocaleString("pt-BR")} kg CO2e`],
       ];
       let y = 665;
       linhas.forEach(([rotulo, valor]) => { desenhar(rotulo, 54, y, 11); desenhar(valor, 350, y, 11, true, rgb(0.04, 0.39, 0.25)); y -= 31; });
       desenhar("Composição por categoria", 48, y - 15, 13, true); y -= 48;
       relatorio.byWasteType.forEach((item) => { desenhar(`${item.wasteType}: ${item.kilograms.toLocaleString("pt-BR")} kg`, 54, y); y -= 23; });
       desenhar("Nota metodológica", 48, 180, 11, true);
-      desenhar("A estimativa de CO₂ utiliza o fator configurável de 0,75 kg CO₂e por kg de reciclável.", 48, 162, 9);
+      desenhar("A estimativa de CO2 utiliza o fator configurável de 0,75 kg CO2e por kg de reciclável.", 48, 162, 9);
       desenhar("Os dados devem ser interpretados como estimativas de apoio à gestão e à prestação de contas.", 48, 148, 9);
       desenhar(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 48, 72, 9);
       const bytes = await pdf.save();
@@ -126,6 +126,10 @@ export const analyticsRouter = router({
         collectorName: perfisColetor.find((perfil) => perfil.usuarioId === registro.coletorId)?.nome ?? null,
       })));
       return { filename: `coletas-ecocondo-${new Date().toISOString().slice(0, 10)}.csv`, content: conteudo };
+    }),
+    anuais: administratorOnly.query(async ({ ctx }) => {
+      const db = await getDb();
+      return db.select().from(relatoriosAnuais).where(eq(relatoriosAnuais.condominioId, ctx.eco.condominio.id)).orderBy(desc(relatoriosAnuais.ano));
     }),
   }),
   engajamento: router({

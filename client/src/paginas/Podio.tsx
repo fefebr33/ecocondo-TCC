@@ -3,9 +3,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
-import { Medal, Percent, Trophy } from "lucide-react";
+import { CheckCircle2, History, Medal, Percent, Trophy } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
+
+function formatDate(value: Date | string) {
+  return new Date(value).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+}
 
 const periodos = [
   { value: "mensal" as const, label: "Mensal" },
@@ -26,6 +30,19 @@ export default function Podio() {
     onSuccess: () => { utils.podio.ranking.invalidate(); toast.success("Percentuais de desconto atualizados."); },
     onError: (issue) => toast.error(issue.message),
   });
+  const historico = trpc.podio.historicoDescontos.useQuery(undefined, { enabled: isAdmin });
+  const [marcandoId, setMarcandoId] = useState<number | null>(null);
+  const [observacaoAplicacao, setObservacaoAplicacao] = useState("");
+  const marcarAplicado = trpc.podio.marcarDescontoAplicado.useMutation({
+    onSuccess: () => {
+      utils.podio.ranking.invalidate();
+      utils.podio.historicoDescontos.invalidate();
+      toast.success("Aplicação do desconto registrada.");
+      setMarcandoId(null);
+      setObservacaoAplicacao("");
+    },
+    onError: (issue) => toast.error(issue.message),
+  });
 
   function submitDescontos(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,6 +51,11 @@ export default function Podio() {
       semestral: descontos.semestral === "" ? undefined : Number(descontos.semestral),
       anual: descontos.anual === "" ? undefined : Number(descontos.anual),
     });
+  }
+
+  function confirmarAplicacao(moradorId: number) {
+    if (!data?.descontoSugeridoPercentual) { toast.error("Defina o percentual sugerido antes de registrar a aplicação."); return; }
+    marcarAplicado.mutate({ moradorId, periodo, percentual: data.descontoSugeridoPercentual, observacao: observacaoAplicacao.trim() || undefined });
   }
 
   const top3 = data?.ranking.slice(0, 3) ?? [];
@@ -76,6 +98,21 @@ export default function Podio() {
                   <p className="text-xs text-muted-foreground">Bloco {linha.bloco} · {linha.apartamento}</p>
                   <p className="mt-3 text-lg font-bold text-[#0f7350]">{linha.pontos} pts</p>
                   <p className="text-xs text-muted-foreground">{linha.pesoKg} kg reciclados</p>
+                  {isAdmin && (
+                    linha.descontoAplicado ? (
+                      <p className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-[#e8f4ed] px-2 py-1.5 text-[11px] font-semibold text-[#0a7048]"><CheckCircle2 className="h-3.5 w-3.5" />Desconto aplicado em {formatDate(linha.descontoAplicado.aplicadoEm)}</p>
+                    ) : marcandoId === linha.moradorId ? (
+                      <div className="mt-3 grid gap-2">
+                        <Input aria-label="Observação da aplicação do desconto" placeholder="Observação (opcional)" value={observacaoAplicacao} onChange={(event) => setObservacaoAplicacao(event.target.value)} className="h-9 rounded-lg bg-white text-xs" />
+                        <div className="flex gap-2">
+                          <Button size="sm" disabled={marcarAplicado.isPending} onClick={() => confirmarAplicacao(linha.moradorId)} className="h-8 flex-1 rounded-lg bg-[#0f7350] text-xs text-white hover:bg-[#0a6243]">Confirmar</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setMarcandoId(null)} className="h-8 rounded-lg text-xs">Cancelar</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => { setMarcandoId(linha.moradorId); setObservacaoAplicacao(""); }} className="mt-3 h-8 w-full rounded-lg text-xs">Marcar desconto como aplicado</Button>
+                    )
+                  )}
                 </article>
               ))}
             </div>
@@ -118,6 +155,20 @@ export default function Podio() {
           {data?.ranking.some((linha) => linha.elegivelDesconto) && (
             <p className="mt-4 text-xs text-muted-foreground"><Badge className="mr-2 border-0 bg-[#edf7f1] text-[#0a7048] hover:bg-[#edf7f1]">Lembrete</Badge>Aplique o desconto manualmente na cobrança dos três primeiros colocados, conforme a política do condomínio.</p>
           )}
+        </section>
+      )}
+
+      {isAdmin && (
+        <section className="mt-5 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
+          <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]"><History className="h-5 w-5" /></span><div><p className="font-semibold">Histórico de descontos aplicados</p><p className="text-sm text-muted-foreground">Fecha o ciclo do pódio: cada linha registra quem aplicou o desconto e quando.</p></div></div>
+          <div className="mt-4 grid gap-2">
+            {historico.data?.length ? historico.data.map((item) => (
+              <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#e5eee8] bg-[#fbfdfc] px-4 py-3 text-sm">
+                <span><b className="font-semibold">{item.moradorNome}</b> · {item.posicao}º lugar · {item.periodo}</span>
+                <span className="text-xs text-muted-foreground">{item.percentualAplicado}% aplicado em {formatDate(item.aplicadoEm)}{item.observacao ? ` · ${item.observacao}` : ""}</span>
+              </div>
+            )) : <p className="rounded-2xl bg-[#f6faf7] p-5 text-sm leading-6 text-muted-foreground">Nenhum desconto foi registrado como aplicado ainda.</p>}
+          </div>
         </section>
       )}
     </div>
