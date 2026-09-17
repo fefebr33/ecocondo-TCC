@@ -1,11 +1,15 @@
 import { TRPCError } from "@trpc/server";
+import QRCode from "qrcode";
+import { customAlphabet } from "nanoid";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { coletas, statusColeta, notificacoes, pessoas, moradores, statusMorador, perfisAcesso, usuarios, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
+
+const gerarCodigoMorador = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 import { administratorOnly, staffOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
-import { prepareCollectionCompletion, resolveCollectorAssignment } from "../dominio/regrasColeta";
+import { calculateCollectionPoints, prepareCollectionCompletion, resolveCollectorAssignment } from "../dominio/regrasColeta";
 import { buildPendingResidentPerson } from "../dominio/regrasPessoas";
 import { collectionAuditState, writeAuditLog } from "../audit";
 import { salvarImagemBase64 } from "../storage";
@@ -77,6 +81,26 @@ export const operationsRouter = router({
         await db.insert(pessoas).values({ condominioId: ctx.eco.condominio.id, ...buildPendingResidentPerson({ id, usuarioId: existente[0].usuarioId, nome: atualizacao.name ?? existente[0].nome, email: proximoEmail, telefone: proximoTelefone, bloco: atualizacao.block ?? existente[0].bloco, apartamento: atualizacao.apartment ?? existente[0].apartamento }) });
       }
       return { success: true };
+    }),
+    /** Gera (na primeira vez) e devolve o código + QR code do apartamento, para o coletor escanear em vez de escolher o morador numa lista. */
+    codigoQr: staffOnly.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      const encontrado = await db.select().from(moradores).where(and(eq(moradores.id, input.id), eq(moradores.condominioId, ctx.eco.condominio.id))).limit(1);
+      const morador = encontrado[0];
+      if (!morador) throw new TRPCError({ code: "NOT_FOUND", message: "Morador não encontrado." });
+      let codigo = morador.codigoAcesso;
+      if (!codigo) {
+        codigo = gerarCodigoMorador();
+        await db.update(moradores).set({ codigoAcesso: codigo, atualizadoEm: new Date() }).where(eq(moradores.id, morador.id));
+      }
+      const qrDataUrl = await QRCode.toDataURL(codigo, { margin: 1, width: 220 });
+      return { code: codigo, qrDataUrl };
+    }),
+    porCodigo: staffOnly.input(z.object({ code: z.string().trim().min(1).max(32) })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      const encontrado = await db.select().from(moradores).where(and(eq(moradores.codigoAcesso, input.code.toUpperCase()), eq(moradores.condominioId, ctx.eco.condominio.id))).limit(1);
+      if (!encontrado[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Nenhum morador encontrado para este código." });
+      return encontrado[0];
     }),
   }),
   coletas: router({
@@ -240,7 +264,9 @@ export const operationsRouter = router({
       }
 
       const novoPeso = conclusao.weightGrams;
-      const novosPontos = conclusao.pointsAwarded;
+      // Peso anômalo em uma coleta concluída: os pontos ficam retidos até a aprovação de um segundo administrador (dupla aprovação).
+      const pontosCalculados = conclusao.pointsAwarded;
+      const novosPontos = pesoAnomalo ? 0 : pontosCalculados;
       const deltaPontos = novosPontos - coleta.pontosConcedidos;
       const concluidaEm = conclusao.completedAt ? new Date() : null;
       await db.update(coletas).set({
@@ -252,6 +278,8 @@ export const operationsRouter = router({
         observacoes: conclusao.notes,
         chaveFoto: foto.key,
         urlFoto: foto.url,
+        pendenteAprovacaoPeso: pesoAnomalo,
+        aprovacaoPesoStatus: pesoAnomalo ? "pendente" : coleta.aprovacaoPesoStatus,
         atualizadoEm: new Date(),
       }).where(eq(coletas.id, coleta.id));
       await writeAuditLog(db, {
@@ -278,8 +306,8 @@ export const operationsRouter = router({
           tipoEntidade: "coleta",
           entidadeId: coleta.id,
           acao: "coleta_sinalizada_suspeita",
-          resumo: `Peso informado (${((novoPeso ?? 0) / 1000).toFixed(1)} kg) muito acima do histórico do morador. Revisar manualmente.`,
-          estadoNovo: { pesoGramas: novoPeso, moradorId: coleta.moradorId },
+          resumo: `Peso informado (${((novoPeso ?? 0) / 1000).toFixed(1)} kg) muito acima do histórico do morador. Pontos retidos até aprovação de um segundo administrador.`,
+          estadoNovo: { pesoGramas: novoPeso, moradorId: coleta.moradorId, pontosPendentes: pontosCalculados },
         });
       }
 
@@ -295,7 +323,80 @@ export const operationsRouter = router({
             coletaId: coleta.id,
             tipo: input.status === "concluida" ? "coleta_concluida" : "sistema",
             titulo: input.status === "concluida" ? "Coleta concluída" : "Atualização de coleta",
-            mensagem: input.status === "concluida" ? `Sua coleta foi concluída${novosPontos ? ` e gerou ${novosPontos} ponto(s).` : "."}` : `O status da sua coleta foi atualizado para ${input.status}.`,
+            mensagem: pesoAnomalo
+              ? "Sua coleta foi concluída. O peso está acima do padrão histórico e os pontos ficarão pendentes até a revisão de um administrador."
+              : input.status === "concluida" ? `Sua coleta foi concluída${novosPontos ? ` e gerou ${novosPontos} ponto(s).` : "."}` : `O status da sua coleta foi atualizado para ${input.status}.`,
+          });
+        }
+      }
+      return { success: true, pointsAwarded: novosPontos, pendingApproval: pesoAnomalo };
+    }),
+    listarPendentesAprovacao: administratorOnly.query(async ({ ctx }) => {
+      const db = await getDb();
+      const registros = await db.select().from(coletas).where(and(eq(coletas.condominioId, ctx.eco.condominio.id), eq(coletas.pendenteAprovacaoPeso, true))).orderBy(desc(coletas.concluidaEm));
+      const moradorIds = Array.from(new Set(registros.map((registro) => registro.moradorId).filter((id): id is number => id !== null)));
+      const moradoresRelacionados = moradorIds.length ? await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id)) : [];
+      return registros.map((registro) => ({
+        ...registro,
+        pontosCalculados: calculateCollectionPoints(registro.status, registro.tipoResiduo, registro.pesoGramas),
+        residentName: moradoresRelacionados.find((morador) => morador.id === registro.moradorId)?.nome ?? null,
+      }));
+    }),
+    decidirAprovacaoPeso: administratorOnly.input(z.object({
+      id: z.number().int().positive(),
+      aprovar: z.boolean(),
+      observacao: z.string().trim().max(500).nullable().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      const encontrada = await db.select().from(coletas).where(and(eq(coletas.id, input.id), eq(coletas.condominioId, ctx.eco.condominio.id))).limit(1);
+      const coleta = encontrada[0];
+      if (!coleta) throw new TRPCError({ code: "NOT_FOUND", message: "Coleta não encontrada." });
+      if (!coleta.pendenteAprovacaoPeso) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta coleta não está pendente de aprovação." });
+      if (coleta.coletorId === ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Quem concluiu a coleta não pode ser quem aprova o peso suspeito. Peça para outro administrador revisar." });
+      }
+
+      const pontosCalculados = calculateCollectionPoints(coleta.status, coleta.tipoResiduo, coleta.pesoGramas);
+      const novosPontos = input.aprovar ? pontosCalculados : 0;
+      const deltaPontos = novosPontos - coleta.pontosConcedidos;
+
+      await db.update(coletas).set({
+        pendenteAprovacaoPeso: false,
+        aprovacaoPesoStatus: input.aprovar ? "aprovado" : "rejeitado",
+        aprovacaoPesoPorId: ctx.user.id,
+        aprovacaoPesoEm: new Date(),
+        pontosConcedidos: novosPontos,
+        atualizadoEm: new Date(),
+      }).where(eq(coletas.id, coleta.id));
+
+      if (coleta.moradorId && deltaPontos !== 0) {
+        await db.update(moradores).set({ pontos: sql`${moradores.pontos} + ${deltaPontos}`, atualizadoEm: new Date() }).where(eq(moradores.id, coleta.moradorId));
+      }
+
+      await writeAuditLog(db, {
+        condominioId: ctx.eco.condominio.id,
+        autorId: ctx.user.id,
+        tipoEntidade: "coleta",
+        entidadeId: coleta.id,
+        acao: input.aprovar ? "peso_suspeito_aprovado" : "peso_suspeito_rejeitado",
+        resumo: input.aprovar
+          ? `Peso suspeito aprovado por segundo administrador; ${novosPontos} ponto(s) liberado(s).`
+          : "Peso suspeito rejeitado por segundo administrador; nenhum ponto concedido.",
+        estadoNovo: { aprovacaoPesoStatus: input.aprovar ? "aprovado" : "rejeitado", pontosConcedidos: novosPontos, observacao: input.observacao || null },
+      });
+
+      if (coleta.moradorId) {
+        const morador = await db.select().from(moradores).where(eq(moradores.id, coleta.moradorId)).limit(1);
+        if (morador[0]?.usuarioId) {
+          await db.insert(notificacoes).values({
+            condominioId: ctx.eco.condominio.id,
+            destinatarioId: morador[0].usuarioId,
+            coletaId: coleta.id,
+            tipo: "sistema",
+            titulo: input.aprovar ? "Pontos liberados" : "Coleta revisada",
+            mensagem: input.aprovar
+              ? `O peso da sua coleta foi revisado e aprovado. ${novosPontos} ponto(s) foram creditados.`
+              : "O peso da sua coleta foi revisado e não pôde ser confirmado. Nenhum ponto foi concedido para este lançamento.",
           });
         }
       }

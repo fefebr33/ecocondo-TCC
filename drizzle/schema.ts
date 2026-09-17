@@ -44,12 +44,14 @@ export const statusAcesso = ["pendente", "ativo"] as const;
 export const statusMorador = ["ativo", "inativo"] as const;
 export const tiposResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"] as const;
 export const statusColeta = ["agendada", "em_andamento", "concluida", "cancelada", "ocorrencia"] as const;
-export const tiposNotificacao = ["coleta_agendada", "coleta_concluida", "lembrete_coleta", "comunicado", "sistema"] as const;
-export const tiposEntidadeAuditoria = ["coleta", "ocorrencia"] as const;
+export const tiposNotificacao = ["coleta_agendada", "coleta_concluida", "lembrete_coleta", "comunicado", "sistema", "certificado_disponivel", "relatorio_anual"] as const;
+export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio"] as const;
 export const statusResgate = ["solicitado", "aprovado", "entregue", "cancelado"] as const;
 export const statusOcorrencia = ["aberta", "em_analise", "resolvida"] as const;
 export const statusCampanha = ["planejada", "ativa", "encerrada"] as const;
 export const statusAvaliacao = ["nova", "respondida", "arquivada"] as const;
+export const periodosPodio = ["mensal", "semestral", "anual"] as const;
+export const statusAprovacaoPeso = ["pendente", "aprovado", "rejeitado"] as const;
 
 export const moradores = sqliteTable("moradores", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -62,11 +64,14 @@ export const moradores = sqliteTable("moradores", {
   apartamento: text("apartamento").notNull(),
   status: text("status", { enum: statusMorador }).default("ativo").notNull(),
   pontos: integer("pontos").default(0).notNull(),
+  /** Código curto único usado para gerar o QR code do apartamento (identificação rápida pelo coletor). */
+  codigoAcesso: text("codigo_acesso"),
   criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
   atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
   index("moradores_condominio_idx").on(table.condominioId),
   uniqueIndex("moradores_usuario_unique").on(table.usuarioId),
+  uniqueIndex("moradores_codigo_acesso_unique").on(table.codigoAcesso),
 ]);
 
 export const perfisAcesso = sqliteTable("perfis_acesso", {
@@ -119,6 +124,13 @@ export const coletas = sqliteTable("coletas", {
   /** Comprovação fotográfica anexada ao concluir a coleta (proteção antifraude). */
   chaveFoto: text("chave_foto"),
   urlFoto: text("url_foto"),
+  /** Regra de recorrência que originou esta coleta automaticamente, quando aplicável. */
+  regraRecorrenciaId: integer("regra_recorrencia_id"),
+  /** Aprovação dupla: pesos sinalizados como muito acima da média ficam pendentes até um segundo administrador decidir. */
+  pendenteAprovacaoPeso: integer("pendente_aprovacao_peso", { mode: "boolean" }).default(false).notNull(),
+  aprovacaoPesoStatus: text("aprovacao_peso_status", { enum: statusAprovacaoPeso }),
+  aprovacaoPesoPorId: integer("aprovacao_peso_por_id"),
+  aprovacaoPesoEm: integer("aprovacao_peso_em", { mode: "timestamp" }),
   criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
   atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
 }, (table) => [
@@ -128,6 +140,7 @@ export const coletas = sqliteTable("coletas", {
   index("coletas_condominio_agendada_idx").on(table.condominioId, table.agendadaPara),
   index("coletas_condominio_status_agendada_idx").on(table.condominioId, table.status, table.agendadaPara),
   index("coletas_condominio_bloco_agendada_idx").on(table.condominioId, table.bloco, table.agendadaPara),
+  index("coletas_pendente_aprovacao_idx").on(table.condominioId, table.pendenteAprovacaoPeso),
 ]);
 
 export const logsAuditoria = sqliteTable("logs_auditoria", {
@@ -295,6 +308,87 @@ export const avaliacoesColeta = sqliteTable("avaliacoes_coleta", {
   index("avaliacoes_condominio_idx").on(table.condominioId),
   index("avaliacoes_morador_idx").on(table.moradorId),
   index("avaliacoes_status_idx").on(table.status),
+]);
+
+/** Registro definitivo de que o desconto sugerido do pódio foi de fato aplicado pelo síndico (fecha o ciclo do pódio). */
+export const aplicacoesDescontoPodio = sqliteTable("aplicacoes_desconto_podio", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  condominioId: integer("condominio_id").notNull(),
+  moradorId: integer("morador_id").notNull(),
+  periodo: text("periodo", { enum: periodosPodio }).notNull(),
+  intervaloInicio: integer("intervalo_inicio", { mode: "timestamp" }).notNull(),
+  intervaloFim: integer("intervalo_fim", { mode: "timestamp" }).notNull(),
+  posicao: integer("posicao").notNull(),
+  percentualAplicado: real("percentual_aplicado").notNull(),
+  observacao: text("observacao"),
+  aplicadoPorId: integer("aplicado_por_id").notNull(),
+  aplicadoEm: integer("aplicado_em", { mode: "timestamp" }).default(agora).notNull(),
+}, (table) => [
+  index("aplicacoes_desconto_condominio_idx").on(table.condominioId),
+  uniqueIndex("aplicacoes_desconto_unique").on(table.moradorId, table.periodo, table.intervaloInicio),
+]);
+
+/** Meta pessoal de reciclagem definida pelo próprio morador (mesma lógica de acompanhamento das metas por bloco). */
+export const metasPessoais = sqliteTable("metas_pessoais", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  condominioId: integer("condominio_id").notNull(),
+  moradorId: integer("morador_id").notNull(),
+  metaKg: real("meta_kg").notNull(),
+  dataInicio: integer("data_inicio", { mode: "timestamp" }).notNull(),
+  dataFim: integer("data_fim", { mode: "timestamp" }).notNull(),
+  ativo: integer("ativo", { mode: "boolean" }).default(true).notNull(),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
+}, (table) => [
+  index("metas_pessoais_condominio_idx").on(table.condominioId),
+  index("metas_pessoais_morador_idx").on(table.moradorId),
+]);
+
+/** Regra de coleta recorrente por bloco (ex.: "toda terça, bloco B"), gerando coletas automaticamente. */
+export const regrasRecorrenciaColeta = sqliteTable("regras_recorrencia_coleta", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  condominioId: integer("condominio_id").notNull(),
+  bloco: text("bloco").notNull(),
+  tipoResiduo: text("tipo_residuo", { enum: tiposResiduo }).notNull(),
+  /** 0 = domingo ... 6 = sábado. */
+  diaSemana: integer("dia_semana").notNull(),
+  horario: text("horario").notNull(),
+  ativo: integer("ativo", { mode: "boolean" }).default(true).notNull(),
+  criadoPorId: integer("criado_por_id").notNull(),
+  /** Data (AAAA-MM-DD) da última coleta gerada automaticamente por esta regra, para evitar duplicidade. */
+  ultimaGeracaoData: text("ultima_geracao_data"),
+  criadoEm: integer("criado_em", { mode: "timestamp" }).default(agora).notNull(),
+  atualizadoEm: integer("atualizado_em", { mode: "timestamp" }).default(agora).notNull(),
+}, (table) => [
+  index("regras_recorrencia_condominio_idx").on(table.condominioId),
+]);
+
+/** Certificado trimestral de sustentabilidade gerado em PDF por bloco. */
+export const certificadosSustentabilidade = sqliteTable("certificados_sustentabilidade", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  condominioId: integer("condominio_id").notNull(),
+  bloco: text("bloco").notNull(),
+  trimestre: text("trimestre").notNull(),
+  pesoKg: real("peso_kg").notNull(),
+  chaveArquivo: text("chave_arquivo").notNull(),
+  urlArquivo: text("url_arquivo").notNull(),
+  geradoPorId: integer("gerado_por_id"),
+  geradoEm: integer("gerado_em", { mode: "timestamp" }).default(agora).notNull(),
+}, (table) => [
+  index("certificados_condominio_idx").on(table.condominioId),
+  uniqueIndex("certificados_unique").on(table.condominioId, table.bloco, table.trimestre),
+]);
+
+/** Relatório anual consolidado, gerado e notificado automaticamente ao síndico em janeiro. */
+export const relatoriosAnuais = sqliteTable("relatorios_anuais", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  condominioId: integer("condominio_id").notNull(),
+  ano: integer("ano").notNull(),
+  chaveArquivo: text("chave_arquivo").notNull(),
+  urlArquivo: text("url_arquivo").notNull(),
+  geradoEm: integer("gerado_em", { mode: "timestamp" }).default(agora).notNull(),
+}, (table) => [
+  uniqueIndex("relatorios_anuais_unique").on(table.condominioId, table.ano),
 ]);
 
 export type Usuario = typeof usuarios.$inferSelect;

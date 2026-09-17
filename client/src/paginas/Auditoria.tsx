@@ -6,14 +6,14 @@ import { AlertTriangle, History, Search, ShieldCheck, UserRound } from "lucide-r
 import { useMemo, useState } from "react";
 import PageIntro from "@/components/PageIntro";
 
-const entityLabels = { coleta: "Coleta", ocorrencia: "Ocorrência" } as const;
+const entityLabels = { coleta: "Coleta", ocorrencia: "Ocorrência", desconto_podio: "Desconto do pódio" } as const;
 
 function formatDate(value: Date) {
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
 export default function Audit() {
-  const [entityType, setEntityType] = useState<"todas" | "coleta" | "ocorrencia">("todas");
+  const [entityType, setEntityType] = useState<"todas" | "coleta" | "ocorrencia" | "desconto_podio">("todas");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const filters = useMemo(() => ({
@@ -40,7 +40,7 @@ export default function Audit() {
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="grid gap-1 text-[11px] font-bold tracking-[.08em] text-muted-foreground uppercase">Entidade
-              <Select value={entityType} onValueChange={(value) => setEntityType(value as "todas" | "coleta" | "ocorrencia")}><SelectTrigger className="h-10 min-w-[150px] rounded-xl bg-[#fbfdfc]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todas">Todas</SelectItem><SelectItem value="coleta">Coletas</SelectItem><SelectItem value="ocorrencia">Ocorrências</SelectItem></SelectContent></Select>
+              <Select value={entityType} onValueChange={(value) => setEntityType(value as "todas" | "coleta" | "ocorrencia" | "desconto_podio")}><SelectTrigger className="h-10 min-w-[150px] rounded-xl bg-[#fbfdfc]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todas">Todas</SelectItem><SelectItem value="coleta">Coletas</SelectItem><SelectItem value="ocorrencia">Ocorrências</SelectItem><SelectItem value="desconto_podio">Desconto do pódio</SelectItem></SelectContent></Select>
             </label>
             <label className="grid gap-1 text-[11px] font-bold tracking-[.08em] text-muted-foreground uppercase">De<Input type="date" value={start} onChange={(event) => setStart(event.target.value)} className="h-10 rounded-xl bg-[#fbfdfc]" /></label>
             <label className="grid gap-1 text-[11px] font-bold tracking-[.08em] text-muted-foreground uppercase">Até<Input type="date" value={end} onChange={(event) => setEnd(event.target.value)} className="h-10 rounded-xl bg-[#fbfdfc]" /></label>

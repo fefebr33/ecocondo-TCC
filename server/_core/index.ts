@@ -9,8 +9,11 @@ import { appRouter } from "../rotas";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runCollectionReminders, sendCollectionReminders } from "../scheduled/collectionReminders";
+import { runAnnualReport, sendAnnualReportCheck } from "../scheduled/annualReport";
+import { runRecurringCollections, sendRecurringCollectionsCheck } from "../scheduled/recurringCollections";
 
 const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,6 +44,8 @@ async function startServer() {
   registerLoginRoute(app);
   app.get("/api/health", (_req, res) => res.json({ ok: true, timestamp: Date.now() }));
   app.post("/api/scheduled/collection-reminders", sendCollectionReminders);
+  app.post("/api/scheduled/annual-report", sendAnnualReportCheck);
+  app.post("/api/scheduled/recurring-collections", sendRecurringCollectionsCheck);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -72,6 +77,14 @@ async function startServer() {
   setInterval(() => {
     runCollectionReminders().catch((error) => console.error("[Lembretes] falha na verificação periódica:", error));
   }, HOUR_MS);
+
+  // Gera coletas recorrentes ("toda terça, bloco B") e, em janeiro, o relatório anual consolidado — ambos sem agendador externo.
+  runRecurringCollections().catch((error) => console.error("[Recorrência] falha na verificação inicial:", error));
+  runAnnualReport().catch((error) => console.error("[Relatório anual] falha na verificação inicial:", error));
+  setInterval(() => {
+    runRecurringCollections().catch((error) => console.error("[Recorrência] falha na verificação periódica:", error));
+    runAnnualReport().catch((error) => console.error("[Relatório anual] falha na verificação periódica:", error));
+  }, DAY_MS);
 }
 
 startServer().catch(console.error);

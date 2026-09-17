@@ -7,6 +7,9 @@ import { analyticsRouter } from "./rotas/indicadores";
 import { sustainabilityRouter } from "./rotas/sustentabilidade";
 import { auditRouter } from "./rotas/auditoria";
 import { podioRouter } from "./rotas/podio";
+import { personalGoalsRouter } from "./rotas/metasPessoais";
+import { certificatesRouter } from "./rotas/certificados";
+import { recurrenceRouter } from "./rotas/recorrencia";
 
 export const appRouter = router({
   auth: router({
@@ -26,6 +29,9 @@ export const appRouter = router({
   ...sustainabilityRouter._def.record,
   ...auditRouter._def.record,
   ...podioRouter._def.record,
+  ...personalGoalsRouter._def.record,
+  ...certificatesRouter._def.record,
+  ...recurrenceRouter._def.record,
 
   // TODO: add feature routers here, e.g.
   // todo: router({

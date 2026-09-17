@@ -8,6 +8,7 @@ import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { countUnreadNotifications } from "../dominio/regrasNotificacao";
 import { buildCollectionsCsv } from "../dominio/exportacaoCsv";
+import { calcularEquivalenciasAmbientais } from "../dominio/impactoAmbiental";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 const csvFiltersInput = z.object({
@@ -60,7 +61,8 @@ export const analyticsRouter = router({
       const db = await getDb();
       const registros = await db.select().from(coletas).where(and(...condicoesPeriodo(ctx.eco.condominio.id))).orderBy(desc(coletas.agendadaPara));
       const registrosPermitidos = ctx.eco.perfil.papel === "morador" && ctx.eco.morador ? registros.filter((registro) => registro.moradorId === ctx.eco.morador?.id) : registros;
-      return { ...resumir(registrosPermitidos), recent: registrosPermitidos.slice(0, 5) };
+      const resumo = resumir(registrosPermitidos);
+      return { ...resumo, recent: registrosPermitidos.slice(0, 5), equivalencias: calcularEquivalenciasAmbientais(resumo.recyclableKg) };
     }),
   }),
   relatorios: router({
@@ -70,7 +72,8 @@ export const analyticsRouter = router({
       const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
       const ranking = [...comunidade].sort((a, b) => b.pontos - a.pontos).slice(0, 10).map((morador, indice) => ({ position: indice + 1, id: morador.id, name: morador.nome, block: morador.bloco, points: morador.pontos }));
       const participantes = new Set(registros.filter((registro) => registro.status === "concluida" && registro.moradorId !== null).map((registro) => registro.moradorId));
-      return { ...resumir(registros), ranking, participationRate: comunidade.length ? Number(((participantes.size / comunidade.length) * 100).toFixed(1)) : null, residentsCount: comunidade.length, period: input ?? {} };
+      const resumo = resumir(registros);
+      return { ...resumo, ranking, participationRate: comunidade.length ? Number(((participantes.size / comunidade.length) * 100).toFixed(1)) : null, residentsCount: comunidade.length, period: input ?? {}, equivalencias: calcularEquivalenciasAmbientais(resumo.recyclableKg) };
     }),
     exportarPdf: administratorOnly.input(periodInput).mutation(async ({ ctx, input }) => {
       const db = await getDb();
