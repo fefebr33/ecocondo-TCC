@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { and, asc, desc, eq, gt, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, recompensas, resgates, perfisAcesso, relatoriosAnuais, usuarios, tiposResiduo } from "../../drizzle/schema";
+import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, ocorrencias, recompensas, resgates, perfisAcesso, relatoriosAnuais, usuarios, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
@@ -62,7 +62,11 @@ export const analyticsRouter = router({
       const registros = await db.select().from(coletas).where(and(...condicoesPeriodo(ctx.eco.condominio.id))).orderBy(desc(coletas.agendadaPara));
       const registrosPermitidos = ctx.eco.perfil.papel === "morador" && ctx.eco.morador ? registros.filter((registro) => registro.moradorId === ctx.eco.morador?.id) : registros;
       const resumo = resumir(registrosPermitidos);
-      return { ...resumo, recent: registrosPermitidos.slice(0, 5), equivalencias: calcularEquivalenciasAmbientais(resumo.recyclableKg) };
+      // Ocorrências ambientais ainda sem solução (o morador vê só as que ele mesmo registrou).
+      const condicoesOcorrencias = [eq(ocorrencias.condominioId, ctx.eco.condominio.id), or(eq(ocorrencias.status, "aberta"), eq(ocorrencias.status, "em_analise"))];
+      if (ctx.eco.perfil.papel === "morador") condicoesOcorrencias.push(eq(ocorrencias.relatorId, ctx.user.id));
+      const ocorrenciasAbertas = await db.select({ id: ocorrencias.id }).from(ocorrencias).where(and(...condicoesOcorrencias));
+      return { ...resumo, openIncidentCount: ocorrenciasAbertas.length, recent: registrosPermitidos.slice(0, 5), equivalencias: calcularEquivalenciasAmbientais(resumo.recyclableKg) };
     }),
   }),
   relatorios: router({

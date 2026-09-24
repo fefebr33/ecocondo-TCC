@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { CheckCircle2, History, Medal, Percent, Trophy } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 function formatDate(value: Date | string) {
@@ -26,8 +26,15 @@ export default function Podio() {
   const { data, isLoading } = trpc.podio.ranking.useQuery({ periodo });
   const isAdmin = profile.data?.role === "administrador";
   const [descontos, setDescontos] = useState({ mensal: "", semestral: "", anual: "" });
+  const condominio = trpc.condominio.atual.useQuery(undefined, { enabled: isAdmin });
+  // Preenche o formulário com os percentuais já salvos dos três períodos.
+  useEffect(() => {
+    if (!condominio.data) return;
+    const paraCampo = (valor: number | null) => (valor === null ? "" : String(valor));
+    setDescontos({ mensal: paraCampo(condominio.data.descontoPodioMensalPercentual), semestral: paraCampo(condominio.data.descontoPodioSemestralPercentual), anual: paraCampo(condominio.data.descontoPodioAnualPercentual) });
+  }, [condominio.data]);
   const configurar = trpc.podio.configurarDescontos.useMutation({
-    onSuccess: () => { utils.podio.ranking.invalidate(); toast.success("Percentuais de desconto atualizados."); },
+    onSuccess: () => { utils.podio.ranking.invalidate(); utils.condominio.atual.invalidate(); toast.success("Percentuais de desconto atualizados."); },
     onError: (issue) => toast.error(issue.message),
   });
   const historico = trpc.podio.historicoDescontos.useQuery(undefined, { enabled: isAdmin });
@@ -147,9 +154,9 @@ export default function Podio() {
           <p className="font-semibold">Percentual de desconto sugerido por período</p>
           <p className="mt-1 text-sm text-muted-foreground">Defina quanto o sistema deve sugerir de desconto para os três primeiros colocados de cada período. Isto não aplica o desconto automaticamente — apenas orienta a decisão do síndico.</p>
           <form onSubmit={submitDescontos} className="mt-4 grid gap-3 sm:grid-cols-3">
-            <label className="grid gap-1.5 text-xs font-semibold">Mensal (%)<Input type="number" min="0" max="100" step="0.5" placeholder={data?.periodo === "mensal" ? String(data?.descontoSugeridoPercentual ?? "") : ""} value={descontos.mensal} onChange={(event) => setDescontos({ ...descontos, mensal: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
-            <label className="grid gap-1.5 text-xs font-semibold">Semestral (%)<Input type="number" min="0" max="100" step="0.5" placeholder={data?.periodo === "semestral" ? String(data?.descontoSugeridoPercentual ?? "") : ""} value={descontos.semestral} onChange={(event) => setDescontos({ ...descontos, semestral: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
-            <label className="grid gap-1.5 text-xs font-semibold">Anual (%)<Input type="number" min="0" max="100" step="0.5" placeholder={data?.periodo === "anual" ? String(data?.descontoSugeridoPercentual ?? "") : ""} value={descontos.anual} onChange={(event) => setDescontos({ ...descontos, anual: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
+            <label className="grid gap-1.5 text-xs font-semibold">Mensal (%)<Input type="number" min="0" max="100" step="0.5" placeholder="Não definido" value={descontos.mensal} onChange={(event) => setDescontos({ ...descontos, mensal: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
+            <label className="grid gap-1.5 text-xs font-semibold">Semestral (%)<Input type="number" min="0" max="100" step="0.5" placeholder="Não definido" value={descontos.semestral} onChange={(event) => setDescontos({ ...descontos, semestral: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
+            <label className="grid gap-1.5 text-xs font-semibold">Anual (%)<Input type="number" min="0" max="100" step="0.5" placeholder="Não definido" value={descontos.anual} onChange={(event) => setDescontos({ ...descontos, anual: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
             <div className="sm:col-span-3"><Button disabled={configurar.isPending} className="h-10 rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]">Salvar percentuais sugeridos</Button></div>
           </form>
           {data?.ranking.some((linha) => linha.elegivelDesconto) && (
