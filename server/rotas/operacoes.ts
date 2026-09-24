@@ -315,6 +315,19 @@ export const operationsRouter = router({
           resumo: `Peso informado (${((novoPeso ?? 0) / 1000).toFixed(1)} kg) muito acima do histórico do morador. Pontos retidos até aprovação de um segundo administrador.`,
           estadoNovo: { pesoGramas: novoPeso, moradorId: coleta.moradorId, pontosPendentes: pontosCalculados },
         });
+        // Avisa os demais administradores: quem concluiu a coleta não pode aprovar o próprio lançamento.
+        const administradores = await db.select({ usuarioId: perfisAcesso.usuarioId }).from(perfisAcesso).where(and(eq(perfisAcesso.condominioId, ctx.eco.condominio.id), eq(perfisAcesso.papel, "administrador")));
+        for (const administrador of administradores) {
+          if (administrador.usuarioId === ctx.user.id) continue;
+          await db.insert(notificacoes).values({
+            condominioId: ctx.eco.condominio.id,
+            destinatarioId: administrador.usuarioId,
+            coletaId: coleta.id,
+            tipo: "sistema",
+            titulo: "Peso aguardando aprovação",
+            mensagem: `Uma coleta de ${coleta.tipoResiduo} do bloco ${coleta.bloco} foi concluída com ${((novoPeso ?? 0) / 1000).toFixed(1)} kg, bem acima do histórico do morador. Revise em Coletas > Pesos pendentes de aprovação.`,
+          });
+        }
       }
 
       if (coleta.moradorId && deltaPontos !== 0) {

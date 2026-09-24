@@ -47,6 +47,14 @@ pnpm db:push
 
 Isso cria o arquivo `data/ecocondo.db` com todas as tabelas.
 
+Para apresentar o sistema com dados de exemplo (sete moradores, seis meses de coletas, pódio, certificados, resgates e um peso aguardando aprovação), rode:
+
+```bash
+pnpm db:seed
+```
+
+Os dados passam pelas mesmas rotas e regras do sistema. Para recomeçar do zero, feche o servidor e rode `pnpm db:seed --limpar`.
+
 ### 3. Rodar
 
 ```bash
@@ -65,6 +73,14 @@ pnpm test
 ## Login
 
 O login é totalmente local: a rota `/api/auth/entrar?role=<perfil>` cria/reaproveita uma conta de demonstração para o perfil escolhido e assina a sessão. Não depende de nenhum serviço externo.
+
+### Variáveis de ambiente (opcionais)
+
+| Variável | Para que serve |
+| --- | --- |
+| `JWT_SECRET` | Chave que assina as sessões. Em produção (`pnpm start`), sem ela o servidor gera uma chave aleatória a cada início e as sessões expiram ao reiniciar. |
+| `LOGIN_DEMONSTRACAO=desativado` | Desliga o login de demonstração sem senha. Use num servidor público, porque com ele qualquer visitante entra como administrador. |
+| `DATABASE_URL` | Caminho do arquivo SQLite (padrão `data/ecocondo.db`). |
 
 ## Arquivos enviados
 

@@ -9,6 +9,7 @@ import { router } from "../_core/trpc";
 import { storagePut } from "../storage";
 import { calcularTrimestre, trimestreAnterior } from "../dominio/trimestre";
 import { calcularEquivalenciasAmbientais } from "../dominio/impactoAmbiental";
+import { pesoConfirmadoGramas } from "../dominio/antifraude";
 
 async function gerarPdfCertificado(condominioNome: string, bloco: string, rotuloTrimestre: string, kg: number) {
   const equivalencias = calcularEquivalenciasAmbientais(kg);
@@ -52,7 +53,7 @@ export const certificatesRouter = router({
         gte(coletas.concluidaEm, inicio),
         lte(coletas.concluidaEm, fim),
       ));
-      const gramas = registros.reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
+      const gramas = registros.reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
       const kg = Number((gramas / 1000).toFixed(1));
       if (kg <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Não há coletas concluídas suficientes neste bloco no trimestre selecionado." });
 

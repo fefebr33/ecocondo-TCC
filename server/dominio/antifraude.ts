@@ -36,6 +36,16 @@ export function verificarLimiteDiarioMorador(pesoJaConcluidoHojeGramas: number, 
   }
 }
 
+/**
+ * Peso que conta nos totais (painel, relatórios, metas, pódio e certificados): um peso suspeito só entra depois de aprovado
+ * pelo segundo administrador, e um peso rejeitado nunca entra. Mantém `null` quando a coleta não tem peso.
+ */
+export function pesoConfirmadoGramas(registro: { pesoGramas: number | null; pendenteAprovacaoPeso: boolean; aprovacaoPesoStatus: string | null }) {
+  if (registro.pesoGramas === null) return null;
+  if (registro.pendenteAprovacaoPeso || registro.aprovacaoPesoStatus === "rejeitado") return 0;
+  return registro.pesoGramas;
+}
+
 /** Sinalização suave (não bloqueia): aponta lançamentos muito acima do padrão histórico do morador para revisão administrativa. */
 export function ehPesoAnomalo(novoPesoGramas: number, mediaHistoricaGramas: number, fator = FATOR_ANOMALIA_PESO) {
   if (mediaHistoricaGramas <= 0) return false;

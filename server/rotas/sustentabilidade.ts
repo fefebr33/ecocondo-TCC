@@ -21,6 +21,7 @@ import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { calculateComplianceOverview, calculateGoalProgress, compareBlocks, compareBlocksOverTime } from "../dominio/regrasSustentabilidade";
+import { pesoConfirmadoGramas } from "../dominio/antifraude";
 import { incidentAuditState, writeAuditLog } from "../audit";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
@@ -40,7 +41,7 @@ function condicoesPeriodo(condominioId: number, periodo?: { startDate?: Date; en
 }
 
 function paraRegroSustentabilidade(registro: typeof coletas.$inferSelect) {
-  return { block: registro.bloco, status: registro.status, scheduledAt: registro.agendadaPara, weightGrams: registro.pesoGramas, wasteType: registro.tipoResiduo };
+  return { block: registro.bloco, status: registro.status, scheduledAt: registro.agendadaPara, weightGrams: pesoConfirmadoGramas(registro), wasteType: registro.tipoResiduo };
 }
 
 async function saveIncidentImage(imageDataUrl: string | null | undefined, condominioId: number, usuarioId: number) {

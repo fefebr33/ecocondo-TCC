@@ -13,19 +13,31 @@ function dataParaChave(data: Date) {
   return `${data.getFullYear()}-${mes}-${dia}`;
 }
 
-/** Decide se uma regra de recorrência deve gerar uma coleta na data de referência (evita duplicar no mesmo dia). */
-export function deveGerarColetaHoje(regra: RegraRecorrencia, dataReferencia: Date) {
-  if (!regra.ativo) return false;
-  if (regra.diaSemana !== dataReferencia.getDay()) return false;
-  return regra.ultimaGeracaoData !== dataParaChave(dataReferencia);
-}
-
 /** Combina a data de referência com o horário "HH:MM" da regra para obter o instante agendado. */
 export function calcularAgendamento(regra: { horario: string }, dataReferencia: Date) {
   const [horas, minutos] = regra.horario.split(":").map((parte) => Number.parseInt(parte, 10));
   const agendado = new Date(dataReferencia);
   agendado.setHours(Number.isFinite(horas) ? horas : 8, Number.isFinite(minutos) ? minutos : 0, 0, 0);
   return agendado;
+}
+
+/**
+ * Próxima ocorrência da regra (hoje ou amanhã) que ainda não foi gerada e cujo horário ainda não passou.
+ * Gerar com até um dia de antecedência garante o lembrete de 24h; ignorar horários passados evita criar coletas "atrasadas"
+ * quando o servidor é ligado depois do horário. `ultimaGeracaoData` guarda o dia da última ocorrência gerada.
+ */
+export function proximaOcorrenciaParaGerar(regra: RegraRecorrencia, agora: Date) {
+  if (!regra.ativo) return null;
+  for (const deslocamento of [0, 1]) {
+    const dia = new Date(agora);
+    dia.setDate(dia.getDate() + deslocamento);
+    if (dia.getDay() !== regra.diaSemana) continue;
+    if (regra.ultimaGeracaoData && regra.ultimaGeracaoData >= dataParaChave(dia)) continue;
+    const agendadaPara = calcularAgendamento(regra, dia);
+    if (agendadaPara <= agora) continue;
+    return agendadaPara;
+  }
+  return null;
 }
 
 export { dataParaChave as chaveDataGeracao };

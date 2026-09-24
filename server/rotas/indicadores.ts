@@ -9,6 +9,7 @@ import { TRPCError } from "@trpc/server";
 import { countUnreadNotifications } from "../dominio/regrasNotificacao";
 import { buildCollectionsCsv } from "../dominio/exportacaoCsv";
 import { calcularEquivalenciasAmbientais } from "../dominio/impactoAmbiental";
+import { pesoConfirmadoGramas } from "../dominio/antifraude";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 const csvFiltersInput = z.object({
@@ -34,15 +35,15 @@ function condicoesCsv(condominioId: number, filtros?: { startDate?: Date; endDat
 
 function resumir(registros: Array<typeof coletas.$inferSelect>) {
   const concluidas = registros.filter((registro) => registro.status === "concluida");
-  const totalGramas = concluidas.reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
-  const gramasReciclaveis = concluidas.filter((registro) => registro.tipoResiduo === "reciclavel").reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
+  const totalGramas = concluidas.reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
+  const gramasReciclaveis = concluidas.filter((registro) => registro.tipoResiduo === "reciclavel").reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
   const totalKg = totalGramas / 1000;
   const reciclavelKg = gramasReciclaveis / 1000;
   const taxaReciclagem = totalGramas > 0 ? Number(((gramasReciclaveis / totalGramas) * 100).toFixed(1)) : null;
   const co2EstimadoKg = calcularEquivalenciasAmbientais(reciclavelKg).co2EvitadoKg;
   const porTipoResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"].map((tipoResiduo) => ({
     wasteType: tipoResiduo,
-    kilograms: Number((concluidas.filter((registro) => registro.tipoResiduo === tipoResiduo).reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0) / 1000).toFixed(2)),
+    kilograms: Number((concluidas.filter((registro) => registro.tipoResiduo === tipoResiduo).reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0) / 1000).toFixed(2)),
   }));
   return { totalKg: Number(totalKg.toFixed(2)), recyclableKg: Number(reciclavelKg.toFixed(2)), recyclingRate: taxaReciclagem, co2EstimateKg: co2EstimadoKg, completedCount: concluidas.length, occurrenceCount: registros.filter((registro) => registro.status === "ocorrencia").length, byWasteType: porTipoResiduo };
 }

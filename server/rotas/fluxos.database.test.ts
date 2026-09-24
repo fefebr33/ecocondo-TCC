@@ -13,7 +13,8 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
 import { getDb, getUserByOpenId, upsertUser } from "../db";
 import { appRouter } from "../rotas";
-import { pessoas, recompensas } from "../../drizzle/schema";
+import { coletas, pessoas, recompensas } from "../../drizzle/schema";
+import { runRecurringCollections } from "../scheduled/recurringCollections";
 import type { TrpcContext } from "../_core/context";
 import type { Usuario } from "../../drizzle/schema";
 
@@ -79,11 +80,34 @@ describe("fluxos com banco de dados real", () => {
     await coletor.coletas.atualizarStatus({ id: primeira.id, status: "concluida", weightGrams: 2000, imageDataUrl: FOTO });
 
     const suspeita = await admin.coletas.criar({ residentId: moradorId, wasteType: "reciclavel", block: "A", scheduledAt: amanha(), collectorUserId: usuarioColetor.id });
+    const totalAntes = (await admin.dashboard.resumo()).totalKg;
     const resultado = await admin.coletas.atualizarStatus({ id: suspeita.id, status: "concluida", weightGrams: 50000, imageDataUrl: FOTO });
     expect(resultado.pendingApproval).toBe(true);
+    // Enquanto aguarda aprovação, o peso não entra nos totais, e o outro administrador é avisado.
+    expect((await admin.dashboard.resumo()).totalKg).toBe(totalAntes);
+    expect((await admin2.notificacoes.listar()).some((item) => item.coletaId === suspeita.id && item.titulo === "Peso aguardando aprovação")).toBe(true);
     await expect(admin.coletas.decidirAprovacaoPeso({ id: suspeita.id, aprovar: true })).rejects.toMatchObject({ code: "FORBIDDEN" });
     const aprovacao = await admin2.coletas.decidirAprovacaoPeso({ id: suspeita.id, aprovar: true });
     expect(aprovacao.pointsAwarded).toBe(50);
+    expect((await admin.dashboard.resumo()).totalKg).toBe(totalAntes + 50);
+  });
+
+  it("coletas recorrentes são geradas uma única vez e nunca com horário passado", async () => {
+    const agora = new Date();
+    const amanhaMesmoHorario = new Date(agora.getTime() + 24 * 60 * 60 * 1000);
+    const horario = `${String(amanhaMesmoHorario.getHours()).padStart(2, "0")}:${String(amanhaMesmoHorario.getMinutes()).padStart(2, "0")}`;
+    const deAmanha = await admin.recorrencias.criar({ block: "R", wasteType: "reciclavel", weekday: amanhaMesmoHorario.getDay(), time: horario });
+    // Regra de hoje à meia-noite: o horário já passou, então não gera nada.
+    await admin.recorrencias.criar({ block: "R", wasteType: "organico", weekday: agora.getDay(), time: "00:00" });
+
+    const primeira = await runRecurringCollections(agora);
+    const segunda = await runRecurringCollections(agora);
+    expect(segunda.collectionsCreated).toBe(0);
+    const db = await getDb();
+    const geradas = await db.select().from(coletas).where(eq(coletas.bloco, "R"));
+    expect(primeira.collectionsCreated).toBe(geradas.length);
+    expect(geradas.map((item) => item.regraRecorrenciaId)).toEqual([deAmanha.id]);
+    expect(geradas.every((item) => item.agendadaPara > agora)).toBe(true);
   });
 
   it("cancelar uma coleta concluída devolve os pontos concedidos", async () => {

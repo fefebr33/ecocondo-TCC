@@ -65,8 +65,9 @@ export default function Podio() {
     marcarAplicado.mutate({ moradorId, periodo, percentual: data.descontoSugeridoPercentual, observacao: observacaoAplicacao.trim() || undefined });
   }
 
-  const top3 = data?.ranking.slice(0, 3) ?? [];
-  const demais = data?.ranking.slice(3) ?? [];
+  // Empatados no 3º lugar também sobem ao pódio (a posição vem calculada do servidor).
+  const top3 = data?.ranking.filter((linha) => linha.elegivelDesconto) ?? [];
+  const demais = data?.ranking.filter((linha) => !linha.elegivelDesconto) ?? [];
 
   return (
     <div>
@@ -84,7 +85,7 @@ export default function Podio() {
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff3df] text-[#7a4d0a]"><Trophy className="h-5 w-5" /></span>
           <div>
             <p className="font-semibold">Top 3 do período {periodos.find((item) => item.value === periodo)?.label.toLowerCase()}</p>
-            <p className="text-sm text-muted-foreground">Pontuação acumulada por coletas recicláveis concluídas neste período.</p>
+            <p className="text-sm text-muted-foreground">Pontuação acumulada por coletas concluídas neste período. Empate nos pontos é decidido pelo peso; se continuar, os moradores dividem a posição.</p>
           </div>
         </div>
 
@@ -95,12 +96,12 @@ export default function Podio() {
         ) : (
           <>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              {top3.map((linha, indice) => (
+              {top3.map((linha) => (
                 <article key={linha.moradorId} className="rounded-2xl border border-[#e0ebe4] bg-[#fbfdfc] p-4 text-center">
-                  <span className="mx-auto grid h-11 w-11 place-items-center rounded-full text-white" style={{ backgroundColor: medalha[indice] }}>
+                  <span className="mx-auto grid h-11 w-11 place-items-center rounded-full text-white" style={{ backgroundColor: medalha[linha.position - 1] }}>
                     <Medal className="h-5 w-5" />
                   </span>
-                  <p className="mt-3 text-xs font-bold uppercase tracking-[.08em] text-muted-foreground">{indice + 1}º lugar</p>
+                  <p className="mt-3 text-xs font-bold uppercase tracking-[.08em] text-muted-foreground">{linha.position}º lugar{linha.empatado ? " (empate)" : ""}</p>
                   <p className="mt-1 text-sm font-semibold">{linha.nome}</p>
                   <p className="text-xs text-muted-foreground">Bloco {linha.bloco} · {linha.apartamento}</p>
                   <p className="mt-3 text-lg font-bold text-[#0f7350]">{linha.pontos} pts</p>
