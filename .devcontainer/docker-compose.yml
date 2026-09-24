@@ -1,0 +1,28 @@
+# Ambiente do GitHub Codespaces: o app e um MySQL 8 no mesmo "computador" virtual.
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+    # Compartilha a rede do MySQL: o endereço padrão mysql://root@127.0.0.1:3306/ecocondo funciona sem .env.
+    network_mode: service:mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    volumes:
+      - mysql-dados:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  mysql-dados:

@@ -15,10 +15,16 @@ export function urlDoBanco() {
   return ENV.databaseUrl || URL_PADRAO_BANCO;
 }
 
-/** SSL opcional, exigido pela maioria dos serviços de MySQL na nuvem; DATABASE_SSL_CA aponta o certificado do provedor, quando ele fornece um. */
+/** DATABASE_SSL_CA aceita o caminho do certificado (ex.: ./ca.pem) ou o próprio texto dele, colado numa variável do painel de hospedagem. */
+export function lerCertificado(valor: string) {
+  if (valor.includes("-----BEGIN")) return valor.replace(/\\n/g, "\n");
+  return fs.readFileSync(path.resolve(valor), "utf8");
+}
+
+/** SSL opcional, exigido pela maioria dos serviços de MySQL na nuvem; DATABASE_SSL_CA traz o certificado do provedor, quando ele fornece um. */
 function opcoesSsl() {
   if (process.env.DATABASE_SSL !== "true") return {};
-  const ca = process.env.DATABASE_SSL_CA ? fs.readFileSync(path.resolve(process.env.DATABASE_SSL_CA), "utf8") : undefined;
+  const ca = process.env.DATABASE_SSL_CA ? lerCertificado(process.env.DATABASE_SSL_CA) : undefined;
   return { ssl: { rejectUnauthorized: true, ...(ca ? { ca } : {}) } };
 }
 

@@ -1,0 +1,26 @@
+# Publicação no Render (plano gratuito). No painel do Render: New > Blueprint, escolha este repositório.
+# O banco fica fora do Render (MySQL gratuito da Aiven); veja NUVEM.md.
+services:
+  - type: web
+    name: ecocondo
+    runtime: node
+    plan: free
+    branch: Desenvolvimento
+    buildCommand: npx --yes pnpm@10.4.1 install --frozen-lockfile && npm run build
+    # Na primeira subida o db:seed cria as tabelas e os dados de demonstração; depois ele só avisa que já há dados.
+    startCommand: npm run db:seed && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_SSL_CA
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # "ativado" deixa o botão de entrar sem senha (bom para a apresentação); troque para "desativado" no painel quando não estiver usando.
+      - key: LOGIN_DEMONSTRACAO
+        value: ativado
