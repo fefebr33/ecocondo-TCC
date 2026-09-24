@@ -20,6 +20,7 @@ import {
   Menu,
   Recycle,
   Settings,
+  ShieldAlert,
   Trophy,
   UsersRound,
   X,
@@ -59,6 +60,19 @@ function resolveRole(role?: string): EcoRole {
 
 function formatRole(role: EcoRole) {
   return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function NoAccess() {
+  return (
+    <section className="grid min-h-[50vh] place-items-center text-center">
+      <div className="max-w-md">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#fff4dd] text-[#7a4d0a]"><ShieldAlert aria-hidden="true" className="h-5 w-5" /></span>
+        <h1 className="mt-4 text-2xl font-bold tracking-[-0.04em]">Você não tem acesso a esta página</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Esta área é restrita a outro perfil. Se precisar dela, peça ao administrador do condomínio.</p>
+        <Link href="/dashboard" className="mt-6 inline-flex h-10 items-center rounded-xl bg-[#0f7350] px-4 text-sm font-semibold text-white hover:bg-[#0a6243]">Voltar para a visão geral</Link>
+      </div>
+    </section>
+  );
 }
 
 function EcoBrand({ compact = false }: { compact?: boolean }) {
@@ -114,6 +128,7 @@ function Navigation({ role, onNavigate }: { role: EcoRole; onNavigate?: () => vo
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const { loading, user, logout } = useAuth();
+  const [location] = useLocation();
   const [isDrawerOpen, setDrawerOpen] = useState(false);
   const profileQuery = trpc.perfil.meuPerfil.useQuery(undefined, { enabled: Boolean(user) });
   const unreadNotifications = trpc.notificacoes.contagemNaoLidas.useQuery(undefined, { enabled: Boolean(user) });
@@ -171,7 +186,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3">
             <Link href="/notificacoes" aria-label={`Abrir notificações${unreadNotifications.data?.count ? `, ${unreadNotifications.data.count} não lidas` : ""}`} className="relative grid h-10 w-10 place-items-center rounded-xl border border-[#dfe9e3] bg-white text-muted-foreground transition-colors hover:bg-[#edf7f1] hover:text-[#0f7350] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
               <Bell className="h-[18px] w-[18px]" />
-              {unreadNotifications.data?.count ? <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-[#e67948] px-1 text-[10px] font-bold text-white ring-2 ring-[#f6f8f6]">{unreadNotifications.data.count > 99 ? "99+" : unreadNotifications.data.count}</span> : null}
+              {unreadNotifications.data?.count ? <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-[#b4461b] px-1 text-[10px] font-bold text-white ring-2 ring-[#f6f8f6]">{unreadNotifications.data.count > 99 ? "99+" : unreadNotifications.data.count}</span> : null}
             </Link>
             <div className="hidden h-7 w-px bg-[#dce8e0] sm:block" />
             <div className="flex items-center gap-2.5">
@@ -190,7 +205,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="px-5 py-7 lg:ml-[272px] lg:px-9 lg:py-9"><div className="mx-auto max-w-[1600px]">{children}</div></main>
+      <main className="px-5 py-7 lg:ml-[272px] lg:px-9 lg:py-9"><div className="mx-auto max-w-[1600px]">{profileQuery.isLoading ? <div aria-busy="true" className="min-h-[50vh]" /> : canAccessRoute(role, location) ? children : <NoAccess />}</div></main>
 
       {isDrawerOpen && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu principal">

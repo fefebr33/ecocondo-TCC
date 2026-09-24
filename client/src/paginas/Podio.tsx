@@ -74,7 +74,7 @@ export default function Podio() {
 
       <section className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff3df] text-[#af7726]"><Trophy className="h-5 w-5" /></span>
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff3df] text-[#7a4d0a]"><Trophy className="h-5 w-5" /></span>
           <div>
             <p className="font-semibold">Top 3 do período {periodos.find((item) => item.value === periodo)?.label.toLowerCase()}</p>
             <p className="text-sm text-muted-foreground">Pontuação acumulada por coletas recicláveis concluídas neste período.</p>

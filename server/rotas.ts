@@ -32,13 +32,6 @@ export const appRouter = router({
   ...personalGoalsRouter._def.record,
   ...certificatesRouter._def.record,
   ...recurrenceRouter._def.record,
-
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
 });
 
 export type AppRouter = typeof appRouter;
