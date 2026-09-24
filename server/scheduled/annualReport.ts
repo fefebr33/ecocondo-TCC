@@ -5,7 +5,7 @@ import { coletas, condominios, notificacoes, perfisAcesso, relatoriosAnuais } fr
 import { getDb } from "../db";
 import { storagePut } from "../storage";
 import { calcularEquivalenciasAmbientais } from "../dominio/impactoAmbiental";
-import { sdk } from "../_core/sdk";
+import { exigirAdministrador } from "../_core/acesso";
 
 async function gerarPdfRelatorioAnual(condominioNome: string, ano: number, totalKg: number, reciclavelKg: number, coletasConcluidas: number) {
   const equivalencias = calcularEquivalenciasAmbientais(reciclavelKg);
@@ -77,7 +77,7 @@ export async function runAnnualReport(dataReferencia = new Date()) {
 /** Endpoint manual para forçar a verificação/geração do relatório anual. */
 export async function sendAnnualReportCheck(req: Request, res: Response) {
   try {
-    await sdk.authenticateRequest(req);
+    if (!(await exigirAdministrador(req, res))) return;
     const resultado = await runAnnualReport();
     return res.json({ ok: true, ...resultado });
   } catch (error) {

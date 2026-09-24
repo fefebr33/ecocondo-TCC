@@ -137,6 +137,11 @@ export const operationsRouter = router({
       collectorUserId: z.number().int().positive().nullable().optional(),
       notes: z.string().trim().max(1200).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
+      const inicioDeHoje = new Date();
+      inicioDeHoje.setHours(0, 0, 0, 0);
+      if (input.scheduledAt < inicioDeHoje) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "A data da coleta não pode ser anterior a hoje." });
+      }
       const db = await getDb();
       let moradorId = input.residentId ?? null;
       let bloco = input.block;
@@ -275,11 +280,12 @@ export const operationsRouter = router({
         pontosConcedidos: novosPontos,
         concluidaEm,
         coletorId: coleta.coletorId ?? ctx.user.id,
+        concluidoPorId: input.status === "concluida" ? ctx.user.id : null,
         observacoes: conclusao.notes,
         chaveFoto: foto.key,
         urlFoto: foto.url,
         pendenteAprovacaoPeso: pesoAnomalo,
-        aprovacaoPesoStatus: pesoAnomalo ? "pendente" : coleta.aprovacaoPesoStatus,
+        aprovacaoPesoStatus: pesoAnomalo ? "pendente" : coleta.aprovacaoPesoStatus === "pendente" ? null : coleta.aprovacaoPesoStatus,
         atualizadoEm: new Date(),
       }).where(eq(coletas.id, coleta.id));
       await writeAuditLog(db, {
@@ -352,7 +358,7 @@ export const operationsRouter = router({
       const coleta = encontrada[0];
       if (!coleta) throw new TRPCError({ code: "NOT_FOUND", message: "Coleta não encontrada." });
       if (!coleta.pendenteAprovacaoPeso) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta coleta não está pendente de aprovação." });
-      if (coleta.coletorId === ctx.user.id) {
+      if ((coleta.concluidoPorId ?? coleta.coletorId) === ctx.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Quem concluiu a coleta não pode ser quem aprova o peso suspeito. Peça para outro administrador revisar." });
       }
 

@@ -6,8 +6,11 @@ export type RegraRecorrencia = {
   ultimaGeracaoData: string | null;
 };
 
+/** Data no fuso local do servidor (AAAA-MM-DD), o mesmo usado por getDay(); toISOString() usaria UTC e trocaria o dia perto da meia-noite. */
 function dataParaChave(data: Date) {
-  return data.toISOString().slice(0, 10);
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
+  return `${data.getFullYear()}-${mes}-${dia}`;
 }
 
 /** Decide se uma regra de recorrência deve gerar uma coleta na data de referência (evita duplicar no mesmo dia). */

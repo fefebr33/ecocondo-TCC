@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { coletas, regrasRecorrenciaColeta } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { chaveDataGeracao, calcularAgendamento, deveGerarColetaHoje } from "../dominio/regrasRecorrencia";
-import { sdk } from "../_core/sdk";
+import { exigirAdministrador } from "../_core/acesso";
 
 /** Gera automaticamente as coletas do dia para cada regra de recorrência ativa cujo dia da semana bate com hoje. */
 export async function runRecurringCollections(dataReferencia = new Date()) {
@@ -33,7 +33,7 @@ export async function runRecurringCollections(dataReferencia = new Date()) {
 /** Endpoint manual para forçar a verificação/geração das coletas recorrentes do dia. */
 export async function sendRecurringCollectionsCheck(req: Request, res: Response) {
   try {
-    await sdk.authenticateRequest(req);
+    if (!(await exigirAdministrador(req, res))) return;
     const resultado = await runRecurringCollections();
     return res.json({ ok: true, ...resultado });
   } catch (error) {

@@ -113,6 +113,8 @@ export const coletas = sqliteTable("coletas", {
   moradorId: integer("morador_id"),
   criadoPorId: integer("criado_por_id").notNull(),
   coletorId: integer("coletor_id"),
+  /** Quem de fato confirmou a conclusão (pode ser diferente do coletor atribuído); usado na aprovação dupla de peso. */
+  concluidoPorId: integer("concluido_por_id"),
   tipoResiduo: text("tipo_residuo", { enum: tiposResiduo }).notNull(),
   bloco: text("bloco").notNull(),
   agendadaPara: integer("agendada_para", { mode: "timestamp" }).notNull(),

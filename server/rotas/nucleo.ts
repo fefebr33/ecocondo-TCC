@@ -86,6 +86,13 @@ export const ecoRouter = router({
       if (input.role === "morador" && !alvo[0].moradorId) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cadastre bloco e apartamento antes de atribuir o perfil de morador." });
       }
+      if (alvo[0].usuarioId === ctx.user.id && input.role !== alvo[0].papel) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode alterar o seu próprio perfil. Peça para outro administrador fazer isso." });
+      }
+      if (alvo[0].papel === "administrador" && input.role !== "administrador") {
+        const administradores = await db.select({ id: pessoas.id }).from(pessoas).where(and(eq(pessoas.condominioId, ctx.eco.condominio.id), eq(pessoas.papel, "administrador")));
+        if (administradores.length <= 1) throw new TRPCError({ code: "BAD_REQUEST", message: "O condomínio precisa ter pelo menos um administrador." });
+      }
       await db.update(pessoas).set({ papel: input.role, atualizadoEm: new Date() }).where(eq(pessoas.id, input.id));
       if (alvo[0].usuarioId) await db.update(perfisAcesso).set({ papel: input.role, moradorId: input.role === "morador" ? alvo[0].moradorId : null, atualizadoEm: new Date() }).where(eq(perfisAcesso.usuarioId, alvo[0].usuarioId));
       return { success: true };
@@ -100,15 +107,6 @@ export const ecoRouter = router({
     membros: administratorOnly.query(async ({ ctx }) => {
       const db = await getDb();
       return db.select({ profile: perfisAcesso, user: usuarios, resident: moradores }).from(perfisAcesso).leftJoin(usuarios, eq(usuarios.id, perfisAcesso.usuarioId)).leftJoin(moradores, eq(moradores.id, perfisAcesso.moradorId)).where(eq(perfisAcesso.condominioId, ctx.eco.condominio.id));
-    }),
-    definirPapel: administratorOnly.input(z.object({ userId: z.number().int().positive(), role: z.enum(papeisEco) })).mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      const alvo = await db.select().from(perfisAcesso).where(eq(perfisAcesso.usuarioId, input.userId)).limit(1);
-      if (!alvo[0] || alvo[0].condominioId !== ctx.eco.condominio.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Perfil não encontrado no condomínio." });
-      }
-      await db.update(perfisAcesso).set({ papel: input.role, atualizadoEm: new Date() }).where(eq(perfisAcesso.usuarioId, input.userId));
-      return { success: true };
     }),
   }),
   condominio: router({

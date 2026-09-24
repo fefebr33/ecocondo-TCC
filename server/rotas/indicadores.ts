@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, recompensas, resgates, perfisAcesso, relatoriosAnuais, usuarios, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -39,7 +39,7 @@ function resumir(registros: Array<typeof coletas.$inferSelect>) {
   const totalKg = totalGramas / 1000;
   const reciclavelKg = gramasReciclaveis / 1000;
   const taxaReciclagem = totalGramas > 0 ? Number(((gramasReciclaveis / totalGramas) * 100).toFixed(1)) : null;
-  const co2EstimadoKg = Number((reciclavelKg * 0.75).toFixed(1));
+  const co2EstimadoKg = calcularEquivalenciasAmbientais(reciclavelKg).co2EvitadoKg;
   const porTipoResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"].map((tipoResiduo) => ({
     wasteType: tipoResiduo,
     kilograms: Number((concluidas.filter((registro) => registro.tipoResiduo === tipoResiduo).reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0) / 1000).toFixed(2)),
@@ -135,7 +135,8 @@ export const analyticsRouter = router({
   engajamento: router({
     ranking: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
+      // Só os campos exibidos no ranking: e-mail, telefone e código QR dos vizinhos não saem do servidor.
+      const comunidade = await db.select({ id: moradores.id, nome: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento, pontos: moradores.pontos }).from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
       return [...comunidade].sort((a, b) => b.pontos - a.pontos).map((morador, indice) => ({ position: indice + 1, ...morador }));
     }),
     recompensas: withProfile.query(async ({ ctx }) => {
@@ -154,10 +155,50 @@ export const analyticsRouter = router({
       const recompensa = encontrada[0];
       if (!recompensa) throw new TRPCError({ code: "NOT_FOUND", message: "Recompensa não encontrada." });
       if (recompensa.estoque !== null && recompensa.estoque <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta recompensa está sem estoque." });
-      if (ctx.eco.morador.pontos < recompensa.custoPontos) throw new TRPCError({ code: "BAD_REQUEST", message: "Pontuação insuficiente para esta recompensa." });
-      await db.insert(resgates).values({ condominioId: ctx.eco.condominio.id, moradorId: ctx.eco.morador.id, recompensaId: recompensa.id, pontosGastos: recompensa.custoPontos });
-      await db.update(moradores).set({ pontos: ctx.eco.morador.pontos - recompensa.custoPontos, atualizadoEm: new Date() }).where(eq(moradores.id, ctx.eco.morador.id));
-      if (recompensa.estoque !== null) await db.update(recompensas).set({ estoque: recompensa.estoque - 1, atualizadoEm: new Date() }).where(eq(recompensas.id, recompensa.id));
+      const moradorId = ctx.eco.morador.id;
+      // Débito de pontos e baixa de estoque condicionais e atômicos: dois cliques simultâneos não geram resgate a mais.
+      const resultado = db.transaction((tx) => {
+        const debito = tx.update(moradores).set({ pontos: sql`${moradores.pontos} - ${recompensa.custoPontos}`, atualizadoEm: new Date() }).where(and(eq(moradores.id, moradorId), gte(moradores.pontos, recompensa.custoPontos))).returning({ id: moradores.id }).all();
+        if (!debito.length) return "sem_pontos" as const;
+        if (recompensa.estoque !== null) {
+          const baixa = tx.update(recompensas).set({ estoque: sql`${recompensas.estoque} - 1`, atualizadoEm: new Date() }).where(and(eq(recompensas.id, recompensa.id), gt(recompensas.estoque, 0))).returning({ id: recompensas.id }).all();
+          // Lançar dentro da transação desfaz o débito de pontos já feito.
+          if (!baixa.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta recompensa está sem estoque." });
+        }
+        tx.insert(resgates).values({ condominioId: ctx.eco.condominio.id, moradorId, recompensaId: recompensa.id, pontosGastos: recompensa.custoPontos }).run();
+        return "ok" as const;
+      });
+      if (resultado === "sem_pontos") throw new TRPCError({ code: "BAD_REQUEST", message: "Pontuação insuficiente para esta recompensa." });
+      return { success: true };
+    }),
+    meusResgates: withProfile.query(async ({ ctx }) => {
+      if (!ctx.eco.morador) return [];
+      const db = await getDb();
+      return db.select({ id: resgates.id, status: resgates.status, pontosGastos: resgates.pontosGastos, criadoEm: resgates.criadoEm, atualizadoEm: resgates.atualizadoEm, recompensa: recompensas.titulo }).from(resgates).leftJoin(recompensas, eq(recompensas.id, resgates.recompensaId)).where(and(eq(resgates.condominioId, ctx.eco.condominio.id), eq(resgates.moradorId, ctx.eco.morador.id))).orderBy(desc(resgates.criadoEm));
+    }),
+    listarResgates: administratorOnly.query(async ({ ctx }) => {
+      const db = await getDb();
+      return db.select({ id: resgates.id, status: resgates.status, pontosGastos: resgates.pontosGastos, criadoEm: resgates.criadoEm, atualizadoEm: resgates.atualizadoEm, recompensa: recompensas.titulo, morador: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento }).from(resgates).leftJoin(recompensas, eq(recompensas.id, resgates.recompensaId)).leftJoin(moradores, eq(moradores.id, resgates.moradorId)).where(eq(resgates.condominioId, ctx.eco.condominio.id)).orderBy(desc(resgates.criadoEm));
+    }),
+    atualizarResgate: administratorOnly.input(z.object({ id: z.number().int().positive(), status: z.enum(["aprovado", "entregue", "cancelado"]) })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      const encontrado = await db.select().from(resgates).where(and(eq(resgates.id, input.id), eq(resgates.condominioId, ctx.eco.condominio.id))).limit(1);
+      const resgate = encontrado[0];
+      if (!resgate) throw new TRPCError({ code: "NOT_FOUND", message: "Resgate não encontrado." });
+      if (resgate.status === "entregue" || resgate.status === "cancelado") throw new TRPCError({ code: "BAD_REQUEST", message: "Este resgate já foi finalizado." });
+      db.transaction((tx) => {
+        tx.update(resgates).set({ status: input.status, atualizadoEm: new Date() }).where(eq(resgates.id, resgate.id)).run();
+        if (input.status === "cancelado") {
+          // Cancelar devolve os pontos ao morador e a unidade ao estoque.
+          tx.update(moradores).set({ pontos: sql`${moradores.pontos} + ${resgate.pontosGastos}`, atualizadoEm: new Date() }).where(eq(moradores.id, resgate.moradorId)).run();
+          tx.update(recompensas).set({ estoque: sql`${recompensas.estoque} + 1`, atualizadoEm: new Date() }).where(and(eq(recompensas.id, resgate.recompensaId), sql`${recompensas.estoque} IS NOT NULL`)).run();
+        }
+      });
+      const morador = await db.select({ usuarioId: moradores.usuarioId }).from(moradores).where(eq(moradores.id, resgate.moradorId)).limit(1);
+      if (morador[0]?.usuarioId) {
+        const textos = { aprovado: "Seu resgate foi aprovado e será entregue em breve.", entregue: "Seu resgate foi marcado como entregue.", cancelado: `Seu resgate foi cancelado e ${resgate.pontosGastos} ponto(s) foram devolvidos.` } as const;
+        await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: morador[0].usuarioId, tipo: "sistema", titulo: "Atualização de resgate", mensagem: textos[input.status] });
+      }
       return { success: true };
     }),
   }),

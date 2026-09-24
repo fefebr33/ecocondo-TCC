@@ -3,7 +3,7 @@ import { and, eq, gte, lte } from "drizzle-orm";
 import { coletas, notificacoes, moradores } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { reminderRecipients } from "../dominio/regrasLembrete";
-import { sdk } from "../_core/sdk";
+import { exigirAdministrador } from "../_core/acesso";
 
 /** Cria uma única notificação de lembrete para cada destinatário nas 24h anteriores à coleta. */
 export async function runCollectionReminders() {
@@ -26,10 +26,10 @@ export async function runCollectionReminders() {
   return { evaluatedCollections: proximas.length, remindersCreated: lembretesCriados };
 }
 
-/** Endpoint manual para disparar os lembretes (qualquer usuário autenticado do condomínio). */
+/** Endpoint manual para disparar os lembretes (apenas administradores). */
 export async function sendCollectionReminders(req: Request, res: Response) {
   try {
-    await sdk.authenticateRequest(req);
+    if (!(await exigirAdministrador(req, res))) return;
     const resultado = await runCollectionReminders();
     return res.json({ ok: true, ...resultado });
   } catch (error) {
