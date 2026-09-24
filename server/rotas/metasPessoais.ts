@@ -36,7 +36,7 @@ export const personalGoalsRouter = router({
         metaKg: input.targetKg,
         dataInicio: input.startDate,
         dataFim: input.endDate,
-      }).returning({ id: metasPessoais.id });
+      }).$returningId();
       return { id: inserida[0].id };
     }),
     cancelar: withProfile.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {

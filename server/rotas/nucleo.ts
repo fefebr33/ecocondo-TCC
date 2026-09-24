@@ -63,7 +63,7 @@ export const ecoRouter = router({
           telefone: input.phone || null,
           bloco: input.block!,
           apartamento: input.apartment!,
-        }).returning({ id: moradores.id });
+        }).$returningId();
         moradorId = morador[0].id;
       }
       const inserido = await db.insert(pessoas).values({
@@ -76,7 +76,7 @@ export const ecoRouter = router({
         apartamento: input.apartment || null,
         papel: input.role,
         statusAcesso: "pendente",
-      }).returning({ id: pessoas.id });
+      }).$returningId();
       return { id: inserido[0].id, residentId: moradorId };
     }),
     definirPapel: administratorOnly.input(z.object({ id: z.number().int().positive(), role: z.enum(papeisEco) })).mutation(async ({ ctx, input }) => {

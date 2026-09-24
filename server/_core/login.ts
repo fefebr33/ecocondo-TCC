@@ -25,7 +25,7 @@ async function garantirCondominio() {
     cidade: "São Paulo",
     estado: "SP",
     quantidadeBlocos: 4,
-  }).returning({ id: condominios.id });
+  }).$returningId();
   return { id: inserido[0].id };
 }
 
@@ -60,7 +60,7 @@ export async function garantirContaDemonstracao(papel: PapelEco) {
         email: conta.email,
         bloco: "A",
         apartamento: "101",
-      }).returning({ id: moradores.id });
+      }).$returningId();
       moradorId = moradorInserido[0].id;
     }
   }

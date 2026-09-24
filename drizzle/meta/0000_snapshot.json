@@ -1,43 +1,155 @@
 {
-  "version": "6",
-  "dialect": "sqlite",
-  "id": "d915ff81-fa87-455e-89cc-df743c8b6de8",
+  "version": "5",
+  "dialect": "mysql",
+  "id": "e0452efe-d4ce-456e-82fb-2f03c742db68",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "avaliacoes_coleta": {
-      "name": "avaliacoes_coleta",
+    "aplicacoes_desconto_podio": {
+      "name": "aplicacoes_desconto_podio",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "morador_id": {
           "name": "morador_id",
-          "type": "integer",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "periodo": {
+          "name": "periodo",
+          "type": "enum('mensal','semestral','anual')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "intervalo_inicio": {
+          "name": "intervalo_inicio",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "intervalo_fim": {
+          "name": "intervalo_fim",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "posicao": {
+          "name": "posicao",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "percentual_aplicado": {
+          "name": "percentual_aplicado",
+          "type": "double",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "observacao": {
+          "name": "observacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "aplicado_por_id": {
+          "name": "aplicado_por_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aplicado_em": {
+          "name": "aplicado_em",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
+        }
+      },
+      "indexes": {
+        "aplicacoes_desconto_condominio_idx": {
+          "name": "aplicacoes_desconto_condominio_idx",
+          "columns": [
+            "condominio_id"
+          ],
+          "isUnique": false
+        },
+        "aplicacoes_desconto_unique": {
+          "name": "aplicacoes_desconto_unique",
+          "columns": [
+            "morador_id",
+            "periodo",
+            "intervalo_inicio"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "aplicacoes_desconto_podio_id": {
+          "name": "aplicacoes_desconto_podio_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "avaliacoes_coleta": {
+      "name": "avaliacoes_coleta",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "morador_id": {
+          "name": "morador_id",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "coleta_id": {
           "name": "coleta_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "nota": {
           "name": "nota",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -51,7 +163,7 @@
         },
         "status": {
           "name": "status",
-          "type": "text",
+          "type": "enum('nova','respondida','arquivada')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -66,33 +178,33 @@
         },
         "respondido_por_id": {
           "name": "respondido_por_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "respondida_em": {
           "name": "respondida_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -119,30 +231,37 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "avaliacoes_coleta_id": {
+          "name": "avaliacoes_coleta_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "campanhas": {
       "name": "campanhas",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "titulo": {
           "name": "titulo",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -163,21 +282,21 @@
         },
         "data_inicio": {
           "name": "data_inicio",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "data_fim": {
           "name": "data_fim",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "status": {
           "name": "status",
-          "type": "text",
+          "type": "enum('planejada','ativa','encerrada')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -185,26 +304,26 @@
         },
         "criado_por_id": {
           "name": "criado_por_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -225,86 +344,198 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "campanhas_id": {
+          "name": "campanhas_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
-    "coletas": {
-      "name": "coletas",
+    "certificados_sustentabilidade": {
+      "name": "certificados_sustentabilidade",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "morador_id": {
-          "name": "morador_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "criado_por_id": {
-          "name": "criado_por_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "coletor_id": {
-          "name": "coletor_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "tipo_residuo": {
-          "name": "tipo_residuo",
-          "type": "text",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "bloco": {
           "name": "bloco",
-          "type": "text",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trimestre": {
+          "name": "trimestre",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "peso_kg": {
+          "name": "peso_kg",
+          "type": "double",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "chave_arquivo": {
+          "name": "chave_arquivo",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url_arquivo": {
+          "name": "url_arquivo",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "gerado_por_id": {
+          "name": "gerado_por_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "gerado_em": {
+          "name": "gerado_em",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
+        }
+      },
+      "indexes": {
+        "certificados_condominio_idx": {
+          "name": "certificados_condominio_idx",
+          "columns": [
+            "condominio_id"
+          ],
+          "isUnique": false
+        },
+        "certificados_unique": {
+          "name": "certificados_unique",
+          "columns": [
+            "condominio_id",
+            "bloco",
+            "trimestre"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "certificados_sustentabilidade_id": {
+          "name": "certificados_sustentabilidade_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "coletas": {
+      "name": "coletas",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "morador_id": {
+          "name": "morador_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "coletor_id": {
+          "name": "coletor_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "concluido_por_id": {
+          "name": "concluido_por_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tipo_residuo": {
+          "name": "tipo_residuo",
+          "type": "enum('reciclavel','organico','rejeito','eletronico','perigoso')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bloco": {
+          "name": "bloco",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "agendada_para": {
           "name": "agendada_para",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "concluida_em": {
           "name": "concluida_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "peso_gramas": {
           "name": "peso_gramas",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "pontos_concedidos": {
           "name": "pontos_concedidos",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -312,7 +543,7 @@
         },
         "status": {
           "name": "status",
-          "type": "text",
+          "type": "enum('agendada','em_andamento','concluida','cancelada','ocorrencia')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -325,21 +556,71 @@
           "notNull": false,
           "autoincrement": false
         },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "integer",
+        "chave_foto": {
+          "name": "chave_foto",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "url_foto": {
+          "name": "url_foto",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "regra_recorrencia_id": {
+          "name": "regra_recorrencia_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pendente_aprovacao_peso": {
+          "name": "pendente_aprovacao_peso",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": false
+        },
+        "aprovacao_peso_status": {
+          "name": "aprovacao_peso_status",
+          "type": "enum('pendente','aprovado','rejeitado')",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "aprovacao_peso_por_id": {
+          "name": "aprovacao_peso_por_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "aprovacao_peso_em": {
+          "name": "aprovacao_peso_em",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -389,54 +670,69 @@
             "agendada_para"
           ],
           "isUnique": false
+        },
+        "coletas_pendente_aprovacao_idx": {
+          "name": "coletas_pendente_aprovacao_idx",
+          "columns": [
+            "condominio_id",
+            "pendente_aprovacao_peso"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "coletas_id": {
+          "name": "coletas_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "condominios": {
       "name": "condominios",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "nome": {
           "name": "nome",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "endereco": {
           "name": "endereco",
-          "type": "text",
+          "type": "varchar(500)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "cidade": {
           "name": "cidade",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "estado": {
           "name": "estado",
-          "type": "text",
+          "type": "varchar(2)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "quantidade_blocos": {
           "name": "quantidade_blocos",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -444,62 +740,90 @@
         },
         "ativo": {
           "name": "ativo",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": true
         },
+        "desconto_podio_mensal_percentual": {
+          "name": "desconto_podio_mensal_percentual",
+          "type": "double",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "desconto_podio_semestral_percentual": {
+          "name": "desconto_podio_semestral_percentual",
+          "type": "double",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "desconto_podio_anual_percentual": {
+          "name": "desconto_podio_anual_percentual",
+          "type": "double",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {},
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "condominios_id": {
+          "name": "condominios_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "guias_descarte": {
       "name": "guias_descarte",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "tipo_residuo": {
           "name": "tipo_residuo",
-          "type": "text",
+          "type": "enum('reciclavel','organico','rejeito','eletronico','perigoso')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "titulo": {
           "name": "titulo",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -527,7 +851,7 @@
         },
         "publicado": {
           "name": "publicado",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -535,11 +859,11 @@
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -553,51 +877,58 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "guias_descarte_id": {
+          "name": "guias_descarte_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "logs_auditoria": {
       "name": "logs_auditoria",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "autor_id": {
           "name": "autor_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "tipo_entidade": {
           "name": "tipo_entidade",
-          "type": "text",
+          "type": "enum('coleta','ocorrencia','desconto_podio')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "entidade_id": {
           "name": "entidade_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "acao": {
           "name": "acao",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -625,11 +956,11 @@
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -659,72 +990,79 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "logs_auditoria_id": {
+          "name": "logs_auditoria_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "metas_bloco": {
       "name": "metas_bloco",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "bloco": {
           "name": "bloco",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "titulo": {
           "name": "titulo",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "meta_kg": {
           "name": "meta_kg",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "data_inicio": {
           "name": "data_inicio",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "data_fim": {
           "name": "data_fim",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "criado_por_id": {
           "name": "criado_por_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "ativo": {
           "name": "ativo",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -732,19 +1070,19 @@
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -765,72 +1103,177 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "metas_bloco_id": {
+          "name": "metas_bloco_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
+    },
+    "metas_pessoais": {
+      "name": "metas_pessoais",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "morador_id": {
+          "name": "morador_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "meta_kg": {
+          "name": "meta_kg",
+          "type": "double",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "data_inicio": {
+          "name": "data_inicio",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "data_fim": {
+          "name": "data_fim",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ativo": {
+          "name": "ativo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
+        }
+      },
+      "indexes": {
+        "metas_pessoais_condominio_idx": {
+          "name": "metas_pessoais_condominio_idx",
+          "columns": [
+            "condominio_id"
+          ],
+          "isUnique": false
+        },
+        "metas_pessoais_morador_idx": {
+          "name": "metas_pessoais_morador_idx",
+          "columns": [
+            "morador_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "metas_pessoais_id": {
+          "name": "metas_pessoais_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
     },
     "moradores": {
       "name": "moradores",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "usuario_id": {
           "name": "usuario_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "nome": {
           "name": "nome",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "email": {
           "name": "email",
-          "type": "text",
+          "type": "varchar(320)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "telefone": {
           "name": "telefone",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "bloco": {
           "name": "bloco",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "apartamento": {
           "name": "apartamento",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "status": {
           "name": "status",
-          "type": "text",
+          "type": "enum('ativo','inativo')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -838,27 +1281,34 @@
         },
         "pontos": {
           "name": "pontos",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 0
         },
+        "codigo_acesso": {
+          "name": "codigo_acesso",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -875,54 +1325,68 @@
             "usuario_id"
           ],
           "isUnique": true
+        },
+        "moradores_codigo_acesso_unique": {
+          "name": "moradores_codigo_acesso_unique",
+          "columns": [
+            "codigo_acesso"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "moradores_id": {
+          "name": "moradores_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "notificacoes": {
       "name": "notificacoes",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "destinatario_id": {
           "name": "destinatario_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "coleta_id": {
           "name": "coleta_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "tipo": {
           "name": "tipo",
-          "type": "text",
+          "type": "enum('coleta_agendada','coleta_concluida','lembrete_coleta','comunicado','sistema','certificado_disponivel','relatorio_anual')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "titulo": {
           "name": "titulo",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -936,18 +1400,18 @@
         },
         "lida_em": {
           "name": "lida_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -967,41 +1431,48 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "notificacoes_id": {
+          "name": "notificacoes_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "notificacoes_lidas": {
       "name": "notificacoes_lidas",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "notificacao_id": {
           "name": "notificacao_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "usuario_id": {
           "name": "usuario_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "lida_em": {
           "name": "lida_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -1022,51 +1493,58 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "notificacoes_lidas_id": {
+          "name": "notificacoes_lidas_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "ocorrencias": {
       "name": "ocorrencias",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "relator_id": {
           "name": "relator_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "bloco": {
           "name": "bloco",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "tipo_residuo": {
           "name": "tipo_residuo",
-          "type": "text",
+          "type": "enum('reciclavel','organico','rejeito','eletronico','perigoso')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "local": {
           "name": "local",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1080,21 +1558,21 @@
         },
         "chave_imagem": {
           "name": "chave_imagem",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "url_imagem": {
           "name": "url_imagem",
-          "type": "text",
+          "type": "varchar(512)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "status": {
           "name": "status",
-          "type": "text",
+          "type": "enum('aberta','em_analise','resolvida')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -1109,33 +1587,33 @@
         },
         "resolvido_por_id": {
           "name": "resolvido_por_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "resolvida_em": {
           "name": "resolvida_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -1164,41 +1642,48 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "ocorrencias_id": {
+          "name": "ocorrencias_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "participantes_campanha": {
       "name": "participantes_campanha",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "campanha_id": {
           "name": "campanha_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "morador_id": {
           "name": "morador_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "entrou_em": {
           "name": "entrou_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -1219,44 +1704,51 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "participantes_campanha_id": {
+          "name": "participantes_campanha_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "perfis_acesso": {
       "name": "perfis_acesso",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "usuario_id": {
           "name": "usuario_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "morador_id": {
           "name": "morador_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "papel": {
           "name": "papel",
-          "type": "text",
+          "type": "enum('administrador','coletor','morador')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -1264,19 +1756,19 @@
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -1296,79 +1788,86 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "perfis_acesso_id": {
+          "name": "perfis_acesso_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "pessoas": {
       "name": "pessoas",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "usuario_id": {
           "name": "usuario_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "morador_id": {
           "name": "morador_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "nome": {
           "name": "nome",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "email": {
           "name": "email",
-          "type": "text",
+          "type": "varchar(320)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "telefone": {
           "name": "telefone",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "bloco": {
           "name": "bloco",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "apartamento": {
           "name": "apartamento",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "papel": {
           "name": "papel",
-          "type": "text",
+          "type": "enum('administrador','coletor','morador')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -1376,7 +1875,7 @@
         },
         "status_acesso": {
           "name": "status_acesso",
-          "type": "text",
+          "type": "enum('pendente','ativo')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -1384,19 +1883,19 @@
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -1424,30 +1923,37 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "pessoas_id": {
+          "name": "pessoas_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "recompensas": {
       "name": "recompensas",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "titulo": {
           "name": "titulo",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1461,21 +1967,21 @@
         },
         "custo_pontos": {
           "name": "custo_pontos",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "estoque": {
           "name": "estoque",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "ativo": {
           "name": "ativo",
-          "type": "integer",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -1483,19 +1989,19 @@
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -1508,51 +2014,232 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "recompensas_id": {
+          "name": "recompensas_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
+    },
+    "regras_recorrencia_coleta": {
+      "name": "regras_recorrencia_coleta",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bloco": {
+          "name": "bloco",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tipo_residuo": {
+          "name": "tipo_residuo",
+          "type": "enum('reciclavel','organico','rejeito','eletronico','perigoso')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dia_semana": {
+          "name": "dia_semana",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "horario": {
+          "name": "horario",
+          "type": "varchar(5)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ativo": {
+          "name": "ativo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ultima_geracao_data": {
+          "name": "ultima_geracao_data",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
+        }
+      },
+      "indexes": {
+        "regras_recorrencia_condominio_idx": {
+          "name": "regras_recorrencia_condominio_idx",
+          "columns": [
+            "condominio_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "regras_recorrencia_coleta_id": {
+          "name": "regras_recorrencia_coleta_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "relatorios_anuais": {
+      "name": "relatorios_anuais",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "condominio_id": {
+          "name": "condominio_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ano": {
+          "name": "ano",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "chave_arquivo": {
+          "name": "chave_arquivo",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url_arquivo": {
+          "name": "url_arquivo",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "gerado_em": {
+          "name": "gerado_em",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
+        }
+      },
+      "indexes": {
+        "relatorios_anuais_unique": {
+          "name": "relatorios_anuais_unique",
+          "columns": [
+            "condominio_id",
+            "ano"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "relatorios_anuais_id": {
+          "name": "relatorios_anuais_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
     },
     "resgates": {
       "name": "resgates",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "condominio_id": {
           "name": "condominio_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "morador_id": {
           "name": "morador_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "recompensa_id": {
           "name": "recompensa_id",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "pontos_gastos": {
           "name": "pontos_gastos",
-          "type": "integer",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "status": {
           "name": "status",
-          "type": "text",
+          "type": "enum('solicitado','aprovado','entregue','cancelado')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -1560,19 +2247,19 @@
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -1592,51 +2279,58 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "resgates_id": {
+          "name": "resgates_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     },
     "usuarios": {
       "name": "usuarios",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
-          "primaryKey": true,
+          "type": "int",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": true
         },
         "id_externo": {
           "name": "id_externo",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "nome": {
           "name": "nome",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "email": {
           "name": "email",
-          "type": "text",
+          "type": "varchar(320)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "metodo_login": {
           "name": "metodo_login",
-          "type": "text",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "papel": {
           "name": "papel",
-          "type": "text",
+          "type": "enum('usuario','administrador')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
@@ -1644,52 +2338,58 @@
         },
         "criado_em": {
           "name": "criado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "atualizado_em": {
           "name": "atualizado_em",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         },
         "ultimo_acesso": {
           "name": "ultimo_acesso",
-          "type": "integer",
+          "type": "datetime(3)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "(unixepoch())"
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
-      "indexes": {
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "usuarios_id": {
+          "name": "usuarios_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
         "usuarios_id_externo_unique": {
           "name": "usuarios_id_externo_unique",
           "columns": [
             "id_externo"
-          ],
-          "isUnique": true
+          ]
         }
       },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraint": {}
     }
   },
   "views": {},
-  "enums": {},
   "_meta": {
     "schemas": {},
     "tables": {},
     "columns": {}
   },
   "internal": {
+    "tables": {},
     "indexes": {}
   }
 }

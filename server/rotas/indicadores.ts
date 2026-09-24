@@ -150,7 +150,7 @@ export const analyticsRouter = router({
     }),
     criarRecompensa: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(140), description: z.string().trim().min(4).max(1000), pointsCost: z.number().int().min(1), stock: z.number().int().min(0).nullable() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const inserida = await db.insert(recompensas).values({ condominioId: ctx.eco.condominio.id, titulo: input.title, descricao: input.description, custoPontos: input.pointsCost, estoque: input.stock }).returning({ id: recompensas.id });
+      const inserida = await db.insert(recompensas).values({ condominioId: ctx.eco.condominio.id, titulo: input.title, descricao: input.description, custoPontos: input.pointsCost, estoque: input.stock }).$returningId();
       return { id: inserida[0].id };
     }),
     resgatar: withProfile.input(z.object({ rewardId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -162,15 +162,15 @@ export const analyticsRouter = router({
       if (recompensa.estoque !== null && recompensa.estoque <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta recompensa está sem estoque." });
       const moradorId = ctx.eco.morador.id;
       // Débito de pontos e baixa de estoque condicionais e atômicos: dois cliques simultâneos não geram resgate a mais.
-      const resultado = db.transaction((tx) => {
-        const debito = tx.update(moradores).set({ pontos: sql`${moradores.pontos} - ${recompensa.custoPontos}`, atualizadoEm: new Date() }).where(and(eq(moradores.id, moradorId), gte(moradores.pontos, recompensa.custoPontos))).returning({ id: moradores.id }).all();
-        if (!debito.length) return "sem_pontos" as const;
+      const resultado = await db.transaction(async (tx) => {
+        const [debito] = await tx.update(moradores).set({ pontos: sql`${moradores.pontos} - ${recompensa.custoPontos}`, atualizadoEm: new Date() }).where(and(eq(moradores.id, moradorId), gte(moradores.pontos, recompensa.custoPontos)));
+        if (!debito.affectedRows) return "sem_pontos" as const;
         if (recompensa.estoque !== null) {
-          const baixa = tx.update(recompensas).set({ estoque: sql`${recompensas.estoque} - 1`, atualizadoEm: new Date() }).where(and(eq(recompensas.id, recompensa.id), gt(recompensas.estoque, 0))).returning({ id: recompensas.id }).all();
+          const [baixa] = await tx.update(recompensas).set({ estoque: sql`${recompensas.estoque} - 1`, atualizadoEm: new Date() }).where(and(eq(recompensas.id, recompensa.id), gt(recompensas.estoque, 0)));
           // Lançar dentro da transação desfaz o débito de pontos já feito.
-          if (!baixa.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta recompensa está sem estoque." });
+          if (!baixa.affectedRows) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta recompensa está sem estoque." });
         }
-        tx.insert(resgates).values({ condominioId: ctx.eco.condominio.id, moradorId, recompensaId: recompensa.id, pontosGastos: recompensa.custoPontos }).run();
+        await tx.insert(resgates).values({ condominioId: ctx.eco.condominio.id, moradorId, recompensaId: recompensa.id, pontosGastos: recompensa.custoPontos });
         return "ok" as const;
       });
       if (resultado === "sem_pontos") throw new TRPCError({ code: "BAD_REQUEST", message: "Pontuação insuficiente para esta recompensa." });
@@ -191,12 +191,12 @@ export const analyticsRouter = router({
       const resgate = encontrado[0];
       if (!resgate) throw new TRPCError({ code: "NOT_FOUND", message: "Resgate não encontrado." });
       if (resgate.status === "entregue" || resgate.status === "cancelado") throw new TRPCError({ code: "BAD_REQUEST", message: "Este resgate já foi finalizado." });
-      db.transaction((tx) => {
-        tx.update(resgates).set({ status: input.status, atualizadoEm: new Date() }).where(eq(resgates.id, resgate.id)).run();
+      await db.transaction(async (tx) => {
+        await tx.update(resgates).set({ status: input.status, atualizadoEm: new Date() }).where(eq(resgates.id, resgate.id));
         if (input.status === "cancelado") {
           // Cancelar devolve os pontos ao morador e a unidade ao estoque.
-          tx.update(moradores).set({ pontos: sql`${moradores.pontos} + ${resgate.pontosGastos}`, atualizadoEm: new Date() }).where(eq(moradores.id, resgate.moradorId)).run();
-          tx.update(recompensas).set({ estoque: sql`${recompensas.estoque} + 1`, atualizadoEm: new Date() }).where(and(eq(recompensas.id, resgate.recompensaId), sql`${recompensas.estoque} IS NOT NULL`)).run();
+          await tx.update(moradores).set({ pontos: sql`${moradores.pontos} + ${resgate.pontosGastos}`, atualizadoEm: new Date() }).where(eq(moradores.id, resgate.moradorId));
+          await tx.update(recompensas).set({ estoque: sql`${recompensas.estoque} + 1`, atualizadoEm: new Date() }).where(and(eq(recompensas.id, resgate.recompensaId), sql`${recompensas.estoque} IS NOT NULL`));
         }
       });
       const morador = await db.select({ usuarioId: moradores.usuarioId }).from(moradores).where(eq(moradores.id, resgate.moradorId)).limit(1);
@@ -222,18 +222,18 @@ export const analyticsRouter = router({
       const db = await getDb();
       const visivel = await db.select().from(notificacoes).where(and(eq(notificacoes.id, input.id), eq(notificacoes.condominioId, ctx.eco.condominio.id), or(eq(notificacoes.destinatarioId, ctx.user.id), sql`${notificacoes.destinatarioId} IS NULL`))).limit(1);
       if (!visivel[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Notificação não encontrada." });
-      await db.insert(notificacoesLidas).values({ notificacaoId: input.id, usuarioId: ctx.user.id }).onConflictDoUpdate({ target: [notificacoesLidas.notificacaoId, notificacoesLidas.usuarioId], set: { lidaEm: new Date() } });
+      await db.insert(notificacoesLidas).values({ notificacaoId: input.id, usuarioId: ctx.user.id }).onDuplicateKeyUpdate({ set: { lidaEm: new Date() } });
       return { success: true };
     }),
     marcarTodasLidas: withProfile.mutation(async ({ ctx }) => {
       const db = await getDb();
       const visiveis = await db.select().from(notificacoes).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), or(eq(notificacoes.destinatarioId, ctx.user.id), sql`${notificacoes.destinatarioId} IS NULL`)));
-      for (const item of visiveis) await db.insert(notificacoesLidas).values({ notificacaoId: item.id, usuarioId: ctx.user.id }).onConflictDoUpdate({ target: [notificacoesLidas.notificacaoId, notificacoesLidas.usuarioId], set: { lidaEm: new Date() } });
+      for (const item of visiveis) await db.insert(notificacoesLidas).values({ notificacaoId: item.id, usuarioId: ctx.user.id }).onDuplicateKeyUpdate({ set: { lidaEm: new Date() } });
       return { success: true };
     }),
     criarComunicado: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(180), message: z.string().trim().min(3).max(2000) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const inserida = await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: null, tipo: "comunicado", titulo: input.title, mensagem: input.message }).returning({ id: notificacoes.id });
+      const inserida = await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: null, tipo: "comunicado", titulo: input.title, mensagem: input.message }).$returningId();
       return { id: inserida[0].id };
     }),
   }),

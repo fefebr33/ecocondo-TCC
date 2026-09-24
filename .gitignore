@@ -101,7 +101,7 @@ jspm_packages/
 tmp/
 temp/
 
-# Database local (SQLite) e arquivos enviados
+# Arquivos enviados e bancos locais antigos (SQLite)
 *.db
 *.db-shm
 *.db-wal

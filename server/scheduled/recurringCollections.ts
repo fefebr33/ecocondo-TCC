@@ -18,13 +18,12 @@ export async function runRecurringCollections(agora = new Date()) {
     const agendadaPara = proximaOcorrenciaParaGerar(regra, agora);
     if (!agendadaPara) continue;
     const chave = chaveDataGeracao(agendadaPara);
-    const criada = db.transaction((tx) => {
-      const marcada = tx.update(regrasRecorrenciaColeta)
+    const criada = await db.transaction(async (tx) => {
+      const [marcada] = await tx.update(regrasRecorrenciaColeta)
         .set({ ultimaGeracaoData: chave, atualizadoEm: new Date() })
-        .where(and(eq(regrasRecorrenciaColeta.id, regra.id), or(isNull(regrasRecorrenciaColeta.ultimaGeracaoData), lt(regrasRecorrenciaColeta.ultimaGeracaoData, chave))))
-        .returning({ id: regrasRecorrenciaColeta.id }).all();
-      if (!marcada.length) return false;
-      tx.insert(coletas).values({
+        .where(and(eq(regrasRecorrenciaColeta.id, regra.id), or(isNull(regrasRecorrenciaColeta.ultimaGeracaoData), lt(regrasRecorrenciaColeta.ultimaGeracaoData, chave))));
+      if (!marcada.affectedRows) return false;
+      await tx.insert(coletas).values({
         condominioId: regra.condominioId,
         criadoPorId: regra.criadoPorId,
         tipoResiduo: regra.tipoResiduo,
@@ -32,7 +31,7 @@ export async function runRecurringCollections(agora = new Date()) {
         agendadaPara,
         regraRecorrenciaId: regra.id,
         observacoes: "Coleta gerada automaticamente por regra de recorrência.",
-      }).run();
+      });
       return true;
     });
     if (criada) geradas += 1;

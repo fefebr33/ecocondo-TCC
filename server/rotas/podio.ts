@@ -151,7 +151,7 @@ export const podioRouter = router({
         percentualAplicado: input.percentual,
         observacao: input.observacao || null,
         aplicadoPorId: ctx.user.id,
-      }).returning({ id: aplicacoesDescontoPodio.id });
+      }).$returningId();
 
       await writeAuditLog(db, {
         condominioId: ctx.eco.condominio.id,

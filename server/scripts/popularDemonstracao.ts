@@ -1,28 +1,26 @@
 /**
- * Popula o banco local com dados de demonstração (pnpm db:seed), passando pelas mesmas rotas e regras do sistema.
- * Use `pnpm db:seed --limpar` para apagar o banco e as fotos antes (feche o `pnpm dev` antes, por causa do arquivo aberto).
+ * Popula o banco MySQL com dados de demonstração (pnpm db:seed), passando pelas mesmas rotas e regras do sistema.
+ * Use `pnpm db:seed --limpar` para apagar e recriar o banco (e as fotos enviadas) antes.
  */
+import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq, sql } from "drizzle-orm";
 import { coletas } from "../../drizzle/schema";
 import type { Usuario } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { fecharDb, getDb, prepararBanco } from "../db";
 import { appRouter } from "../rotas";
 import type { TrpcContext } from "../_core/context";
 import { garantirContaDemonstracao } from "../_core/login";
 
-const arquivoBanco = path.resolve(process.env.DATABASE_URL || "./data/ecocondo.db");
 const pastaUploads = path.resolve("data", "uploads");
 const FOTO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-function limparBanco() {
+function limparUploads() {
   try {
-    for (const sufixo of ["", "-wal", "-shm"]) fs.rmSync(arquivoBanco + sufixo, { force: true });
     fs.rmSync(pastaUploads, { recursive: true, force: true });
   } catch (error) {
-    console.error("Não foi possível apagar o banco. Feche o servidor (pnpm dev) e tente de novo.");
+    console.error("Não foi possível apagar as fotos enviadas. Feche o servidor (pnpm dev) e tente de novo.");
     throw error;
   }
 }
@@ -44,14 +42,14 @@ function chamador(usuario: Usuario) {
 }
 
 async function main() {
-  if (process.argv.includes("--limpar")) limparBanco();
-  fs.mkdirSync(path.dirname(arquivoBanco), { recursive: true });
+  const limpar = process.argv.includes("--limpar");
+  if (limpar) limparUploads();
+  await prepararBanco({ recriar: limpar });
   const db = await getDb();
-  migrate(db, { migrationsFolder: path.resolve("drizzle") });
 
   const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(coletas);
-  if (total > 0) {
-    console.log("O banco já tem coletas cadastradas. Para recomeçar do zero, feche o servidor e rode: pnpm db:seed --limpar");
+  if (Number(total) > 0) {
+    console.log("O banco já tem coletas cadastradas. Para recomeçar do zero, rode: pnpm db:seed --limpar");
     return;
   }
 
@@ -165,7 +163,7 @@ async function main() {
   console.log(`Dados de demonstração criados: ${criadas} coletas, ${vizinhos.length + 1} moradores. Rode pnpm dev e entre como Administrador, Coletor ou Morador.`);
 }
 
-main().catch((error) => {
+main().then(fecharDb, (error) => {
   console.error(error);
   process.exit(1);
 });

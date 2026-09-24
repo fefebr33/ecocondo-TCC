@@ -1,1 +1,0 @@
-ALTER TABLE `coletas` ADD `concluido_por_id` integer;

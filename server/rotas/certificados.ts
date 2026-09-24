@@ -78,7 +78,7 @@ export const certificatesRouter = router({
         chaveArquivo: arquivo.key,
         urlArquivo: arquivo.url,
         geradoPorId: ctx.user.id,
-      }).returning({ id: certificadosSustentabilidade.id });
+      }).$returningId();
       return { id: inserido[0].id, url: arquivo.url };
     }),
   }),

@@ -55,7 +55,7 @@ export const operationsRouter = router({
         bloco: input.block,
         apartamento: input.apartment,
         status: input.status,
-      }).returning({ id: moradores.id });
+      }).$returningId();
       return { id: inserido[0].id };
     }),
     atualizar: administratorOnly.input(moradorInput.partial().extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -175,7 +175,7 @@ export const operationsRouter = router({
         bloco,
         agendadaPara: input.scheduledAt,
         observacoes: input.notes || null,
-      }).returning({ id: coletas.id });
+      }).$returningId();
       const coletaId = inserido[0].id;
       await writeAuditLog(db, {
         condominioId: ctx.eco.condominio.id,

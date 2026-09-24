@@ -1,22 +1,23 @@
-import path from "node:path";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-// Banco SQLite temporário e exclusivo deste arquivo, com as migrações reais aplicadas.
+// Banco MySQL temporário e exclusivo deste arquivo (mesmo servidor do DATABASE_URL), com as migrações reais aplicadas.
 vi.hoisted(() => {
-  const nodeFs = require("node:fs") as typeof import("node:fs");
-  const nodeOs = require("node:os") as typeof import("node:os");
-  const nodePath = require("node:path") as typeof import("node:path");
-  process.env.DATABASE_URL = nodePath.join(nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), "ecocondo-teste-")), "teste.db");
+  const endereco = new URL(process.env.DATABASE_URL || "mysql://root@127.0.0.1:3306/ecocondo");
+  endereco.pathname = `/ecocondo_teste_fluxos_${process.pid}_${Date.now()}`;
+  process.env.DATABASE_URL = endereco.toString();
 });
 
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
-import { getDb, getUserByOpenId, upsertUser } from "../db";
+import { apagarBanco, fecharDb, getDb, getUserByOpenId, prepararBanco, upsertUser, urlDoBanco } from "../db";
+import { mysqlDisponivelParaTestes } from "../testes/mysqlTeste";
 import { appRouter } from "../rotas";
 import { coletas, pessoas, recompensas } from "../../drizzle/schema";
 import { runRecurringCollections } from "../scheduled/recurringCollections";
 import type { TrpcContext } from "../_core/context";
 import type { Usuario } from "../../drizzle/schema";
+
+const mysqlDisponivel = await mysqlDisponivelParaTestes();
+const describeComMysql = mysqlDisponivel ? describe : describe.skip;
 
 const FOTO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const amanha = () => new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -39,8 +40,8 @@ let usuarioColetor: Usuario;
 let moradorId: number;
 
 beforeAll(async () => {
-  const db = await getDb();
-  migrate(db, { migrationsFolder: path.resolve(import.meta.dirname, "../../drizzle") });
+  if (!mysqlDisponivel) return;
+  await prepararBanco();
   usuarioAdmin = await criarUsuario("admin-1", "admin1@teste.local", "administrador");
   admin = chamador(usuarioAdmin);
   await admin.perfil.meuPerfil();
@@ -54,7 +55,13 @@ beforeAll(async () => {
   moradorId = (await morador.perfil.meuPerfil()).resident!.id;
 });
 
-describe("fluxos com banco de dados real", () => {
+afterAll(async () => {
+  if (!mysqlDisponivel) return;
+  await fecharDb();
+  await apagarBanco(urlDoBanco());
+});
+
+describeComMysql("fluxos com banco de dados real", () => {
   it("perfis são criados conforme o cadastro", async () => {
     expect((await admin.perfil.meuPerfil()).role).toBe("administrador");
     expect((await coletor.perfil.meuPerfil()).role).toBe("coletor");

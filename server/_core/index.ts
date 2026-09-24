@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerLoginRoute } from "./login";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../rotas";
+import { prepararBanco, urlDoBanco } from "../db";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runCollectionReminders, sendCollectionReminders } from "../scheduled/collectionReminders";
@@ -34,7 +35,20 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+/** Cria o banco MySQL (se preciso) e aplica as migrações antes de abrir o servidor. */
+async function conectarBanco() {
+  try {
+    await prepararBanco();
+  } catch (error) {
+    const endereco = new URL(urlDoBanco());
+    endereco.password = endereco.password ? "****" : "";
+    console.error(`[Banco de dados] Não foi possível conectar ao MySQL em ${endereco.toString()}. Confira se o MySQL está rodando e o DATABASE_URL do arquivo .env (veja o README).`);
+    throw error;
+  }
+}
+
 async function startServer() {
+  await conectarBanco();
   const app = express();
   const server = createServer(app);
   // Fotos chegam em base64 dentro do JSON (até ~5,5 MB validados nas rotas); o limite fica logo acima disso.
@@ -89,4 +103,7 @@ async function startServer() {
   }, DAY_MS);
 }
 
-startServer().catch(console.error);
+startServer().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
