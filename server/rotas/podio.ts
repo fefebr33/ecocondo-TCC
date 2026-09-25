@@ -6,9 +6,24 @@ import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 import { writeAuditLog } from "../audit";
+import { pesoConfirmadoGramas } from "../dominio/antifraude";
+import { classificarPodio } from "../dominio/regrasPodio";
 
 const periodos = periodosPodio;
 type Periodo = (typeof periodos)[number];
+
+/** Soma pontos e peso confirmado de cada morador nas coletas concluídas do período. */
+function somarPorMorador(registros: Array<typeof coletas.$inferSelect>) {
+  const totais = new Map<number, { moradorId: number; pontos: number; pesoGramas: number }>();
+  for (const registro of registros) {
+    if (!registro.moradorId) continue;
+    const atual = totais.get(registro.moradorId) ?? { moradorId: registro.moradorId, pontos: 0, pesoGramas: 0 };
+    atual.pontos += registro.pontosConcedidos;
+    atual.pesoGramas += pesoConfirmadoGramas(registro) ?? 0;
+    totais.set(registro.moradorId, atual);
+  }
+  return Array.from(totais.values());
+}
 
 /** Calcula o intervalo [inicio, fim] do período de apuração do pódio, a partir de uma data de referência (padrão: hoje). */
 function calcularIntervalo(periodo: Periodo, dataReferencia: Date) {
@@ -48,14 +63,6 @@ export const podioRouter = router({
 
       const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
 
-      const totalPorMorador = new Map<number, { pontos: number; pesoGramas: number }>();
-      for (const registro of registros) {
-        if (!registro.moradorId) continue;
-        const atual = totalPorMorador.get(registro.moradorId) ?? { pontos: 0, pesoGramas: 0 };
-        atual.pontos += registro.pontosConcedidos;
-        atual.pesoGramas += registro.pesoGramas ?? 0;
-        totalPorMorador.set(registro.moradorId, atual);
-      }
 
       const aplicacoes = await db.select().from(aplicacoesDescontoPodio).where(and(
         eq(aplicacoesDescontoPodio.condominioId, ctx.eco.condominio.id),
@@ -63,21 +70,21 @@ export const podioRouter = router({
         eq(aplicacoesDescontoPodio.intervaloInicio, inicio),
       ));
 
-      const ranking = comunidade
-        .map((morador) => ({ morador, totais: totalPorMorador.get(morador.id) ?? { pontos: 0, pesoGramas: 0 } }))
-        .filter((linha) => linha.totais.pontos > 0)
-        .sort((a, b) => b.totais.pontos - a.totais.pontos)
-        .map((linha, indice) => {
-          const aplicacao = aplicacoes.find((item) => item.moradorId === linha.morador.id);
+      const moradoresPorId = new Map(comunidade.map((morador) => [morador.id, morador]));
+      const ranking = classificarPodio(somarPorMorador(registros).filter((linha) => moradoresPorId.has(linha.moradorId)))
+        .map((linha) => {
+          const morador = moradoresPorId.get(linha.moradorId)!;
+          const aplicacao = aplicacoes.find((item) => item.moradorId === linha.moradorId);
           return {
-            position: indice + 1,
-            moradorId: linha.morador.id,
-            nome: linha.morador.nome,
-            bloco: linha.morador.bloco,
-            apartamento: linha.morador.apartamento,
-            pontos: linha.totais.pontos,
-            pesoKg: Number((linha.totais.pesoGramas / 1000).toFixed(2)),
-            elegivelDesconto: indice < 3,
+            position: linha.posicao,
+            empatado: linha.empatado,
+            moradorId: linha.moradorId,
+            nome: morador.nome,
+            bloco: morador.bloco,
+            apartamento: morador.apartamento,
+            pontos: linha.pontos,
+            pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)),
+            elegivelDesconto: linha.elegivelDesconto,
             descontoAplicado: aplicacao
               ? { percentual: aplicacao.percentualAplicado, aplicadoEm: aplicacao.aplicadoEm, observacao: aplicacao.observacao }
               : null,
@@ -118,14 +125,9 @@ export const podioRouter = router({
         gte(coletas.concluidaEm, inicio),
         lte(coletas.concluidaEm, fim),
       ));
-      const totalPorMorador = new Map<number, number>();
-      for (const registro of registros) {
-        if (!registro.moradorId) continue;
-        totalPorMorador.set(registro.moradorId, (totalPorMorador.get(registro.moradorId) ?? 0) + registro.pontosConcedidos);
-      }
-      const posicaoOrdenada = Array.from(totalPorMorador.entries()).sort((a, b) => b[1] - a[1]);
-      const posicao = posicaoOrdenada.findIndex(([moradorId]) => moradorId === input.moradorId) + 1;
-      if (posicao < 1 || posicao > 3) {
+      const classificado = classificarPodio(somarPorMorador(registros)).find((linha) => linha.moradorId === input.moradorId);
+      const posicao = classificado?.posicao ?? 0;
+      if (!classificado?.elegivelDesconto) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Este morador não está entre os três primeiros colocados do período informado." });
       }
 
@@ -149,7 +151,7 @@ export const podioRouter = router({
         percentualAplicado: input.percentual,
         observacao: input.observacao || null,
         aplicadoPorId: ctx.user.id,
-      }).returning({ id: aplicacoesDescontoPodio.id });
+      }).$returningId();
 
       await writeAuditLog(db, {
         condominioId: ctx.eco.condominio.id,

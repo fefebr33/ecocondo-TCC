@@ -1,13 +1,11 @@
-import path from "node:path";
+import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
-
-const databaseFile = path.resolve(process.env.DATABASE_URL || "./data/ecocondo.db");
 
 export default defineConfig({
   schema: "./drizzle/schema.ts",
   out: "./drizzle",
-  dialect: "sqlite",
+  dialect: "mysql",
   dbCredentials: {
-    url: databaseFile,
+    url: process.env.DATABASE_URL || "mysql://root@127.0.0.1:3306/ecocondo",
   },
 });

@@ -5,7 +5,8 @@ import { coletas, condominios, notificacoes, perfisAcesso, relatoriosAnuais } fr
 import { getDb } from "../db";
 import { storagePut } from "../storage";
 import { calcularEquivalenciasAmbientais } from "../dominio/impactoAmbiental";
-import { sdk } from "../_core/sdk";
+import { pesoConfirmadoGramas } from "../dominio/antifraude";
+import { exigirAdministrador } from "../_core/acesso";
 
 async function gerarPdfRelatorioAnual(condominioNome: string, ano: number, totalKg: number, reciclavelKg: number, coletasConcluidas: number) {
   const equivalencias = calcularEquivalenciasAmbientais(reciclavelKg);
@@ -49,8 +50,8 @@ export async function runAnnualReport(dataReferencia = new Date()) {
     const inicio = new Date(ano, 0, 1, 0, 0, 0);
     const fim = new Date(ano, 11, 31, 23, 59, 59);
     const registros = await db.select().from(coletas).where(and(eq(coletas.condominioId, condominio.id), eq(coletas.status, "concluida"), gte(coletas.concluidaEm, inicio), lte(coletas.concluidaEm, fim)));
-    const totalGramas = registros.reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
-    const gramasReciclaveis = registros.filter((registro) => registro.tipoResiduo === "reciclavel").reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
+    const totalGramas = registros.reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
+    const gramasReciclaveis = registros.filter((registro) => registro.tipoResiduo === "reciclavel").reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
     const totalKg = Number((totalGramas / 1000).toFixed(1));
     const reciclavelKg = Number((gramasReciclaveis / 1000).toFixed(1));
 
@@ -77,7 +78,7 @@ export async function runAnnualReport(dataReferencia = new Date()) {
 /** Endpoint manual para forçar a verificação/geração do relatório anual. */
 export async function sendAnnualReportCheck(req: Request, res: Response) {
   try {
-    await sdk.authenticateRequest(req);
+    if (!(await exigirAdministrador(req, res))) return;
     const resultado = await runAnnualReport();
     return res.json({ ok: true, ...resultado });
   } catch (error) {

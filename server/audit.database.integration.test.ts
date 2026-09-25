@@ -1,15 +1,23 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+
+// Banco MySQL temporário e exclusivo deste arquivo; cada teste roda numa transação desfeita ao final.
+vi.hoisted(() => {
+  const endereco = new URL(process.env.DATABASE_URL || "mysql://root@127.0.0.1:3306/ecocondo");
+  endereco.pathname = `/ecocondo_teste_auditoria_${process.pid}_${Date.now()}`;
+  process.env.DATABASE_URL = endereco.toString();
+});
+
+import type { Connection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { writeAuditLog } from "./audit";
 import { appRouter } from "./rotas";
 import type { TrpcContext } from "./_core/context";
-import { getDb } from "./db";
+import { abrirConexao, apagarBanco, criarDrizzle, fecharDb, getDb, prepararBanco, urlDoBanco } from "./db";
+import { mysqlDisponivelParaTestes } from "./testes/mysqlTeste";
 
-vi.mock("./db", () => ({ getDb: vi.fn() }));
+vi.mock("./db", async (original) => ({ ...(await original<typeof import("./db")>()), getDb: vi.fn() }));
 
-const databaseUrl = process.env.DATABASE_URL;
-const describeWithDatabase = databaseUrl ? describe : describe.skip;
+const mysqlDisponivel = await mysqlDisponivelParaTestes();
+const describeWithDatabase = mysqlDisponivel ? describe : describe.skip;
 
 function administratorContext(userId: number) {
   return {
@@ -20,32 +28,35 @@ function administratorContext(userId: number) {
 }
 
 describeWithDatabase("auditoria com banco isolado por transação", () => {
-  let connection: Database.Database;
-  let db: ReturnType<typeof drizzle>;
+  let connection: Connection;
+  let db: ReturnType<typeof criarDrizzle>;
 
   beforeAll(async () => {
-    connection = new Database(databaseUrl!);
-    db = drizzle(connection);
+    await prepararBanco();
+    await fecharDb();
+    connection = await abrirConexao();
+    db = criarDrizzle(connection);
     vi.mocked(getDb).mockResolvedValue(db as any);
 
-    const hasAdministrator = connection.prepare("SELECT id FROM perfis_acesso WHERE papel = 'administrador' LIMIT 1").get();
-    if (!hasAdministrator) {
-      const condominioId = (connection.prepare("INSERT INTO condominios (nome, quantidade_blocos) VALUES ('Condomínio de teste', 1) RETURNING id").get() as { id: number }).id;
-      const usuarioId = (connection.prepare("INSERT INTO usuarios (id_externo, nome, papel) VALUES ('teste-admin-seed', 'Administrador de teste', 'administrador') RETURNING id").get() as { id: number }).id;
-      connection.prepare("INSERT INTO perfis_acesso (usuario_id, condominio_id, papel) VALUES (?, ?, 'administrador')").run(usuarioId, condominioId);
+    const [administradores] = await connection.query<RowDataPacket[]>("SELECT id FROM perfis_acesso WHERE papel = 'administrador' LIMIT 1");
+    if (!administradores.length) {
+      const [condominio] = await connection.query<ResultSetHeader>("INSERT INTO condominios (nome, quantidade_blocos) VALUES ('Condomínio de teste', 1)");
+      const [usuario] = await connection.query<ResultSetHeader>("INSERT INTO usuarios (id_externo, nome, papel) VALUES ('teste-admin-seed', 'Administrador de teste', 'administrador')");
+      await connection.query("INSERT INTO perfis_acesso (usuario_id, condominio_id, papel) VALUES (?, ?, 'administrador')", [usuario.insertId, condominio.insertId]);
     }
   });
 
   beforeEach(async () => {
-    connection.exec("BEGIN");
+    await connection.beginTransaction();
   });
 
   afterEach(async () => {
-    connection.exec("ROLLBACK");
+    await connection.rollback();
   });
 
   afterAll(async () => {
-    connection.close();
+    await connection.end();
+    await apagarBanco(urlDoBanco());
   });
 
   it("insere e consulta um evento sem conservar dado de teste após a transação", async () => {
@@ -60,7 +71,7 @@ describeWithDatabase("auditoria com banco isolado por transação", () => {
       estadoAnterior: { status: "agendada" },
       estadoNovo: { status: "concluida", weightGrams: 1000 },
     });
-    const rows = connection.prepare("SELECT resumo, estado_anterior, estado_novo FROM logs_auditoria WHERE resumo = ?").all(marker) as Array<{ resumo: string; estado_anterior: string; estado_novo: string }>;
+    const [rows] = await connection.query<RowDataPacket[]>("SELECT resumo, estado_anterior, estado_novo FROM logs_auditoria WHERE resumo = ?", [marker]);
     expect(rows).toHaveLength(1);
     expect(rows[0].resumo).toBe(marker);
     expect(rows[0].estado_anterior).toContain("agendada");
@@ -68,13 +79,14 @@ describeWithDatabase("auditoria com banco isolado por transação", () => {
   });
 
   it("exporta somente a coleta temporária filtrada por período, bloco e categoria antes do rollback", async () => {
-    const administrator = connection.prepare("SELECT usuario_id, condominio_id FROM perfis_acesso WHERE papel = 'administrador' LIMIT 1").get() as { usuario_id: number; condominio_id: number } | undefined;
+    const [administradores] = await connection.query<RowDataPacket[]>("SELECT usuario_id, condominio_id FROM perfis_acesso WHERE papel = 'administrador' LIMIT 1");
+    const administrator = administradores[0] as { usuario_id: number; condominio_id: number } | undefined;
     expect(administrator).toBeTruthy();
     const marker = `CSV-${Date.now()}`;
     const excludedMarker = `EXCLUIR-${Date.now()}`;
-    const scheduledAt = Math.floor(new Date("2026-08-25T12:00:00Z").getTime() / 1000);
-    connection.prepare("INSERT INTO coletas (condominio_id, morador_id, criado_por_id, coletor_id, tipo_residuo, bloco, agendada_para, concluida_em, peso_gramas, pontos_concedidos, status, observacoes) VALUES (?, NULL, ?, NULL, 'reciclavel', ?, ?, ?, 2345, 2, 'concluida', ?)").run(administrator!.condominio_id, administrator!.usuario_id, marker, scheduledAt, scheduledAt, marker);
-    connection.prepare("INSERT INTO coletas (condominio_id, morador_id, criado_por_id, coletor_id, tipo_residuo, bloco, agendada_para, concluida_em, peso_gramas, pontos_concedidos, status, observacoes) VALUES (?, NULL, ?, NULL, 'organico', ?, ?, ?, 3000, 0, 'concluida', ?)").run(administrator!.condominio_id, administrator!.usuario_id, excludedMarker, scheduledAt, scheduledAt, excludedMarker);
+    const scheduledAt = "2026-08-25 12:00:00";
+    await connection.query("INSERT INTO coletas (condominio_id, morador_id, criado_por_id, coletor_id, tipo_residuo, bloco, agendada_para, concluida_em, peso_gramas, pontos_concedidos, status, observacoes) VALUES (?, NULL, ?, NULL, 'reciclavel', ?, ?, ?, 2345, 2, 'concluida', ?)", [administrator!.condominio_id, administrator!.usuario_id, marker, scheduledAt, scheduledAt, marker]);
+    await connection.query("INSERT INTO coletas (condominio_id, morador_id, criado_por_id, coletor_id, tipo_residuo, bloco, agendada_para, concluida_em, peso_gramas, pontos_concedidos, status, observacoes) VALUES (?, NULL, ?, NULL, 'organico', ?, ?, ?, 3000, 0, 'concluida', ?)", [administrator!.condominio_id, administrator!.usuario_id, excludedMarker, scheduledAt, scheduledAt, excludedMarker]);
     const caller = appRouter.createCaller(administratorContext(Number(administrator!.usuario_id)));
     const csv = await caller.relatorios.exportarCsv({ startDate: new Date("2026-08-25T00:00:00Z"), endDate: new Date("2026-08-25T23:59:59Z"), block: marker, wasteType: "reciclavel" });
     expect(csv.content).toContain(`"${marker}"`);

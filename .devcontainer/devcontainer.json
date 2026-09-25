@@ -1,0 +1,20 @@
+{
+  "name": "EcoCondo (Node 22 + MySQL 8)",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": { "label": "EcoCondo", "onAutoForward": "openBrowser" }
+  },
+  "postCreateCommand": "bash .devcontainer/preparar.sh",
+  "postAttachCommand": "pnpm dev",
+  "customizations": {
+    "vscode": {
+      "extensions": ["esbenp.prettier-vscode", "cweijan.vscode-mysql-client2"]
+    },
+    "codespaces": {
+      "openFiles": ["README.md"]
+    }
+  }
+}

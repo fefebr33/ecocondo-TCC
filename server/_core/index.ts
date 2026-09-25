@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerLoginRoute } from "./login";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../rotas";
+import { prepararBanco, urlDoBanco } from "../db";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runCollectionReminders, sendCollectionReminders } from "../scheduled/collectionReminders";
@@ -34,12 +35,25 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+/** Cria o banco MySQL (se preciso) e aplica as migrações antes de abrir o servidor. */
+async function conectarBanco() {
+  try {
+    await prepararBanco();
+  } catch (error) {
+    const endereco = new URL(urlDoBanco());
+    endereco.password = endereco.password ? "****" : "";
+    console.error(`[Banco de dados] Não foi possível conectar ao MySQL em ${endereco.toString()}. Confira se o MySQL está rodando e o DATABASE_URL do arquivo .env (veja o README).`);
+    throw error;
+  }
+}
+
 async function startServer() {
+  await conectarBanco();
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Fotos chegam em base64 dentro do JSON (até ~5,5 MB validados nas rotas); o limite fica logo acima disso.
+  app.use(express.json({ limit: "8mb" }));
+  app.use(express.urlencoded({ limit: "1mb", extended: true }));
   registerStorageProxy(app);
   registerLoginRoute(app);
   app.get("/api/health", (_req, res) => res.json({ ok: true, timestamp: Date.now() }));
@@ -72,19 +86,24 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
   });
 
-  // Verifica lembretes de coleta periodicamente, sem depender de agendador externo.
-  runCollectionReminders().catch((error) => console.error("[Lembretes] falha na verificação inicial:", error));
-  setInterval(() => {
-    runCollectionReminders().catch((error) => console.error("[Lembretes] falha na verificação periódica:", error));
-  }, HOUR_MS);
+  // A cada hora, sem agendador externo: gera as coletas recorrentes ("toda terça, bloco B") com um dia de antecedência e, em seguida,
+  // cria os lembretes das coletas das próximas 24h (a ordem garante que a coleta recém-gerada já receba o lembrete).
+  const verificarColetas = () =>
+    runRecurringCollections()
+      .catch((error) => console.error("[Recorrência] falha na verificação:", error))
+      .then(() => runCollectionReminders())
+      .catch((error) => console.error("[Lembretes] falha na verificação:", error));
+  verificarColetas();
+  setInterval(verificarColetas, HOUR_MS);
 
-  // Gera coletas recorrentes ("toda terça, bloco B") e, em janeiro, o relatório anual consolidado — ambos sem agendador externo.
-  runRecurringCollections().catch((error) => console.error("[Recorrência] falha na verificação inicial:", error));
+  // Em janeiro, gera o relatório anual consolidado.
   runAnnualReport().catch((error) => console.error("[Relatório anual] falha na verificação inicial:", error));
   setInterval(() => {
-    runRecurringCollections().catch((error) => console.error("[Recorrência] falha na verificação periódica:", error));
     runAnnualReport().catch((error) => console.error("[Relatório anual] falha na verificação periódica:", error));
   }, DAY_MS);
 }
 
-startServer().catch(console.error);
+startServer().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

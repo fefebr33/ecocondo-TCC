@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { CheckCircle2, History, Medal, Percent, Trophy } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 function formatDate(value: Date | string) {
@@ -26,8 +26,15 @@ export default function Podio() {
   const { data, isLoading } = trpc.podio.ranking.useQuery({ periodo });
   const isAdmin = profile.data?.role === "administrador";
   const [descontos, setDescontos] = useState({ mensal: "", semestral: "", anual: "" });
+  const condominio = trpc.condominio.atual.useQuery(undefined, { enabled: isAdmin });
+  // Preenche o formulário com os percentuais já salvos dos três períodos.
+  useEffect(() => {
+    if (!condominio.data) return;
+    const paraCampo = (valor: number | null) => (valor === null ? "" : String(valor));
+    setDescontos({ mensal: paraCampo(condominio.data.descontoPodioMensalPercentual), semestral: paraCampo(condominio.data.descontoPodioSemestralPercentual), anual: paraCampo(condominio.data.descontoPodioAnualPercentual) });
+  }, [condominio.data]);
   const configurar = trpc.podio.configurarDescontos.useMutation({
-    onSuccess: () => { utils.podio.ranking.invalidate(); toast.success("Percentuais de desconto atualizados."); },
+    onSuccess: () => { utils.podio.ranking.invalidate(); utils.condominio.atual.invalidate(); toast.success("Percentuais de desconto atualizados."); },
     onError: (issue) => toast.error(issue.message),
   });
   const historico = trpc.podio.historicoDescontos.useQuery(undefined, { enabled: isAdmin });
@@ -58,8 +65,9 @@ export default function Podio() {
     marcarAplicado.mutate({ moradorId, periodo, percentual: data.descontoSugeridoPercentual, observacao: observacaoAplicacao.trim() || undefined });
   }
 
-  const top3 = data?.ranking.slice(0, 3) ?? [];
-  const demais = data?.ranking.slice(3) ?? [];
+  // Empatados no 3º lugar também sobem ao pódio (a posição vem calculada do servidor).
+  const top3 = data?.ranking.filter((linha) => linha.elegivelDesconto) ?? [];
+  const demais = data?.ranking.filter((linha) => !linha.elegivelDesconto) ?? [];
 
   return (
     <div>
@@ -74,10 +82,10 @@ export default function Podio() {
 
       <section className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff3df] text-[#af7726]"><Trophy className="h-5 w-5" /></span>
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff3df] text-[#7a4d0a]"><Trophy className="h-5 w-5" /></span>
           <div>
             <p className="font-semibold">Top 3 do período {periodos.find((item) => item.value === periodo)?.label.toLowerCase()}</p>
-            <p className="text-sm text-muted-foreground">Pontuação acumulada por coletas recicláveis concluídas neste período.</p>
+            <p className="text-sm text-muted-foreground">Pontuação acumulada por coletas concluídas neste período. Empate nos pontos é decidido pelo peso; se continuar, os moradores dividem a posição.</p>
           </div>
         </div>
 
@@ -88,12 +96,12 @@ export default function Podio() {
         ) : (
           <>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              {top3.map((linha, indice) => (
+              {top3.map((linha) => (
                 <article key={linha.moradorId} className="rounded-2xl border border-[#e0ebe4] bg-[#fbfdfc] p-4 text-center">
-                  <span className="mx-auto grid h-11 w-11 place-items-center rounded-full text-white" style={{ backgroundColor: medalha[indice] }}>
+                  <span className="mx-auto grid h-11 w-11 place-items-center rounded-full text-white" style={{ backgroundColor: medalha[linha.position - 1] }}>
                     <Medal className="h-5 w-5" />
                   </span>
-                  <p className="mt-3 text-xs font-bold uppercase tracking-[.08em] text-muted-foreground">{indice + 1}º lugar</p>
+                  <p className="mt-3 text-xs font-bold uppercase tracking-[.08em] text-muted-foreground">{linha.position}º lugar{linha.empatado ? " (empate)" : ""}</p>
                   <p className="mt-1 text-sm font-semibold">{linha.nome}</p>
                   <p className="text-xs text-muted-foreground">Bloco {linha.bloco} · {linha.apartamento}</p>
                   <p className="mt-3 text-lg font-bold text-[#0f7350]">{linha.pontos} pts</p>
@@ -147,9 +155,9 @@ export default function Podio() {
           <p className="font-semibold">Percentual de desconto sugerido por período</p>
           <p className="mt-1 text-sm text-muted-foreground">Defina quanto o sistema deve sugerir de desconto para os três primeiros colocados de cada período. Isto não aplica o desconto automaticamente — apenas orienta a decisão do síndico.</p>
           <form onSubmit={submitDescontos} className="mt-4 grid gap-3 sm:grid-cols-3">
-            <label className="grid gap-1.5 text-xs font-semibold">Mensal (%)<Input type="number" min="0" max="100" step="0.5" placeholder={data?.periodo === "mensal" ? String(data?.descontoSugeridoPercentual ?? "") : ""} value={descontos.mensal} onChange={(event) => setDescontos({ ...descontos, mensal: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
-            <label className="grid gap-1.5 text-xs font-semibold">Semestral (%)<Input type="number" min="0" max="100" step="0.5" placeholder={data?.periodo === "semestral" ? String(data?.descontoSugeridoPercentual ?? "") : ""} value={descontos.semestral} onChange={(event) => setDescontos({ ...descontos, semestral: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
-            <label className="grid gap-1.5 text-xs font-semibold">Anual (%)<Input type="number" min="0" max="100" step="0.5" placeholder={data?.periodo === "anual" ? String(data?.descontoSugeridoPercentual ?? "") : ""} value={descontos.anual} onChange={(event) => setDescontos({ ...descontos, anual: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
+            <label className="grid gap-1.5 text-xs font-semibold">Mensal (%)<Input type="number" min="0" max="100" step="0.5" placeholder="Não definido" value={descontos.mensal} onChange={(event) => setDescontos({ ...descontos, mensal: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
+            <label className="grid gap-1.5 text-xs font-semibold">Semestral (%)<Input type="number" min="0" max="100" step="0.5" placeholder="Não definido" value={descontos.semestral} onChange={(event) => setDescontos({ ...descontos, semestral: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
+            <label className="grid gap-1.5 text-xs font-semibold">Anual (%)<Input type="number" min="0" max="100" step="0.5" placeholder="Não definido" value={descontos.anual} onChange={(event) => setDescontos({ ...descontos, anual: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
             <div className="sm:col-span-3"><Button disabled={configurar.isPending} className="h-10 rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]">Salvar percentuais sugeridos</Button></div>
           </form>
           {data?.ranking.some((linha) => linha.elegivelDesconto) && (

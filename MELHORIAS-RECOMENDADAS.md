@@ -22,7 +22,7 @@ Este documento reúne sugestões de evolução do sistema. Os itens marcados com
 ## Segurança e confiabilidade
 
 - **Rate limiting no login local.** A rota `/api/auth/entrar` não tem limite de tentativas; vale a pena adicionar um limite simples por IP para reduzir abuso, mesmo em ambiente local/demo.
-- **Backup automático do banco SQLite.** Um job agendado que copia `data/ecocondo.db` periodicamente (ou usa `VACUUM INTO`) evita perda de dados por corrupção de arquivo.
+- **Backup automático do banco MySQL.** Um job agendado com `mysqldump` (ou o backup automático do serviço na nuvem) evita perda de dados.
 - **CI automatizado.** Rodar `pnpm check` e `pnpm test` automaticamente a cada push (GitHub Actions) evita que uma quebra chegue à branch principal sem ser notada.
 - **Testes end-to-end automatizados.** Hoje a verificação de UI é manual; um conjunto pequeno de testes Playwright cobrindo login, criação de coleta e conclusão de coleta evitaria regressões visuais/funcionais silenciosas.
 - **Paginação nas listagens.** `pessoas.diretorio`, `coletas.listar`, `auditoria.listar` (parcialmente) e `engajamento.ranking` carregam tudo de uma vez. Em um condomínio grande isso cresce rápido; vale paginar.

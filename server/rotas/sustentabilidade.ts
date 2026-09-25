@@ -21,6 +21,7 @@ import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { calculateComplianceOverview, calculateGoalProgress, compareBlocks, compareBlocksOverTime } from "../dominio/regrasSustentabilidade";
+import { pesoConfirmadoGramas } from "../dominio/antifraude";
 import { incidentAuditState, writeAuditLog } from "../audit";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
@@ -40,7 +41,7 @@ function condicoesPeriodo(condominioId: number, periodo?: { startDate?: Date; en
 }
 
 function paraRegroSustentabilidade(registro: typeof coletas.$inferSelect) {
-  return { block: registro.bloco, status: registro.status, scheduledAt: registro.agendadaPara, weightGrams: registro.pesoGramas, wasteType: registro.tipoResiduo };
+  return { block: registro.bloco, status: registro.status, scheduledAt: registro.agendadaPara, weightGrams: pesoConfirmadoGramas(registro), wasteType: registro.tipoResiduo };
 }
 
 async function saveIncidentImage(imageDataUrl: string | null | undefined, condominioId: number, usuarioId: number) {
@@ -62,7 +63,7 @@ export const sustainabilityRouter = router({
     }),
     criar: administratorOnly.input(z.object({ block: z.string().trim().min(1).max(32), title: z.string().trim().min(3).max(140), targetKg: z.number().int().min(1).max(100000), startDate: z.date(), endDate: z.date() }).refine((input) => input.endDate >= input.startDate, { message: "A data final deve ser posterior à data inicial.", path: ["endDate"] })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const inserida = await db.insert(metasBloco).values({ condominioId: ctx.eco.condominio.id, criadoPorId: ctx.user.id, bloco: input.block, titulo: input.title, metaKg: input.targetKg, dataInicio: input.startDate, dataFim: input.endDate }).returning({ id: metasBloco.id });
+      const inserida = await db.insert(metasBloco).values({ condominioId: ctx.eco.condominio.id, criadoPorId: ctx.user.id, bloco: input.block, titulo: input.title, metaKg: input.targetKg, dataInicio: input.startDate, dataFim: input.endDate }).$returningId();
       return { id: inserida[0].id };
     }),
     alternar: administratorOnly.input(z.object({ id: z.number().int().positive(), isActive: z.boolean() })).mutation(async ({ ctx, input }) => {
@@ -82,7 +83,7 @@ export const sustainabilityRouter = router({
       const db = await getDb();
       const imagem = await saveIncidentImage(input.imageDataUrl, ctx.eco.condominio.id, ctx.user.id);
       const bloco = ctx.eco.perfil.papel === "morador" && ctx.eco.morador ? ctx.eco.morador.bloco : input.block;
-      const inserida = await db.insert(ocorrencias).values({ condominioId: ctx.eco.condominio.id, relatorId: ctx.user.id, bloco, tipoResiduo: input.wasteType, local: input.location, descricao: input.description, chaveImagem: imagem.key, urlImagem: imagem.url }).returning({ id: ocorrencias.id });
+      const inserida = await db.insert(ocorrencias).values({ condominioId: ctx.eco.condominio.id, relatorId: ctx.user.id, bloco, tipoResiduo: input.wasteType, local: input.location, descricao: input.description, chaveImagem: imagem.key, urlImagem: imagem.url }).$returningId();
       const ocorrenciaId = inserida[0].id;
       await writeAuditLog(db, {
         condominioId: ctx.eco.condominio.id,
@@ -139,7 +140,7 @@ export const sustainabilityRouter = router({
     }),
     criar: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(140), description: z.string().trim().min(10).max(1600), targetDescription: z.string().trim().min(3).max(240), startDate: z.date(), endDate: z.date(), status: z.enum(statusCampanha).default("planejada") }).refine((input) => input.endDate >= input.startDate, { message: "A data final deve ser posterior à data inicial.", path: ["endDate"] })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const inserida = await db.insert(campanhas).values({ condominioId: ctx.eco.condominio.id, criadoPorId: ctx.user.id, titulo: input.title, descricao: input.description, descricaoMeta: input.targetDescription, dataInicio: input.startDate, dataFim: input.endDate, status: input.status }).returning({ id: campanhas.id });
+      const inserida = await db.insert(campanhas).values({ condominioId: ctx.eco.condominio.id, criadoPorId: ctx.user.id, titulo: input.title, descricao: input.description, descricaoMeta: input.targetDescription, dataInicio: input.startDate, dataFim: input.endDate, status: input.status }).$returningId();
       return { id: inserida[0].id };
     }),
     participar: withProfile.input(z.object({ campaignId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -147,7 +148,7 @@ export const sustainabilityRouter = router({
       if (ctx.eco.perfil.papel !== "morador" || !ctx.eco.morador || ctx.eco.morador.status !== "ativo") throw new TRPCError({ code: "FORBIDDEN", message: "Apenas moradores ativos podem participar de campanhas." });
       const campanha = await db.select().from(campanhas).where(and(eq(campanhas.id, input.campaignId), eq(campanhas.condominioId, ctx.eco.condominio.id), eq(campanhas.status, "ativa"))).limit(1);
       if (!campanha[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Campanha ativa não encontrada." });
-      await db.insert(participantesCampanha).values({ campanhaId: input.campaignId, moradorId: ctx.eco.morador.id }).onConflictDoUpdate({ target: [participantesCampanha.campanhaId, participantesCampanha.moradorId], set: { entrouEm: new Date() } });
+      await db.insert(participantesCampanha).values({ campanhaId: input.campaignId, moradorId: ctx.eco.morador.id }).onDuplicateKeyUpdate({ set: { entrouEm: new Date() } });
       return { success: true };
     }),
   }),
@@ -164,7 +165,7 @@ export const sustainabilityRouter = router({
     criar: withProfile.input(z.object({ collectionId: z.number().int().positive().nullable().optional(), rating: z.number().int().min(1).max(5), message: z.string().trim().min(5).max(1500) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (ctx.eco.perfil.papel !== "morador" || !ctx.eco.morador) throw new TRPCError({ code: "FORBIDDEN", message: "Apenas moradores podem enviar feedback." });
-      const inserida = await db.insert(avaliacoesColeta).values({ condominioId: ctx.eco.condominio.id, moradorId: ctx.eco.morador.id, coletaId: input.collectionId || null, nota: input.rating, mensagem: input.message }).returning({ id: avaliacoesColeta.id });
+      const inserida = await db.insert(avaliacoesColeta).values({ condominioId: ctx.eco.condominio.id, moradorId: ctx.eco.morador.id, coletaId: input.collectionId || null, nota: input.rating, mensagem: input.message }).$returningId();
       return { id: inserida[0].id };
     }),
     responder: administratorOnly.input(z.object({ id: z.number().int().positive(), response: z.string().trim().min(3).max(1500), status: z.enum(statusAvaliacao).default("respondida") })).mutation(async ({ ctx, input }) => {

@@ -1,10 +1,19 @@
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
+import { ZodError } from "zod";
+import { mensagensDeValidacao } from "./errosValidacao";
 import type { TrpcContext } from "./context";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  // Erros de validação viram frases em português em vez do JSON técnico do Zod exibido nas notificações da tela.
+  errorFormatter({ shape, error }) {
+    if (error.code === "BAD_REQUEST" && error.cause instanceof ZodError) {
+      return { ...shape, message: mensagensDeValidacao(error.cause) };
+    }
+    return shape;
+  },
 });
 
 export const router = t.router;

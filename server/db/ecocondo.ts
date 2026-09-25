@@ -26,7 +26,7 @@ async function obterCondominioPadrao() {
     cidade: "São Paulo",
     estado: "SP",
     quantidadeBlocos: 4,
-  }).returning({ id: condominios.id });
+  }).$returningId();
   const criado = await db.select().from(condominios).where(eq(condominios.id, resultado[0].id)).limit(1);
   if (!criado[0]) throw new Error("Não foi possível inicializar o condomínio.");
   return criado[0];
@@ -88,7 +88,7 @@ export async function obterOuCriarPerfil(usuario: Usuario): Promise<ContextoPerf
         email: usuario.email || null,
         bloco: "A",
         apartamento: "A definir",
-      }).returning({ id: moradores.id });
+      }).$returningId();
       moradorId = criado[0].id;
     }
   }
@@ -112,7 +112,7 @@ export async function obterOuCriarPerfil(usuario: Usuario): Promise<ContextoPerf
     condominioId: condominio.id,
     moradorId,
     papel,
-  }).returning({ id: perfisAcesso.id });
+  }).$returningId();
   const perfil = await db.select().from(perfisAcesso).where(eq(perfisAcesso.id, inserido[0].id)).limit(1);
   const morador = moradorId ? await db.select().from(moradores).where(eq(moradores.id, moradorId)).limit(1) : [];
   if (!perfil[0]) throw new Error("Não foi possível criar o perfil de acesso.");

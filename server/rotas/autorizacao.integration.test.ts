@@ -71,7 +71,7 @@ describe("autorização de procedimentos EcoCondo", () => {
     });
     const caller = appRouter.createCaller(contextFor("coletor"));
     await expect(caller.engajamento.criarRecompensa({ title: "Recompensa", description: "Descrição válida", pointsCost: 10, stock: null })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.perfil.definirPapel({ userId: 12, role: "morador" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.pessoas.definirPapel({ id: 12, role: "morador" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("bloqueia coletor nos indicadores e intervenções exclusivos da administração", async () => {

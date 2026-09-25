@@ -1,39 +1,49 @@
 import type { Request, Response } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { coletas, regrasRecorrenciaColeta } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { chaveDataGeracao, calcularAgendamento, deveGerarColetaHoje } from "../dominio/regrasRecorrencia";
-import { sdk } from "../_core/sdk";
+import { chaveDataGeracao, proximaOcorrenciaParaGerar } from "../dominio/regrasRecorrencia";
+import { exigirAdministrador } from "../_core/acesso";
 
-/** Gera automaticamente as coletas do dia para cada regra de recorrência ativa cujo dia da semana bate com hoje. */
-export async function runRecurringCollections(dataReferencia = new Date()) {
+/**
+ * Gera as coletas das regras de recorrência ativas com até um dia de antecedência (roda a cada hora).
+ * A marcação da regra e a criação da coleta ficam na mesma transação e são condicionais: duas execuções simultâneas não duplicam a coleta.
+ */
+export async function runRecurringCollections(agora = new Date()) {
   const db = await getDb();
   const regras = await db.select().from(regrasRecorrenciaColeta).where(eq(regrasRecorrenciaColeta.ativo, true));
   let geradas = 0;
 
   for (const regra of regras) {
-    if (!deveGerarColetaHoje(regra, dataReferencia)) continue;
-    const agendadaPara = calcularAgendamento(regra, dataReferencia);
-    await db.insert(coletas).values({
-      condominioId: regra.condominioId,
-      criadoPorId: regra.criadoPorId,
-      tipoResiduo: regra.tipoResiduo,
-      bloco: regra.bloco,
-      agendadaPara,
-      regraRecorrenciaId: regra.id,
-      observacoes: "Coleta gerada automaticamente por regra de recorrência.",
+    const agendadaPara = proximaOcorrenciaParaGerar(regra, agora);
+    if (!agendadaPara) continue;
+    const chave = chaveDataGeracao(agendadaPara);
+    const criada = await db.transaction(async (tx) => {
+      const [marcada] = await tx.update(regrasRecorrenciaColeta)
+        .set({ ultimaGeracaoData: chave, atualizadoEm: new Date() })
+        .where(and(eq(regrasRecorrenciaColeta.id, regra.id), or(isNull(regrasRecorrenciaColeta.ultimaGeracaoData), lt(regrasRecorrenciaColeta.ultimaGeracaoData, chave))));
+      if (!marcada.affectedRows) return false;
+      await tx.insert(coletas).values({
+        condominioId: regra.condominioId,
+        criadoPorId: regra.criadoPorId,
+        tipoResiduo: regra.tipoResiduo,
+        bloco: regra.bloco,
+        agendadaPara,
+        regraRecorrenciaId: regra.id,
+        observacoes: "Coleta gerada automaticamente por regra de recorrência.",
+      });
+      return true;
     });
-    await db.update(regrasRecorrenciaColeta).set({ ultimaGeracaoData: chaveDataGeracao(dataReferencia), atualizadoEm: new Date() }).where(eq(regrasRecorrenciaColeta.id, regra.id));
-    geradas += 1;
+    if (criada) geradas += 1;
   }
 
   return { evaluatedRules: regras.length, collectionsCreated: geradas };
 }
 
-/** Endpoint manual para forçar a verificação/geração das coletas recorrentes do dia. */
+/** Endpoint manual para forçar a verificação/geração das coletas recorrentes. */
 export async function sendRecurringCollectionsCheck(req: Request, res: Response) {
   try {
-    await sdk.authenticateRequest(req);
+    if (!(await exigirAdministrador(req, res))) return;
     const resultado = await runRecurringCollections();
     return res.json({ ok: true, ...resultado });
   } catch (error) {

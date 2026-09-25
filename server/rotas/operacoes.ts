@@ -55,7 +55,7 @@ export const operationsRouter = router({
         bloco: input.block,
         apartamento: input.apartment,
         status: input.status,
-      }).returning({ id: moradores.id });
+      }).$returningId();
       return { id: inserido[0].id };
     }),
     atualizar: administratorOnly.input(moradorInput.partial().extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -137,6 +137,11 @@ export const operationsRouter = router({
       collectorUserId: z.number().int().positive().nullable().optional(),
       notes: z.string().trim().max(1200).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
+      const inicioDeHoje = new Date();
+      inicioDeHoje.setHours(0, 0, 0, 0);
+      if (input.scheduledAt < inicioDeHoje) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "A data da coleta não pode ser anterior a hoje." });
+      }
       const db = await getDb();
       let moradorId = input.residentId ?? null;
       let bloco = input.block;
@@ -170,7 +175,7 @@ export const operationsRouter = router({
         bloco,
         agendadaPara: input.scheduledAt,
         observacoes: input.notes || null,
-      }).returning({ id: coletas.id });
+      }).$returningId();
       const coletaId = inserido[0].id;
       await writeAuditLog(db, {
         condominioId: ctx.eco.condominio.id,
@@ -275,11 +280,12 @@ export const operationsRouter = router({
         pontosConcedidos: novosPontos,
         concluidaEm,
         coletorId: coleta.coletorId ?? ctx.user.id,
+        concluidoPorId: input.status === "concluida" ? ctx.user.id : null,
         observacoes: conclusao.notes,
         chaveFoto: foto.key,
         urlFoto: foto.url,
         pendenteAprovacaoPeso: pesoAnomalo,
-        aprovacaoPesoStatus: pesoAnomalo ? "pendente" : coleta.aprovacaoPesoStatus,
+        aprovacaoPesoStatus: pesoAnomalo ? "pendente" : coleta.aprovacaoPesoStatus === "pendente" ? null : coleta.aprovacaoPesoStatus,
         atualizadoEm: new Date(),
       }).where(eq(coletas.id, coleta.id));
       await writeAuditLog(db, {
@@ -309,6 +315,19 @@ export const operationsRouter = router({
           resumo: `Peso informado (${((novoPeso ?? 0) / 1000).toFixed(1)} kg) muito acima do histórico do morador. Pontos retidos até aprovação de um segundo administrador.`,
           estadoNovo: { pesoGramas: novoPeso, moradorId: coleta.moradorId, pontosPendentes: pontosCalculados },
         });
+        // Avisa os demais administradores: quem concluiu a coleta não pode aprovar o próprio lançamento.
+        const administradores = await db.select({ usuarioId: perfisAcesso.usuarioId }).from(perfisAcesso).where(and(eq(perfisAcesso.condominioId, ctx.eco.condominio.id), eq(perfisAcesso.papel, "administrador")));
+        for (const administrador of administradores) {
+          if (administrador.usuarioId === ctx.user.id) continue;
+          await db.insert(notificacoes).values({
+            condominioId: ctx.eco.condominio.id,
+            destinatarioId: administrador.usuarioId,
+            coletaId: coleta.id,
+            tipo: "sistema",
+            titulo: "Peso aguardando aprovação",
+            mensagem: `Uma coleta de ${coleta.tipoResiduo} do bloco ${coleta.bloco} foi concluída com ${((novoPeso ?? 0) / 1000).toFixed(1)} kg, bem acima do histórico do morador. Revise em Coletas > Pesos pendentes de aprovação.`,
+          });
+        }
       }
 
       if (coleta.moradorId && deltaPontos !== 0) {
@@ -352,7 +371,7 @@ export const operationsRouter = router({
       const coleta = encontrada[0];
       if (!coleta) throw new TRPCError({ code: "NOT_FOUND", message: "Coleta não encontrada." });
       if (!coleta.pendenteAprovacaoPeso) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta coleta não está pendente de aprovação." });
-      if (coleta.coletorId === ctx.user.id) {
+      if ((coleta.concluidoPorId ?? coleta.coletorId) === ctx.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Quem concluiu a coleta não pode ser quem aprova o peso suspeito. Peça para outro administrador revisar." });
       }
 

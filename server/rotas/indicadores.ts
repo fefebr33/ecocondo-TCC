@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { and, asc, desc, eq, gte, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, recompensas, resgates, perfisAcesso, relatoriosAnuais, usuarios, tiposResiduo } from "../../drizzle/schema";
+import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, ocorrencias, recompensas, resgates, perfisAcesso, relatoriosAnuais, usuarios, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
@@ -9,6 +9,7 @@ import { TRPCError } from "@trpc/server";
 import { countUnreadNotifications } from "../dominio/regrasNotificacao";
 import { buildCollectionsCsv } from "../dominio/exportacaoCsv";
 import { calcularEquivalenciasAmbientais } from "../dominio/impactoAmbiental";
+import { pesoConfirmadoGramas } from "../dominio/antifraude";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 const csvFiltersInput = z.object({
@@ -34,15 +35,15 @@ function condicoesCsv(condominioId: number, filtros?: { startDate?: Date; endDat
 
 function resumir(registros: Array<typeof coletas.$inferSelect>) {
   const concluidas = registros.filter((registro) => registro.status === "concluida");
-  const totalGramas = concluidas.reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
-  const gramasReciclaveis = concluidas.filter((registro) => registro.tipoResiduo === "reciclavel").reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
+  const totalGramas = concluidas.reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
+  const gramasReciclaveis = concluidas.filter((registro) => registro.tipoResiduo === "reciclavel").reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
   const totalKg = totalGramas / 1000;
   const reciclavelKg = gramasReciclaveis / 1000;
   const taxaReciclagem = totalGramas > 0 ? Number(((gramasReciclaveis / totalGramas) * 100).toFixed(1)) : null;
-  const co2EstimadoKg = Number((reciclavelKg * 0.75).toFixed(1));
+  const co2EstimadoKg = calcularEquivalenciasAmbientais(reciclavelKg).co2EvitadoKg;
   const porTipoResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"].map((tipoResiduo) => ({
     wasteType: tipoResiduo,
-    kilograms: Number((concluidas.filter((registro) => registro.tipoResiduo === tipoResiduo).reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0) / 1000).toFixed(2)),
+    kilograms: Number((concluidas.filter((registro) => registro.tipoResiduo === tipoResiduo).reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0) / 1000).toFixed(2)),
   }));
   return { totalKg: Number(totalKg.toFixed(2)), recyclableKg: Number(reciclavelKg.toFixed(2)), recyclingRate: taxaReciclagem, co2EstimateKg: co2EstimadoKg, completedCount: concluidas.length, occurrenceCount: registros.filter((registro) => registro.status === "ocorrencia").length, byWasteType: porTipoResiduo };
 }
@@ -62,7 +63,11 @@ export const analyticsRouter = router({
       const registros = await db.select().from(coletas).where(and(...condicoesPeriodo(ctx.eco.condominio.id))).orderBy(desc(coletas.agendadaPara));
       const registrosPermitidos = ctx.eco.perfil.papel === "morador" && ctx.eco.morador ? registros.filter((registro) => registro.moradorId === ctx.eco.morador?.id) : registros;
       const resumo = resumir(registrosPermitidos);
-      return { ...resumo, recent: registrosPermitidos.slice(0, 5), equivalencias: calcularEquivalenciasAmbientais(resumo.recyclableKg) };
+      // Ocorrências ambientais ainda sem solução (o morador vê só as que ele mesmo registrou).
+      const condicoesOcorrencias = [eq(ocorrencias.condominioId, ctx.eco.condominio.id), or(eq(ocorrencias.status, "aberta"), eq(ocorrencias.status, "em_analise"))];
+      if (ctx.eco.perfil.papel === "morador") condicoesOcorrencias.push(eq(ocorrencias.relatorId, ctx.user.id));
+      const ocorrenciasAbertas = await db.select({ id: ocorrencias.id }).from(ocorrencias).where(and(...condicoesOcorrencias));
+      return { ...resumo, openIncidentCount: ocorrenciasAbertas.length, recent: registrosPermitidos.slice(0, 5), equivalencias: calcularEquivalenciasAmbientais(resumo.recyclableKg) };
     }),
   }),
   relatorios: router({
@@ -135,7 +140,8 @@ export const analyticsRouter = router({
   engajamento: router({
     ranking: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
+      // Só os campos exibidos no ranking: e-mail, telefone e código QR dos vizinhos não saem do servidor.
+      const comunidade = await db.select({ id: moradores.id, nome: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento, pontos: moradores.pontos }).from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
       return [...comunidade].sort((a, b) => b.pontos - a.pontos).map((morador, indice) => ({ position: indice + 1, ...morador }));
     }),
     recompensas: withProfile.query(async ({ ctx }) => {
@@ -144,7 +150,7 @@ export const analyticsRouter = router({
     }),
     criarRecompensa: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(140), description: z.string().trim().min(4).max(1000), pointsCost: z.number().int().min(1), stock: z.number().int().min(0).nullable() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const inserida = await db.insert(recompensas).values({ condominioId: ctx.eco.condominio.id, titulo: input.title, descricao: input.description, custoPontos: input.pointsCost, estoque: input.stock }).returning({ id: recompensas.id });
+      const inserida = await db.insert(recompensas).values({ condominioId: ctx.eco.condominio.id, titulo: input.title, descricao: input.description, custoPontos: input.pointsCost, estoque: input.stock }).$returningId();
       return { id: inserida[0].id };
     }),
     resgatar: withProfile.input(z.object({ rewardId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -154,10 +160,50 @@ export const analyticsRouter = router({
       const recompensa = encontrada[0];
       if (!recompensa) throw new TRPCError({ code: "NOT_FOUND", message: "Recompensa não encontrada." });
       if (recompensa.estoque !== null && recompensa.estoque <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta recompensa está sem estoque." });
-      if (ctx.eco.morador.pontos < recompensa.custoPontos) throw new TRPCError({ code: "BAD_REQUEST", message: "Pontuação insuficiente para esta recompensa." });
-      await db.insert(resgates).values({ condominioId: ctx.eco.condominio.id, moradorId: ctx.eco.morador.id, recompensaId: recompensa.id, pontosGastos: recompensa.custoPontos });
-      await db.update(moradores).set({ pontos: ctx.eco.morador.pontos - recompensa.custoPontos, atualizadoEm: new Date() }).where(eq(moradores.id, ctx.eco.morador.id));
-      if (recompensa.estoque !== null) await db.update(recompensas).set({ estoque: recompensa.estoque - 1, atualizadoEm: new Date() }).where(eq(recompensas.id, recompensa.id));
+      const moradorId = ctx.eco.morador.id;
+      // Débito de pontos e baixa de estoque condicionais e atômicos: dois cliques simultâneos não geram resgate a mais.
+      const resultado = await db.transaction(async (tx) => {
+        const [debito] = await tx.update(moradores).set({ pontos: sql`${moradores.pontos} - ${recompensa.custoPontos}`, atualizadoEm: new Date() }).where(and(eq(moradores.id, moradorId), gte(moradores.pontos, recompensa.custoPontos)));
+        if (!debito.affectedRows) return "sem_pontos" as const;
+        if (recompensa.estoque !== null) {
+          const [baixa] = await tx.update(recompensas).set({ estoque: sql`${recompensas.estoque} - 1`, atualizadoEm: new Date() }).where(and(eq(recompensas.id, recompensa.id), gt(recompensas.estoque, 0)));
+          // Lançar dentro da transação desfaz o débito de pontos já feito.
+          if (!baixa.affectedRows) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta recompensa está sem estoque." });
+        }
+        await tx.insert(resgates).values({ condominioId: ctx.eco.condominio.id, moradorId, recompensaId: recompensa.id, pontosGastos: recompensa.custoPontos });
+        return "ok" as const;
+      });
+      if (resultado === "sem_pontos") throw new TRPCError({ code: "BAD_REQUEST", message: "Pontuação insuficiente para esta recompensa." });
+      return { success: true };
+    }),
+    meusResgates: withProfile.query(async ({ ctx }) => {
+      if (!ctx.eco.morador) return [];
+      const db = await getDb();
+      return db.select({ id: resgates.id, status: resgates.status, pontosGastos: resgates.pontosGastos, criadoEm: resgates.criadoEm, atualizadoEm: resgates.atualizadoEm, recompensa: recompensas.titulo }).from(resgates).leftJoin(recompensas, eq(recompensas.id, resgates.recompensaId)).where(and(eq(resgates.condominioId, ctx.eco.condominio.id), eq(resgates.moradorId, ctx.eco.morador.id))).orderBy(desc(resgates.criadoEm));
+    }),
+    listarResgates: administratorOnly.query(async ({ ctx }) => {
+      const db = await getDb();
+      return db.select({ id: resgates.id, status: resgates.status, pontosGastos: resgates.pontosGastos, criadoEm: resgates.criadoEm, atualizadoEm: resgates.atualizadoEm, recompensa: recompensas.titulo, morador: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento }).from(resgates).leftJoin(recompensas, eq(recompensas.id, resgates.recompensaId)).leftJoin(moradores, eq(moradores.id, resgates.moradorId)).where(eq(resgates.condominioId, ctx.eco.condominio.id)).orderBy(desc(resgates.criadoEm));
+    }),
+    atualizarResgate: administratorOnly.input(z.object({ id: z.number().int().positive(), status: z.enum(["aprovado", "entregue", "cancelado"]) })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      const encontrado = await db.select().from(resgates).where(and(eq(resgates.id, input.id), eq(resgates.condominioId, ctx.eco.condominio.id))).limit(1);
+      const resgate = encontrado[0];
+      if (!resgate) throw new TRPCError({ code: "NOT_FOUND", message: "Resgate não encontrado." });
+      if (resgate.status === "entregue" || resgate.status === "cancelado") throw new TRPCError({ code: "BAD_REQUEST", message: "Este resgate já foi finalizado." });
+      await db.transaction(async (tx) => {
+        await tx.update(resgates).set({ status: input.status, atualizadoEm: new Date() }).where(eq(resgates.id, resgate.id));
+        if (input.status === "cancelado") {
+          // Cancelar devolve os pontos ao morador e a unidade ao estoque.
+          await tx.update(moradores).set({ pontos: sql`${moradores.pontos} + ${resgate.pontosGastos}`, atualizadoEm: new Date() }).where(eq(moradores.id, resgate.moradorId));
+          await tx.update(recompensas).set({ estoque: sql`${recompensas.estoque} + 1`, atualizadoEm: new Date() }).where(and(eq(recompensas.id, resgate.recompensaId), sql`${recompensas.estoque} IS NOT NULL`));
+        }
+      });
+      const morador = await db.select({ usuarioId: moradores.usuarioId }).from(moradores).where(eq(moradores.id, resgate.moradorId)).limit(1);
+      if (morador[0]?.usuarioId) {
+        const textos = { aprovado: "Seu resgate foi aprovado e será entregue em breve.", entregue: "Seu resgate foi marcado como entregue.", cancelado: `Seu resgate foi cancelado e ${resgate.pontosGastos} ponto(s) foram devolvidos.` } as const;
+        await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: morador[0].usuarioId, tipo: "sistema", titulo: "Atualização de resgate", mensagem: textos[input.status] });
+      }
       return { success: true };
     }),
   }),
@@ -176,18 +222,18 @@ export const analyticsRouter = router({
       const db = await getDb();
       const visivel = await db.select().from(notificacoes).where(and(eq(notificacoes.id, input.id), eq(notificacoes.condominioId, ctx.eco.condominio.id), or(eq(notificacoes.destinatarioId, ctx.user.id), sql`${notificacoes.destinatarioId} IS NULL`))).limit(1);
       if (!visivel[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Notificação não encontrada." });
-      await db.insert(notificacoesLidas).values({ notificacaoId: input.id, usuarioId: ctx.user.id }).onConflictDoUpdate({ target: [notificacoesLidas.notificacaoId, notificacoesLidas.usuarioId], set: { lidaEm: new Date() } });
+      await db.insert(notificacoesLidas).values({ notificacaoId: input.id, usuarioId: ctx.user.id }).onDuplicateKeyUpdate({ set: { lidaEm: new Date() } });
       return { success: true };
     }),
     marcarTodasLidas: withProfile.mutation(async ({ ctx }) => {
       const db = await getDb();
       const visiveis = await db.select().from(notificacoes).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), or(eq(notificacoes.destinatarioId, ctx.user.id), sql`${notificacoes.destinatarioId} IS NULL`)));
-      for (const item of visiveis) await db.insert(notificacoesLidas).values({ notificacaoId: item.id, usuarioId: ctx.user.id }).onConflictDoUpdate({ target: [notificacoesLidas.notificacaoId, notificacoesLidas.usuarioId], set: { lidaEm: new Date() } });
+      for (const item of visiveis) await db.insert(notificacoesLidas).values({ notificacaoId: item.id, usuarioId: ctx.user.id }).onDuplicateKeyUpdate({ set: { lidaEm: new Date() } });
       return { success: true };
     }),
     criarComunicado: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(180), message: z.string().trim().min(3).max(2000) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const inserida = await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: null, tipo: "comunicado", titulo: input.title, mensagem: input.message }).returning({ id: notificacoes.id });
+      const inserida = await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: null, tipo: "comunicado", titulo: input.title, mensagem: input.message }).$returningId();
       return { id: inserida[0].id };
     }),
   }),

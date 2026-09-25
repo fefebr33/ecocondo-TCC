@@ -27,7 +27,7 @@ export const recurrenceRouter = router({
         diaSemana: input.weekday,
         horario: input.time,
         criadoPorId: ctx.user.id,
-      }).returning({ id: regrasRecorrenciaColeta.id });
+      }).$returningId();
       return { id: inserida[0].id };
     }),
     alternar: administratorOnly.input(z.object({ id: z.number().int().positive(), isActive: z.boolean() })).mutation(async ({ ctx, input }) => {

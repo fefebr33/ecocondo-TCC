@@ -7,6 +7,7 @@ import { withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 import { calculatePersonalGoalProgress } from "../dominio/metaPessoal";
 import { calcularEquivalenciasAmbientais } from "../dominio/impactoAmbiental";
+import { pesoConfirmadoGramas } from "../dominio/antifraude";
 
 export const personalGoalsRouter = router({
   metaPessoal: router({
@@ -15,8 +16,9 @@ export const personalGoalsRouter = router({
       const db = await getDb();
       const metas = await db.select().from(metasPessoais).where(eq(metasPessoais.moradorId, ctx.eco.morador.id)).orderBy(desc(metasPessoais.dataFim));
       const registros = await db.select().from(coletas).where(and(eq(coletas.condominioId, ctx.eco.condominio.id), eq(coletas.moradorId, ctx.eco.morador.id), eq(coletas.status, "concluida")));
+      const confirmados = registros.map((registro) => ({ ...registro, pesoGramas: pesoConfirmadoGramas(registro) }));
       return metas.map((meta) => {
-        const progresso = calculatePersonalGoalProgress({ moradorId: meta.moradorId, metaKg: meta.metaKg, dataInicio: meta.dataInicio, dataFim: meta.dataFim }, registros);
+        const progresso = calculatePersonalGoalProgress({ moradorId: meta.moradorId, metaKg: meta.metaKg, dataInicio: meta.dataInicio, dataFim: meta.dataFim }, confirmados);
         return { ...meta, ...progresso, equivalencias: calcularEquivalenciasAmbientais(progresso.coletadoKg) };
       });
     }),
@@ -34,7 +36,7 @@ export const personalGoalsRouter = router({
         metaKg: input.targetKg,
         dataInicio: input.startDate,
         dataFim: input.endDate,
-      }).returning({ id: metasPessoais.id });
+      }).$returningId();
       return { id: inserida[0].id };
     }),
     cancelar: withProfile.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
