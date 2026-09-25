@@ -8,10 +8,12 @@ import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { coletas } from "../../drizzle/schema";
 import type { Usuario } from "../../drizzle/schema";
-import { fecharDb, getDb, prepararBanco } from "../db";
+import { fecharDb, getDb, getUserByOpenId, prepararBanco, upsertUser } from "../db";
 import { appRouter } from "../rotas";
 import type { TrpcContext } from "../_core/context";
 import { garantirContaDemonstracao } from "../_core/login";
+import { definirSorteioAmostragem } from "../dominio/estacaoPesagem";
+import { CABECALHO_TOKEN_ESTACAO } from "../rotas/estacoes";
 
 const pastaUploads = path.resolve("data", "uploads");
 const FOTO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -41,6 +43,11 @@ function chamador(usuario: Usuario) {
   return appRouter.createCaller({ user: usuario, req: { protocol: "https", headers: {} }, res: { clearCookie() {}, cookie() {} } } as unknown as TrpcContext);
 }
 
+/** O tablet da estação: sem login de pessoa, só com o código de pareamento no cabeçalho. */
+function tablet(token: string) {
+  return appRouter.createCaller({ user: null, req: { protocol: "https", headers: { [CABECALHO_TOKEN_ESTACAO]: token } }, res: { clearCookie() {}, cookie() {} } } as unknown as TrpcContext);
+}
+
 async function main() {
   const limpar = process.argv.includes("--limpar");
   if (limpar) limparUploads();
@@ -54,12 +61,12 @@ async function main() {
   }
 
   const usuarioAdmin = await garantirContaDemonstracao("administrador");
-  const usuarioColetor = await garantirContaDemonstracao("coletor");
   const usuarioMorador = await garantirContaDemonstracao("morador");
-  if (!usuarioAdmin || !usuarioColetor || !usuarioMorador) throw new Error("Não foi possível criar as contas de demonstração.");
+  if (!usuarioAdmin || !usuarioMorador) throw new Error("Não foi possível criar as contas de demonstração.");
   const admin = chamador(usuarioAdmin);
-  const coletor = chamador(usuarioColetor);
   const morador = chamador(usuarioMorador);
+  // Sem sorteio de conferência nos dados de demonstração: o resultado é sempre o mesmo.
+  definirSorteioAmostragem(() => 1);
 
   await admin.condominio.atualizar({ name: "Condomínio Parque das Flores", address: "Rua das Palmeiras, 250", city: "São Paulo", state: "SP", blockCount: 4 });
   const vizinhos = [
@@ -78,11 +85,11 @@ async function main() {
   const agora = new Date();
   const emHoras = (horas: number) => new Date(agora.getTime() + horas * 60 * 60 * 1000);
 
-  /** Agenda e conclui pela API (regras antifraude valem) e depois move a coleta para a data histórica. */
+  /** Agenda e conclui pela API (registro manual da administração; regras antifraude valem) e depois move a coleta para a data histórica. */
   async function coletaConcluida(nome: string, tipo: "reciclavel" | "organico" | "eletronico", pesoGramas: number, data: Date | null) {
     const alvo = porNome[nome];
-    const { id } = await admin.coletas.criar({ residentId: alvo.id, wasteType: tipo, block: alvo.bloco, scheduledAt: emHoras(1), collectorUserId: usuarioColetor!.id, notes: null });
-    await coletor.coletas.atualizarStatus({ id, status: "concluida", weightGrams: pesoGramas, imageDataUrl: FOTO });
+    const { id } = await admin.coletas.criar({ residentId: alvo.id, wasteType: tipo, block: alvo.bloco, scheduledAt: emHoras(1), notes: null });
+    await admin.coletas.atualizarStatus({ id, status: "concluida", weightGrams: pesoGramas, imageDataUrl: FOTO });
     if (data) await db.update(coletas).set({ agendadaPara: data, concluidaEm: data, criadoEm: data, atualizadoEm: data }).where(eq(coletas.id, id));
   }
 
@@ -106,8 +113,17 @@ async function main() {
   await coletaConcluida("Pedro Almeida", "eletronico", 1800, null);
   await coletaConcluida("Beatriz Lima", "reciclavel", 6400, null);
 
-  // Um peso muito acima do histórico: fica aguardando a aprovação de um segundo administrador.
-  await coletaConcluida("Luísa Martins", "reciclavel", 26000, null);
+  // Estação de pesagem (tablet + balança ao lado das lixeiras): Marina registra um saco comum e ganha os pontos na hora;
+  // Luísa registra 26 kg, bem acima do padrão dela, e o registro fica aguardando a conferência do administrador.
+  const { token: tokenEstacao } = await admin.estacoes.criar({ name: "Lixeiras do térreo", location: "Garagem, ao lado do bloco A" });
+  const estacao = tablet(tokenEstacao);
+  const { code: codigoMarina } = await morador.estacao.gerarCodigo();
+  await estacao.estacao.registrar({ code: codigoMarina, wasteType: "reciclavel", weightGrams: 4200, imageDataUrl: FOTO });
+  await upsertUser({ idExterno: "demo-luisa", nome: "Luísa Martins", email: "luisa@parquedasflores.com", metodoLogin: "demo", papel: "usuario" });
+  const luisa = chamador((await getUserByOpenId("demo-luisa"))!);
+  await luisa.perfil.meuPerfil();
+  const { code: codigoLuisa } = await luisa.estacao.gerarCodigo();
+  await estacao.estacao.registrar({ code: codigoLuisa, wasteType: "reciclavel", weightGrams: 26000, imageDataUrl: FOTO });
 
   // Próximas coletas, uma em andamento, uma cancelada e um pedido do próprio morador.
   const futuras: Array<[string | null, "reciclavel" | "organico" | "perigoso", number, string?]> = [
@@ -116,10 +132,10 @@ async function main() {
   const idsFuturas: number[] = [];
   for (const [nome, tipo, horas, bloco] of futuras) {
     const alvo = nome ? porNome[nome] : null;
-    const { id } = await admin.coletas.criar({ residentId: alvo?.id ?? null, wasteType: tipo, block: alvo?.bloco ?? bloco!, scheduledAt: emHoras(horas), collectorUserId: usuarioColetor.id, notes: alvo ? null : "Coleta coletiva do bloco" });
+    const { id } = await admin.coletas.criar({ residentId: alvo?.id ?? null, wasteType: tipo, block: alvo?.bloco ?? bloco!, scheduledAt: emHoras(horas), notes: alvo ? null : "Coleta coletiva do bloco" });
     idsFuturas.push(id);
   }
-  await coletor.coletas.atualizarStatus({ id: idsFuturas[1], status: "em_andamento" });
+  await admin.coletas.atualizarStatus({ id: idsFuturas[1], status: "em_andamento" });
   await admin.coletas.atualizarStatus({ id: idsFuturas[3], status: "cancelada", notes: "Morador em viagem" });
   await morador.coletas.criar({ wasteType: "eletronico", block: "A", scheduledAt: emHoras(52), notes: "Monitor antigo e cabos" });
 
@@ -139,12 +155,26 @@ async function main() {
   await admin.engajamento.atualizarResgate({ id: resgateSacolas.id, status: "entregue" });
   await morador.engajamento.resgatar({ rewardId: cafe.id });
 
-  // Pódio: percentuais sugeridos e o desconto do campeão do mês passado já registrado.
-  await admin.podio.configurarDescontos({ mensal: 5, semestral: 10, anual: 15 });
+  // Pódio: prêmios sem custo para os outros moradores e o prêmio do campeão do mês passado já entregue.
+  await admin.podio.configurarPremios({ periodo: "mensal", premios: [
+    { posicao: 1, titulo: "Vale-compras no hortifrúti parceiro", descricao: "Doado pelo comércio parceiro em troca de divulgação no mural." },
+    { posicao: 2, titulo: "Kit de mudas e adubo da composteira", descricao: null },
+    { posicao: 3, titulo: "Destaque no mural do condomínio", descricao: null },
+  ] });
+  await admin.podio.configurarPremios({ periodo: "semestral", premios: [
+    { posicao: 1, titulo: "Prioridade na reserva do salão de festas", descricao: "Escolhe a data antes dos demais no semestre seguinte." },
+    { posicao: 2, titulo: "Troféu de material reciclado", descricao: null },
+    { posicao: 3, titulo: "Kit de mudas e adubo da composteira", descricao: null },
+  ] });
+  await admin.podio.configurarPremios({ periodo: "anual", premios: [
+    { posicao: 1, titulo: "Cesta de Natal", descricao: "Paga com o dinheiro da venda dos recicláveis à cooperativa." },
+    { posicao: 2, titulo: "Cesta de Natal (menor)", descricao: "Paga com o dinheiro da venda dos recicláveis à cooperativa." },
+    { posicao: 3, titulo: "Panetone e troféu de material reciclado", descricao: null },
+  ] });
   const mesPassado = new Date(agora.getFullYear(), agora.getMonth() - 1, 15);
   const podioMesPassado = await admin.podio.ranking({ periodo: "mensal", dataReferencia: mesPassado });
   const campeao = podioMesPassado.ranking[0];
-  if (campeao) await admin.podio.marcarDescontoAplicado({ moradorId: campeao.moradorId, periodo: "mensal", dataReferencia: mesPassado, percentual: 5, observacao: "Aplicado no boleto do mês seguinte." });
+  if (campeao?.moradorId) await admin.podio.marcarPremioEntregue({ moradorId: campeao.moradorId, periodo: "mensal", dataReferencia: mesPassado, observacao: "Entregue na portaria." });
 
   // Certificados do trimestre anterior para os blocos com coletas.
   for (const bloco of ["A", "B", "C"]) {
@@ -156,11 +186,12 @@ async function main() {
   const [campanha] = await morador.campanhas.listar();
   await morador.campanhas.participar({ campaignId: campanha.id });
   await morador.ocorrencias.criar({ block: "A", wasteType: "reciclavel", location: "Lixeira do térreo, bloco A", description: "Recicláveis misturados com restos de comida.", imageDataUrl: FOTO });
-  await morador.avaliacoes.criar({ rating: 5, message: "Coleta pontual e coletor muito atencioso." });
+  await morador.avaliacoes.criar({ rating: 5, message: "A estação de pesagem é rápida de usar." });
   await admin.notificacoes.criarComunicado({ title: "Nova coleta de eletrônicos", message: "No sábado teremos coleta especial de eletrônicos no hall do bloco C, das 9h às 12h." });
 
   const [{ criadas }] = await db.select({ criadas: sql<number>`count(*)` }).from(coletas);
-  console.log(`Dados de demonstração criados: ${criadas} coletas, ${vizinhos.length + 1} moradores. Rode pnpm dev e entre como Administrador, Coletor ou Morador.`);
+  console.log(`Dados de demonstração criados: ${criadas} coletas, ${vizinhos.length + 1} moradores. Rode pnpm dev e entre como Administrador ou Morador.`);
+  console.log(`Estação de pesagem "Lixeiras do térreo": abra /estacao?codigo=${encodeURIComponent(tokenEstacao)} no tablet (ou em outra aba) para parear.`);
 }
 
 main().then(fecharDb, (error) => {

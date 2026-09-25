@@ -19,6 +19,7 @@ import Configuracoes from "@/paginas/Configuracoes";
 import Sustentabilidade from "@/paginas/Sustentabilidade";
 import Comunidade from "@/paginas/Comunidade";
 import Auditoria from "@/paginas/Auditoria";
+import Estacao from "@/paginas/Estacao";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -31,6 +32,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Inicio} />
       <Route path="/entrar" component={Entrar} />
+      <Route path="/estacao" component={Estacao} />
       <Route path="/dashboard"><ProtectedRoute><Painel /></ProtectedRoute></Route>
       <Route path="/coletas"><ProtectedRoute><Coletas /></ProtectedRoute></Route>
       <Route path="/moradores"><ProtectedRoute><Moradores /></ProtectedRoute></Route>

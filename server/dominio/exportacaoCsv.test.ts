@@ -13,17 +13,17 @@ describe("exportação CSV de coletas", () => {
       weightGrams: 1250,
       pointsAwarded: 1,
       residentName: "Ana; Silva",
-      collectorName: "Coletor \"João\"",
+      origin: "Estação \"Térreo\"",
       notes: "Material separado",
     }]);
     expect(csv.startsWith("\ufeff\"ID\";\"Status\"" )).toBe(true);
     expect(csv).toContain('"1,25"');
     expect(csv).toContain('"Ana; Silva"');
-    expect(csv).toContain('"Coletor ""João"""');
+    expect(csv).toContain('"Estação ""Térreo"""');
   });
 
   it("mantém campos nulos vazios sem remover a linha", () => {
-    const csv = buildCollectionsCsv([{ id: 4, status: "agendada", wasteType: "organico", block: "C", scheduledAt: new Date("2026-08-23T10:00:00Z"), completedAt: null, weightGrams: null, pointsAwarded: 0, residentName: null, collectorName: null, notes: null }]);
+    const csv = buildCollectionsCsv([{ id: 4, status: "agendada", wasteType: "organico", block: "C", scheduledAt: new Date("2026-08-23T10:00:00Z"), completedAt: null, weightGrams: null, pointsAwarded: 0, residentName: null, origin: null, notes: null }]);
     expect(csv.split("\r\n")).toHaveLength(3);
     expect(csv).toContain('"4";"agendada"');
   });

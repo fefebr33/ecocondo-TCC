@@ -8,7 +8,8 @@ export type CollectionCsvRow = {
   weightGrams: number | null;
   pointsAwarded: number;
   residentName: string | null;
-  collectorName: string | null;
+  /** Estação de pesagem, administração ou coletor (este só nas coletas antigas). */
+  origin: string | null;
   notes: string | null;
 };
 
@@ -22,7 +23,7 @@ function formatDate(value: Date | null) {
 }
 
 export function buildCollectionsCsv(rows: CollectionCsvRow[]) {
-  const header = ["ID", "Status", "Categoria", "Bloco", "Agendada para", "Concluída em", "Peso (kg)", "Pontos", "Morador", "Coletor", "Observações"];
+  const header = ["ID", "Status", "Categoria", "Bloco", "Agendada para", "Concluída em", "Peso (kg)", "Pontos", "Morador", "Origem do registro", "Observações"];
   const records = rows.map((row) => [
     row.id,
     row.status,
@@ -33,7 +34,7 @@ export function buildCollectionsCsv(rows: CollectionCsvRow[]) {
     row.weightGrams === null ? "" : (row.weightGrams / 1000).toFixed(2).replace(".", ","),
     row.pointsAwarded,
     row.residentName,
-    row.collectorName,
+    row.origin,
     row.notes,
   ].map(escapeCsv).join(";"));
   return `\ufeff${header.map(escapeCsv).join(";")}\r\n${records.join("\r\n")}\r\n`;

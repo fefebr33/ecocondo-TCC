@@ -19,13 +19,6 @@ export const administratorOnly = withProfile.use(async ({ ctx, next }) => {
   return next();
 });
 
-export const staffOnly = withProfile.use(async ({ ctx, next }) => {
-  if (ctx.eco.perfil.papel !== "administrador" && ctx.eco.perfil.papel !== "coletor") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Esta operação requer perfil de administrador ou coletor." });
-  }
-  return next();
-});
-
 export const ecoRouter = router({
   pessoas: router({
     diretorio: administratorOnly.query(async ({ ctx }) => {

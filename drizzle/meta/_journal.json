@@ -8,6 +8,13 @@
       "when": 1790278594406,
       "tag": "0000_banco_mysql",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1790347316396,
+      "tag": "0001_sem_coletor_estacao_premios",
+      "breakpoints": true
     }
   ]
 }

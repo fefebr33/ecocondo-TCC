@@ -38,18 +38,18 @@ type NavItem = {
 };
 
 const navigation: NavItem[] = [
-  { href: "/dashboard", label: "Visão geral", icon: LayoutDashboard, roles: ["administrador", "coletor", "morador"] },
-  { href: "/coletas", label: "Coletas", icon: Recycle, roles: ["administrador", "coletor", "morador"] },
+  { href: "/dashboard", label: "Visão geral", icon: LayoutDashboard, roles: ["administrador", "morador"] },
+  { href: "/coletas", label: "Coletas", icon: Recycle, roles: ["administrador", "morador"] },
   { href: "/moradores", label: "Moradores", icon: UsersRound, roles: ["administrador"] },
   { href: "/pessoas", label: "Pessoas e acessos", icon: UsersRound, roles: ["administrador"] },
   { href: "/relatorios", label: "Relatórios", icon: ClipboardList, roles: ["administrador"] },
   { href: "/auditoria", label: "Auditoria", icon: History, roles: ["administrador"] },
   { href: "/engajamento", label: "Engajamento", icon: Gift, roles: ["administrador", "morador"] },
-  { href: "/podio", label: "Pódio de reciclagem", icon: Trophy, roles: ["administrador", "coletor", "morador"] },
-  { href: "/guia", label: "Guia de descarte", icon: BookOpenCheck, roles: ["administrador", "coletor", "morador"] },
-  { href: "/notificacoes", label: "Notificações", icon: Bell, roles: ["administrador", "coletor", "morador"] },
-  { href: "/ambiental", label: "Gestão ambiental", icon: Camera, roles: ["administrador", "coletor", "morador"] },
-  { href: "/comunidade", label: "Calendário e campanhas", icon: CalendarDays, roles: ["administrador", "coletor", "morador"] },
+  { href: "/podio", label: "Pódio de reciclagem", icon: Trophy, roles: ["administrador", "morador"] },
+  { href: "/guia", label: "Guia de descarte", icon: BookOpenCheck, roles: ["administrador", "morador"] },
+  { href: "/notificacoes", label: "Notificações", icon: Bell, roles: ["administrador", "morador"] },
+  { href: "/ambiental", label: "Gestão ambiental", icon: Camera, roles: ["administrador", "morador"] },
+  { href: "/comunidade", label: "Calendário e campanhas", icon: CalendarDays, roles: ["administrador", "morador"] },
   { href: "/configuracoes", label: "Configurações", icon: Settings, roles: ["administrador"] },
 ];
 

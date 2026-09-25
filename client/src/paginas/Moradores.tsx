@@ -44,7 +44,7 @@ export default function Residents() {
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>QR code do apartamento</DialogTitle>
-          <DialogDescription>{qrTarget?.nome}. O coletor pode escanear este código para identificar o morador ao registrar a coleta, sem precisar escolher numa lista.</DialogDescription>
+          <DialogDescription>{qrTarget?.nome}. O administrador pode escanear este código para identificar o morador ao registrar uma coleta manualmente, sem precisar escolher numa lista.</DialogDescription>
         </DialogHeader>
         <div className="grid place-items-center gap-3 py-2">
           {qrCode.isLoading ? <p className="text-sm text-muted-foreground">Gerando código...</p> : qrCode.data ? (

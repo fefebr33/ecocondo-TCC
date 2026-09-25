@@ -1,8 +1,8 @@
-import { ArrowRight, Leaf, Recycle, ShieldCheck, UsersRound } from "lucide-react";
+import { ArrowRight, Leaf, Scale, ShieldCheck, UsersRound } from "lucide-react";
 import { Link } from "wouter";
 
 type RoleOption = {
-  role: "administrador" | "coletor" | "morador";
+  role: "administrador" | "morador";
   title: string;
   description: string;
   icon: typeof ShieldCheck;
@@ -16,15 +16,9 @@ const roles: RoleOption[] = [
     icon: ShieldCheck,
   },
   {
-    role: "coletor",
-    title: "Coletor",
-    description: "Acompanha e atualiza o status das coletas agendadas.",
-    icon: Recycle,
-  },
-  {
     role: "morador",
     title: "Morador",
-    description: "Consulta coletas, participa de campanhas e resgata recompensas.",
+    description: "Registra a própria reciclagem na estação de pesagem, participa de campanhas e resgata recompensas.",
     icon: UsersRound,
   },
 ];
@@ -72,6 +66,20 @@ export default function Login() {
             </a>
           ))}
         </div>
+
+        <Link
+          href="/estacao"
+          className="mt-4 flex items-center gap-4 rounded-[22px] border border-dashed border-[#b9d8c5] bg-[#f7fbf8] p-5 transition-colors hover:border-[#0f7350]/50"
+        >
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white text-[#0f7350]">
+            <Scale className="h-6 w-6" />
+          </span>
+          <span className="flex-1">
+            <span className="block text-base font-bold tracking-[-.02em]">Estação de pesagem (tablet)</span>
+            <span className="mt-1 block text-sm leading-5 text-muted-foreground">Tela do tablet ao lado das lixeiras. Precisa do código de pareamento criado pelo administrador em Configurações.</span>
+          </span>
+          <ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+        </Link>
 
         <p className="mt-8 text-xs leading-5 text-muted-foreground">
           Contas de demonstração criadas automaticamente para fins de apresentação — nenhuma senha é necessária.

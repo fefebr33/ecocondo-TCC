@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { startLogin } from "./const";
+import { lerTokenEstacao } from "./lib/estacao";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,11 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
+      // Só o tablet pareado como estação de pesagem envia este cabeçalho.
+      headers() {
+        const tokenEstacao = lerTokenEstacao();
+        return tokenEstacao ? { "x-estacao-token": tokenEstacao } : {};
+      },
       fetch(input, init) {
         return globalThis.fetch(input, {
           ...(init ?? {}),

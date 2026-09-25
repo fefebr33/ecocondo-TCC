@@ -37,21 +37,19 @@ export const condominios = mysqlTable("condominios", {
   estado: varchar("estado", { length: 2 }),
   quantidadeBlocos: int("quantidade_blocos").default(1).notNull(),
   ativo: boolean("ativo").default(true).notNull(),
-  /** Percentual de desconto sugerido para o pódio de reciclagem (aplicação manual pelo síndico). */
-  descontoPodioMensalPercentual: double("desconto_podio_mensal_percentual"),
-  descontoPodioSemestralPercentual: double("desconto_podio_semestral_percentual"),
-  descontoPodioAnualPercentual: double("desconto_podio_anual_percentual"),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
 });
 
-export const papeisEco = ["administrador", "coletor", "morador"] as const;
+/** Só dois perfis: o próprio morador registra a reciclagem na estação de pesagem (tablet + balança), sem coletor. */
+export const papeisEco = ["administrador", "morador"] as const;
 export const statusAcesso = ["pendente", "ativo"] as const;
 export const statusMorador = ["ativo", "inativo"] as const;
 export const tiposResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"] as const;
 export const statusColeta = ["agendada", "em_andamento", "concluida", "cancelada", "ocorrencia"] as const;
 export const tiposNotificacao = ["coleta_agendada", "coleta_concluida", "lembrete_coleta", "comunicado", "sistema", "certificado_disponivel", "relatorio_anual"] as const;
-export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio"] as const;
+/** "desconto_podio" fica só para os registros antigos, de quando o pódio dava desconto na taxa condominial. */
+export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio", "premio_podio", "estacao"] as const;
 export const statusResgate = ["solicitado", "aprovado", "entregue", "cancelado"] as const;
 export const statusOcorrencia = ["aberta", "em_analise", "resolvida"] as const;
 export const statusCampanha = ["planejada", "ativa", "encerrada"] as const;
@@ -70,14 +68,20 @@ export const moradores = mysqlTable("moradores", {
   apartamento: varchar("apartamento", { length: 255 }).notNull(),
   status: mysqlEnum("status", statusMorador).default("ativo").notNull(),
   pontos: int("pontos").default(0).notNull(),
-  /** Código curto único usado para gerar o QR code do apartamento (identificação rápida pelo coletor). */
+  /** Código curto único usado para gerar o QR code do apartamento (identificação rápida pelo administrador). */
   codigoAcesso: varchar("codigo_acesso", { length: 32 }),
+  /** Código temporário (6 dígitos, uso único) gerado no app do morador para se identificar na estação de pesagem. */
+  codigoEstacao: varchar("codigo_estacao", { length: 8 }),
+  codigoEstacaoExpiraEm: dataHora("codigo_estacao_expira_em"),
+  /** No pódio, mostra "Morador do bloco X" em vez do nome, mesmo se ficar entre os três primeiros. */
+  ocultarNomeNoPodio: boolean("ocultar_nome_no_podio").default(false).notNull(),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
 }, (table) => [
   index("moradores_condominio_idx").on(table.condominioId),
   uniqueIndex("moradores_usuario_unique").on(table.usuarioId),
   uniqueIndex("moradores_codigo_acesso_unique").on(table.codigoAcesso),
+  uniqueIndex("moradores_codigo_estacao_unique").on(table.condominioId, table.codigoEstacao),
 ]);
 
 export const perfisAcesso = mysqlTable("perfis_acesso", {
@@ -118,7 +122,10 @@ export const coletas = mysqlTable("coletas", {
   condominioId: int("condominio_id").notNull(),
   moradorId: int("morador_id"),
   criadoPorId: int("criado_por_id").notNull(),
+  /** Coletor atribuído: só existe em coletas antigas, de antes da retirada do perfil coletor (mantido para o histórico). */
   coletorId: int("coletor_id"),
+  /** Estação de pesagem (tablet) onde o próprio morador registrou a reciclagem; nulo nas coletas agendadas pela administração. */
+  estacaoId: int("estacao_id"),
   /** Quem de fato confirmou a conclusão (pode ser diferente do coletor atribuído); usado na aprovação dupla de peso. */
   concluidoPorId: int("concluido_por_id"),
   tipoResiduo: mysqlEnum("tipo_residuo", tiposResiduo).notNull(),
@@ -149,6 +156,7 @@ export const coletas = mysqlTable("coletas", {
   index("coletas_condominio_status_agendada_idx").on(table.condominioId, table.status, table.agendadaPara),
   index("coletas_condominio_bloco_agendada_idx").on(table.condominioId, table.bloco, table.agendadaPara),
   index("coletas_pendente_aprovacao_idx").on(table.condominioId, table.pendenteAprovacaoPeso),
+  index("coletas_morador_concluida_idx").on(table.moradorId, table.concluidaEm),
 ]);
 
 export const logsAuditoria = mysqlTable("logs_auditoria", {
@@ -318,8 +326,39 @@ export const avaliacoesColeta = mysqlTable("avaliacoes_coleta", {
   index("avaliacoes_status_idx").on(table.status),
 ]);
 
-/** Registro definitivo de que o desconto sugerido do pódio foi de fato aplicado pelo síndico (fecha o ciclo do pódio). */
-export const aplicacoesDescontoPodio = mysqlTable("aplicacoes_desconto_podio", {
+/** Tablet com balança instalado ao lado das lixeiras, cadastrado pelo administrador. Só um tablet pareado (token válido) registra reciclagem. */
+export const estacoesPesagem = mysqlTable("estacoes_pesagem", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  local: varchar("local", { length: 255 }).notNull(),
+  /** SHA-256 do código de pareamento; o código em si só aparece uma vez, para o administrador. */
+  tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+  ativo: boolean("ativo").default(true).notNull(),
+  criadoPorId: int("criado_por_id").notNull(),
+  ultimoUsoEm: dataHora("ultimo_uso_em"),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+  atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
+}, (table) => [
+  index("estacoes_condominio_idx").on(table.condominioId),
+  uniqueIndex("estacoes_token_unique").on(table.tokenHash),
+]);
+
+/** Prêmio que o administrador define para cada posição (1º a 3º) de cada período do pódio. */
+export const premiosPodio = mysqlTable("premios_podio", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  periodo: mysqlEnum("periodo", periodosPodio).notNull(),
+  posicao: int("posicao").notNull(),
+  titulo: varchar("titulo", { length: 255 }).notNull(),
+  descricao: text("descricao"),
+  atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
+}, (table) => [
+  uniqueIndex("premios_podio_unique").on(table.condominioId, table.periodo, table.posicao),
+]);
+
+/** Registro de que o prêmio do pódio foi entregue ao morador (fecha o ciclo do pódio). Os descontos antigos foram migrados para cá. */
+export const entregasPremioPodio = mysqlTable("entregas_premio_podio", {
   id: int("id").autoincrement().primaryKey(),
   condominioId: int("condominio_id").notNull(),
   moradorId: int("morador_id").notNull(),
@@ -327,13 +366,13 @@ export const aplicacoesDescontoPodio = mysqlTable("aplicacoes_desconto_podio", {
   intervaloInicio: dataHora("intervalo_inicio").notNull(),
   intervaloFim: dataHora("intervalo_fim").notNull(),
   posicao: int("posicao").notNull(),
-  percentualAplicado: double("percentual_aplicado").notNull(),
+  premio: varchar("premio", { length: 255 }).notNull(),
   observacao: text("observacao"),
-  aplicadoPorId: int("aplicado_por_id").notNull(),
-  aplicadoEm: dataHora("aplicado_em").default(agora).notNull(),
+  entreguePorId: int("entregue_por_id").notNull(),
+  entregueEm: dataHora("entregue_em").default(agora).notNull(),
 }, (table) => [
-  index("aplicacoes_desconto_condominio_idx").on(table.condominioId),
-  uniqueIndex("aplicacoes_desconto_unique").on(table.moradorId, table.periodo, table.intervaloInicio),
+  index("entregas_premio_condominio_idx").on(table.condominioId),
+  uniqueIndex("entregas_premio_unique").on(table.moradorId, table.periodo, table.intervaloInicio),
 ]);
 
 /** Meta pessoal de reciclagem definida pelo próprio morador (mesma lógica de acompanhamento das metas por bloco). */
@@ -406,3 +445,4 @@ export type Morador = typeof moradores.$inferSelect;
 export type Condominio = typeof condominios.$inferSelect;
 export type Coleta = typeof coletas.$inferSelect;
 export type Pessoa = typeof pessoas.$inferSelect;
+export type EstacaoPesagem = typeof estacoesPesagem.$inferSelect;
