@@ -164,11 +164,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-[#f6f8f6] text-foreground">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[272px] flex-col border-r border-[#dce8e0] bg-white px-4 py-5 lg:flex">
         <EcoBrand />
-        <div className="my-7 h-px bg-[#e8efeb]" />
-        <Navigation role={role} />
-        <div className="mt-auto rounded-2xl border border-[#dcebe2] bg-[linear-gradient(145deg,#f0f8f3,#fbfdfb)] p-3.5">
-          <p className="text-xs font-semibold text-[#0c563d]">Dica de operação</p>
-          <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Atualize o status das coletas no mesmo dia para manter os indicadores consistentes.</p>
+        <div className="my-7 h-px shrink-0 bg-[#e8efeb]" />
+        {/* Com zoom alto ou tela baixa, os itens não cabem na altura: só esta parte rola, a marca fica no topo. */}
+        <div className="-mx-4 flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-1">
+          <Navigation role={role} />
+          <div className="mt-auto pt-6">
+            <div className="rounded-2xl border border-[#dcebe2] bg-[linear-gradient(145deg,#f0f8f3,#fbfdfb)] p-3.5">
+              <p className="text-xs font-semibold text-[#0c563d]">Dica de operação</p>
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Atualize o status das coletas no mesmo dia para manter os indicadores consistentes.</p>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -212,9 +217,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <button onClick={() => setDrawerOpen(false)} className="absolute inset-0 bg-[#062e20]/35 backdrop-blur-[2px]" aria-label="Fechar menu" />
           <aside className="relative flex h-full w-[286px] flex-col bg-white px-4 py-5 shadow-2xl">
             <div className="flex items-center justify-between"><EcoBrand /><Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setDrawerOpen(false)} aria-label="Fechar menu"><X className="h-5 w-5" /></Button></div>
-            <div className="my-7 h-px bg-[#e8efeb]" />
-            <Navigation role={role} onNavigate={() => setDrawerOpen(false)} />
-            <Button variant="ghost" className="mt-auto justify-start gap-3 rounded-xl px-3 text-muted-foreground hover:text-destructive" onClick={logout}><LogOut className="h-4 w-4" />Sair da conta</Button>
+            <div className="my-7 h-px shrink-0 bg-[#e8efeb]" />
+            <div className="-mx-4 min-h-0 flex-1 overflow-y-auto px-4 pb-1">
+              <Navigation role={role} onNavigate={() => setDrawerOpen(false)} />
+            </div>
+            <Button variant="ghost" className="mt-3 shrink-0 justify-start gap-3 rounded-xl px-3 text-muted-foreground hover:text-destructive" onClick={logout}><LogOut className="h-4 w-4" />Sair da conta</Button>
           </aside>
         </div>
       )}
