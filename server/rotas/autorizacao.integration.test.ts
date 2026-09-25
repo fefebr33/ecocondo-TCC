@@ -9,7 +9,7 @@ import type { TrpcContext } from "../_core/context";
 
 const mockProfile = vi.mocked(obterOuCriarPerfil);
 
-function contextFor(role: "administrador" | "coletor" | "morador") {
+function contextFor(role: "administrador" | "morador") {
   return {
     user: {
       id: 77,
@@ -42,13 +42,13 @@ describe("autorização de procedimentos EcoCondo", () => {
     await expect(caller.moradores.listar()).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("bloqueia coletor na emissão de relatórios administrativos", async () => {
+  it("bloqueia morador na emissão de relatórios administrativos", async () => {
     mockProfile.mockResolvedValue({
-      perfil: { id: 2, usuarioId: 77, condominioId: 1, moradorId: null, papel: "coletor", criadoEm: new Date(), atualizadoEm: new Date() },
+      perfil: { id: 2, usuarioId: 77, condominioId: 1, moradorId: 10, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() },
       condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
       morador: null,
     });
-    const caller = appRouter.createCaller(contextFor("coletor"));
+    const caller = appRouter.createCaller(contextFor("morador"));
     await expect(caller.relatorios.visaoGeral({})).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -63,24 +63,27 @@ describe("autorização de procedimentos EcoCondo", () => {
     await expect(caller.notificacoes.criarComunicado({ title: "Aviso", message: "Mensagem de teste" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("bloqueia coletor na administração de recompensas e perfis", async () => {
+  it("bloqueia morador na administração de recompensas, perfis, estações e prêmios", async () => {
     mockProfile.mockResolvedValue({
-      perfil: { id: 4, usuarioId: 77, condominioId: 1, moradorId: null, papel: "coletor", criadoEm: new Date(), atualizadoEm: new Date() },
+      perfil: { id: 4, usuarioId: 77, condominioId: 1, moradorId: 10, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() },
       condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
       morador: null,
     });
-    const caller = appRouter.createCaller(contextFor("coletor"));
+    const caller = appRouter.createCaller(contextFor("morador"));
     await expect(caller.engajamento.criarRecompensa({ title: "Recompensa", description: "Descrição válida", pointsCost: 10, stock: null })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.pessoas.definirPapel({ id: 12, role: "morador" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.estacoes.criar({ name: "Tablet", location: "Garagem" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.podio.configurarPremios({ periodo: "mensal", premios: [] })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.podio.marcarPremioEntregue({ moradorId: 10, periodo: "mensal" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("bloqueia coletor nos indicadores e intervenções exclusivos da administração", async () => {
+  it("bloqueia morador nos indicadores e intervenções exclusivos da administração", async () => {
     mockProfile.mockResolvedValue({
-      perfil: { id: 5, usuarioId: 77, condominioId: 1, moradorId: null, papel: "coletor", criadoEm: new Date(), atualizadoEm: new Date() },
+      perfil: { id: 5, usuarioId: 77, condominioId: 1, moradorId: 10, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() },
       condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
       morador: null,
     });
-    const caller = appRouter.createCaller(contextFor("coletor"));
+    const caller = appRouter.createCaller(contextFor("morador"));
     await expect(caller.metas.criar({ block: "A", title: "Meta válida", targetKg: 20, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-31") })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.ocorrencias.atualizarStatus({ id: 1, status: "resolvida" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.conformidade.visaoGeral()).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -89,6 +92,12 @@ describe("autorização de procedimentos EcoCondo", () => {
     await expect(caller.relatorios.exportarCsv({})).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.campanhas.criar({ title: "Campanha", description: "Descrição de campanha válida", targetDescription: "Meta", startDate: new Date("2026-08-01"), endDate: new Date("2026-08-31"), status: "ativa" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.avaliacoes.responder({ id: 1, response: "Resposta válida" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("exige tablet pareado para os procedimentos da estação de pesagem", async () => {
+    const caller = appRouter.createCaller({ ...contextFor("morador"), user: null } as unknown as TrpcContext);
+    await expect(caller.estacao.status()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.estacao.registrar({ code: "123456", wasteType: "reciclavel", weightGrams: 1000, imageDataUrl: "data:image/png;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("rejeita datas inválidas e conteúdo insuficiente antes de acessar o banco", async () => {

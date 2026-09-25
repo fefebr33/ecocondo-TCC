@@ -1,15 +1,15 @@
 import { TRPCError } from "@trpc/server";
 import QRCode from "qrcode";
 import { customAlphabet } from "nanoid";
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, statusColeta, notificacoes, pessoas, moradores, statusMorador, perfisAcesso, usuarios, tiposResiduo } from "../../drizzle/schema";
+import { coletas, estacoesPesagem, statusColeta, notificacoes, pessoas, moradores, statusMorador, perfisAcesso, usuarios, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
 
 const gerarCodigoMorador = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
-import { administratorOnly, staffOnly, withProfile } from "./nucleo";
+import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
-import { calculateCollectionPoints, prepareCollectionCompletion, resolveCollectorAssignment } from "../dominio/regrasColeta";
+import { calculateCollectionPoints, prepareCollectionCompletion } from "../dominio/regrasColeta";
 import { buildPendingResidentPerson } from "../dominio/regrasPessoas";
 import { collectionAuditState, writeAuditLog } from "../audit";
 import { salvarImagemBase64 } from "../storage";
@@ -38,6 +38,24 @@ const filtrosColeta = z.object({
   startDate: z.date().optional(),
   endDate: z.date().optional(),
 });
+
+/**
+ * Descreve de onde veio cada registro: estação de pesagem (o próprio morador), coletor (só coletas antigas,
+ * de antes da retirada do perfil) ou administração.
+ */
+export async function origensDosRegistros(condominioId: number, registros: Array<typeof coletas.$inferSelect>) {
+  const db = await getDb();
+  const estacoes = registros.some((registro) => registro.estacaoId !== null)
+    ? await db.select({ id: estacoesPesagem.id, nome: estacoesPesagem.nome }).from(estacoesPesagem).where(eq(estacoesPesagem.condominioId, condominioId))
+    : [];
+  const idsColetores = Array.from(new Set(registros.map((registro) => registro.coletorId).filter((id): id is number => id !== null)));
+  const coletores = idsColetores.length ? await db.select({ id: usuarios.id, nome: usuarios.nome }).from(usuarios).where(inArray(usuarios.id, idsColetores)) : [];
+  return (registro: typeof coletas.$inferSelect) => {
+    if (registro.estacaoId !== null) return `Estação: ${estacoes.find((estacao) => estacao.id === registro.estacaoId)?.nome ?? "removida"}`;
+    if (registro.coletorId !== null) return `Coletor: ${coletores.find((coletor) => coletor.id === registro.coletorId)?.nome ?? "sem nome"} (histórico)`;
+    return "Administração";
+  };
+}
 
 export const operationsRouter = router({
   moradores: router({
@@ -82,8 +100,8 @@ export const operationsRouter = router({
       }
       return { success: true };
     }),
-    /** Gera (na primeira vez) e devolve o código + QR code do apartamento, para o coletor escanear em vez de escolher o morador numa lista. */
-    codigoQr: staffOnly.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
+    /** Gera (na primeira vez) e devolve o código + QR code do apartamento, para o administrador identificar o morador num registro manual. */
+    codigoQr: administratorOnly.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const db = await getDb();
       const encontrado = await db.select().from(moradores).where(and(eq(moradores.id, input.id), eq(moradores.condominioId, ctx.eco.condominio.id))).limit(1);
       const morador = encontrado[0];
@@ -96,7 +114,7 @@ export const operationsRouter = router({
       const qrDataUrl = await QRCode.toDataURL(codigo, { margin: 1, width: 220 });
       return { code: codigo, qrDataUrl };
     }),
-    porCodigo: staffOnly.input(z.object({ code: z.string().trim().min(1).max(32) })).query(async ({ ctx, input }) => {
+    porCodigo: administratorOnly.input(z.object({ code: z.string().trim().min(1).max(32) })).query(async ({ ctx, input }) => {
       const db = await getDb();
       const encontrado = await db.select().from(moradores).where(and(eq(moradores.codigoAcesso, input.code.toUpperCase()), eq(moradores.condominioId, ctx.eco.condominio.id))).limit(1);
       if (!encontrado[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Nenhum morador encontrado para este código." });
@@ -122,11 +140,11 @@ export const operationsRouter = router({
       const moradoresRelacionados = moradorIds.length
         ? await db.select().from(moradores).where(and(eq(moradores.condominioId, ctx.eco.condominio.id)))
         : [];
-      const perfisColetor = await db.select({ usuarioId: perfisAcesso.usuarioId, papel: perfisAcesso.papel, nome: usuarios.nome }).from(perfisAcesso).leftJoin(usuarios, eq(usuarios.id, perfisAcesso.usuarioId)).where(eq(perfisAcesso.condominioId, ctx.eco.condominio.id));
+      const origens = await origensDosRegistros(ctx.eco.condominio.id, registros);
       return registros.map((registro) => ({
         ...registro,
         residentName: moradoresRelacionados.find((morador) => morador.id === registro.moradorId)?.nome ?? null,
-        collectorName: perfisColetor.find((perfil) => perfil.usuarioId === registro.coletorId)?.nome ?? null,
+        origin: origens(registro),
       }));
     }),
     criar: withProfile.input(z.object({
@@ -134,7 +152,6 @@ export const operationsRouter = router({
       wasteType: z.enum(tiposResiduo),
       block: z.string().trim().min(1).max(32),
       scheduledAt: z.date(),
-      collectorUserId: z.number().int().positive().nullable().optional(),
       notes: z.string().trim().max(1200).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
       const inicioDeHoje = new Date();
@@ -145,18 +162,11 @@ export const operationsRouter = router({
       const db = await getDb();
       let moradorId = input.residentId ?? null;
       let bloco = input.block;
-      let coletorId = resolveCollectorAssignment(ctx.eco.perfil.papel, ctx.user.id, input.collectorUserId);
 
       if (ctx.eco.perfil.papel === "morador") {
         if (!ctx.eco.morador || ctx.eco.morador.status !== "ativo") throw new TRPCError({ code: "FORBIDDEN", message: "O perfil do morador não está habilitado para solicitar coletas." });
         moradorId = ctx.eco.morador.id;
         bloco = ctx.eco.morador.bloco;
-      }
-      if (ctx.eco.perfil.papel === "administrador" && coletorId) {
-        const perfilColetor = await db.select().from(perfisAcesso).where(and(eq(perfisAcesso.usuarioId, coletorId), eq(perfisAcesso.condominioId, ctx.eco.condominio.id))).limit(1);
-        if (!perfilColetor[0] || perfilColetor[0].papel !== "coletor") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um usuário com perfil de coletor para assumir a coleta." });
-        }
       }
 
       let morador = null;
@@ -170,7 +180,6 @@ export const operationsRouter = router({
         condominioId: ctx.eco.condominio.id,
         moradorId,
         criadoPorId: ctx.user.id,
-        coletorId,
         tipoResiduo: input.wasteType,
         bloco,
         agendadaPara: input.scheduledAt,
@@ -184,7 +193,7 @@ export const operationsRouter = router({
         entidadeId: coletaId,
         acao: "coleta_criada",
         resumo: `Coleta de ${input.wasteType} criada para o bloco ${bloco}.`,
-        estadoNovo: { status: "agendada", tipoResiduo: input.wasteType, bloco, agendadaPara: input.scheduledAt, moradorId, coletorId, observacoes: input.notes || null },
+        estadoNovo: { status: "agendada", tipoResiduo: input.wasteType, bloco, agendadaPara: input.scheduledAt, moradorId, observacoes: input.notes || null },
       });
       if (morador?.usuarioId) {
         await db.insert(notificacoes).values({
@@ -196,19 +205,9 @@ export const operationsRouter = router({
           mensagem: `Uma coleta de ${input.wasteType} foi agendada para o bloco ${bloco}.`,
         });
       }
-      if (coletorId && coletorId !== ctx.user.id) {
-        await db.insert(notificacoes).values({
-          condominioId: ctx.eco.condominio.id,
-          destinatarioId: coletorId,
-          coletaId,
-          tipo: "coleta_agendada",
-          titulo: "Coleta atribuída",
-          mensagem: `Você foi designado para uma coleta de ${input.wasteType} no bloco ${bloco}.`,
-        });
-      }
       return { id: coletaId };
     }),
-    atualizarStatus: staffOnly.input(z.object({
+    atualizarStatus: administratorOnly.input(z.object({
       id: z.number().int().positive(),
       status: z.enum(statusColeta),
       weightGrams: z.number().int().min(0).max(LIMITE_PESO_POR_COLETA_GRAMAS).nullable().optional(),
@@ -279,7 +278,6 @@ export const operationsRouter = router({
         pesoGramas: novoPeso,
         pontosConcedidos: novosPontos,
         concluidaEm,
-        coletorId: coleta.coletorId ?? ctx.user.id,
         concluidoPorId: input.status === "concluida" ? ctx.user.id : null,
         observacoes: conclusao.notes,
         chaveFoto: foto.key,
@@ -300,7 +298,6 @@ export const operationsRouter = router({
           status: input.status,
           pesoGramas: novoPeso,
           pontosConcedidos: novosPontos,
-          coletorId: coleta.coletorId ?? ctx.user.id,
           concluidaEm,
           observacoes: conclusao.notes,
         },
@@ -325,7 +322,7 @@ export const operationsRouter = router({
             coletaId: coleta.id,
             tipo: "sistema",
             titulo: "Peso aguardando aprovação",
-            mensagem: `Uma coleta de ${coleta.tipoResiduo} do bloco ${coleta.bloco} foi concluída com ${((novoPeso ?? 0) / 1000).toFixed(1)} kg, bem acima do histórico do morador. Revise em Coletas > Pesos pendentes de aprovação.`,
+            mensagem: `Uma coleta de ${coleta.tipoResiduo} do bloco ${coleta.bloco} foi concluída com ${((novoPeso ?? 0) / 1000).toFixed(1)} kg, bem acima do histórico do morador. Revise em Coletas > Registros aguardando aprovação.`,
           });
         }
       }
@@ -355,10 +352,12 @@ export const operationsRouter = router({
       const registros = await db.select().from(coletas).where(and(eq(coletas.condominioId, ctx.eco.condominio.id), eq(coletas.pendenteAprovacaoPeso, true))).orderBy(desc(coletas.concluidaEm));
       const moradorIds = Array.from(new Set(registros.map((registro) => registro.moradorId).filter((id): id is number => id !== null)));
       const moradoresRelacionados = moradorIds.length ? await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id)) : [];
+      const origens = await origensDosRegistros(ctx.eco.condominio.id, registros);
       return registros.map((registro) => ({
         ...registro,
         pontosCalculados: calculateCollectionPoints(registro.status, registro.tipoResiduo, registro.pesoGramas),
         residentName: moradoresRelacionados.find((morador) => morador.id === registro.moradorId)?.nome ?? null,
+        origin: origens(registro),
       }));
     }),
     decidirAprovacaoPeso: administratorOnly.input(z.object({

@@ -103,7 +103,21 @@ Para ver as tabelas, use qualquer cliente MySQL (MySQL Workbench, DBeaver, Heidi
 pnpm dev
 ```
 
-Acesse [http://localhost:3000](http://localhost:3000). Clique em **"Acessar plataforma"** e escolha um perfil (Administrador, Coletor ou Morador) — o login local cria a conta de demonstração automaticamente, sem senha.
+Acesse [http://localhost:3000](http://localhost:3000). Clique em **"Acessar plataforma"** e escolha um perfil (Administrador ou Morador) — o login local cria a conta de demonstração automaticamente, sem senha.
+
+### Estação de pesagem (tablet + balança)
+
+Não existe mais o perfil coletor: o próprio morador pesa e registra a reciclagem num tablet ao lado das lixeiras.
+
+1. O administrador cadastra o tablet em **Configurações > Estações de pesagem** e recebe um código de pareamento (mostrado uma única vez).
+2. No tablet, abra `/estacao` e digite o código (ou abra o link de pareamento). O `pnpm db:seed` já cria uma estação e mostra o link no terminal.
+3. O morador toca em **Gerar código para a estação** na página Coletas do celular, digita os 6 números no tablet, informa o peso e fotografa o visor da balança.
+
+Travas antifraude: só tablet pareado registra; código do morador de uso único, válido por 5 minutos, com bloqueio do tablet após muitos códigos errados; foto obrigatória; peso entre 0,1 e 30 kg por registro, até 40 kg e 4 registros por dia, com 10 minutos entre registros; registros acima de 10 kg, muito acima do histórico do morador ou sorteados (10%) só somam pontos depois da aprovação do administrador. Os limites ficam em `server/dominio/estacaoPesagem.ts`.
+
+### Pódio e privacidade
+
+Os moradores veem só os três primeiros colocados (nome e bloco) e a própria posição; ninguém abaixo do 3º lugar é exposto. O morador pode pedir para aparecer como "Morador(a) do bloco X". O administrador vê a lista completa e define o prêmio de cada posição (sem descontos na taxa condominial).
 
 ## Validar
 

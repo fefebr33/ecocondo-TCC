@@ -10,6 +10,7 @@ import { podioRouter } from "./rotas/podio";
 import { personalGoalsRouter } from "./rotas/metasPessoais";
 import { certificatesRouter } from "./rotas/certificados";
 import { recurrenceRouter } from "./rotas/recorrencia";
+import { estacoesRouter } from "./rotas/estacoes";
 
 export const appRouter = router({
   auth: router({
@@ -32,6 +33,7 @@ export const appRouter = router({
   ...personalGoalsRouter._def.record,
   ...certificatesRouter._def.record,
   ...recurrenceRouter._def.record,
+  ...estacoesRouter._def.record,
 });
 
 export type AppRouter = typeof appRouter;

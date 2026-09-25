@@ -1,19 +1,19 @@
-export const ecoRoles = ["administrador", "coletor", "morador"] as const;
+export const ecoRoles = ["administrador", "morador"] as const;
 export type EcoRole = (typeof ecoRoles)[number];
 
 const routePermissions: Record<string, EcoRole[]> = {
-  "/dashboard": ["administrador", "coletor", "morador"],
-  "/coletas": ["administrador", "coletor", "morador"],
+  "/dashboard": ["administrador", "morador"],
+  "/coletas": ["administrador", "morador"],
   "/moradores": ["administrador"],
   "/pessoas": ["administrador"],
   "/relatorios": ["administrador"],
   "/auditoria": ["administrador"],
   "/engajamento": ["administrador", "morador"],
-  "/podio": ["administrador", "coletor", "morador"],
-  "/guia": ["administrador", "coletor", "morador"],
-  "/notificacoes": ["administrador", "coletor", "morador"],
-  "/ambiental": ["administrador", "coletor", "morador"],
-  "/comunidade": ["administrador", "coletor", "morador"],
+  "/podio": ["administrador", "morador"],
+  "/guia": ["administrador", "morador"],
+  "/notificacoes": ["administrador", "morador"],
+  "/ambiental": ["administrador", "morador"],
+  "/comunidade": ["administrador", "morador"],
   "/configuracoes": ["administrador"],
 };
 

@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { and, asc, desc, eq, gt, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, ocorrencias, recompensas, resgates, perfisAcesso, relatoriosAnuais, usuarios, tiposResiduo } from "../../drizzle/schema";
+import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, ocorrencias, recompensas, resgates, relatoriosAnuais, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
@@ -10,6 +10,8 @@ import { countUnreadNotifications } from "../dominio/regrasNotificacao";
 import { buildCollectionsCsv } from "../dominio/exportacaoCsv";
 import { calcularEquivalenciasAmbientais } from "../dominio/impactoAmbiental";
 import { pesoConfirmadoGramas } from "../dominio/antifraude";
+import { classificarPorPontos, nomePublico, recortarRankingPublico } from "../dominio/privacidadeRanking";
+import { origensDosRegistros } from "./operacoes";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 const csvFiltersInput = z.object({
@@ -116,7 +118,7 @@ export const analyticsRouter = router({
       const db = await getDb();
       const registros = await db.select().from(coletas).where(and(...condicoesCsv(ctx.eco.condominio.id, input))).orderBy(desc(coletas.agendadaPara));
       const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
-      const perfisColetor = await db.select({ usuarioId: perfisAcesso.usuarioId, nome: usuarios.nome }).from(perfisAcesso).leftJoin(usuarios, eq(usuarios.id, perfisAcesso.usuarioId)).where(eq(perfisAcesso.condominioId, ctx.eco.condominio.id));
+      const origens = await origensDosRegistros(ctx.eco.condominio.id, registros);
       const conteudo = buildCollectionsCsv(registros.map((registro) => ({
         id: registro.id,
         status: registro.status,
@@ -128,7 +130,7 @@ export const analyticsRouter = router({
         pointsAwarded: registro.pontosConcedidos,
         notes: registro.observacoes,
         residentName: comunidade.find((morador) => morador.id === registro.moradorId)?.nome ?? null,
-        collectorName: perfisColetor.find((perfil) => perfil.usuarioId === registro.coletorId)?.nome ?? null,
+        origin: origens(registro),
       })));
       return { filename: `coletas-ecocondo-${new Date().toISOString().slice(0, 10)}.csv`, content: conteudo };
     }),
@@ -140,9 +142,23 @@ export const analyticsRouter = router({
   engajamento: router({
     ranking: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      // Só os campos exibidos no ranking: e-mail, telefone e código QR dos vizinhos não saem do servidor.
-      const comunidade = await db.select({ id: moradores.id, nome: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento, pontos: moradores.pontos }).from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
-      return [...comunidade].sort((a, b) => b.pontos - a.pontos).map((morador, indice) => ({ position: indice + 1, ...morador }));
+      // Só os campos exibidos no ranking: e-mail, telefone e códigos dos vizinhos não saem do servidor.
+      const comunidade = await db.select({ moradorId: moradores.id, nome: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento, pontos: moradores.pontos, ocultarNomeNoPodio: moradores.ocultarNomeNoPodio }).from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
+      const classificados = classificarPorPontos(comunidade);
+      if (ctx.eco.perfil.papel === "administrador") {
+        return {
+          linhas: classificados.map((linha) => ({ position: linha.posicao, id: linha.moradorId, nome: linha.nome, bloco: linha.bloco, apartamento: linha.apartamento as string | null, pontos: linha.pontos, voce: false })),
+          minhaPosicao: null,
+          totalParticipantes: classificados.length,
+        };
+      }
+      // Morador: só o top 3 (nome e bloco) e a própria posição; ninguém abaixo do 3º lugar é exposto.
+      const { publicas, minha, total } = recortarRankingPublico(classificados, ctx.eco.morador?.id ?? null);
+      return {
+        linhas: publicas.map((linha) => ({ position: linha.posicao, id: null as number | null, nome: nomePublico(linha), bloco: linha.bloco, apartamento: null as string | null, pontos: linha.pontos, voce: linha.moradorId === ctx.eco.morador?.id })),
+        minhaPosicao: minha ? { position: minha.posicao, pontos: minha.pontos } : null,
+        totalParticipantes: total,
+      };
     }),
     recompensas: withProfile.query(async ({ ctx }) => {
       const db = await getDb();

@@ -12,7 +12,6 @@ type PapelEco = (typeof papeisEco)[number];
 
 const CONTAS_DEMONSTRACAO: Record<PapelEco, { idExterno: string; nome: string; email: string }> = {
   administrador: { idExterno: "demo-administrador", nome: "Ana Administradora", email: "admin@ecocondo.local" },
-  coletor: { idExterno: "demo-coletor", nome: "Carlos Coletor", email: "coletor@ecocondo.local" },
   morador: { idExterno: "demo-morador", nome: "Marina Moradora", email: "morador@ecocondo.local" },
 };
 

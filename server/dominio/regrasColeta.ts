@@ -7,12 +7,6 @@ export function calculateCollectionPoints(status: CompletionStatus, wasteType: W
   return Math.floor(weightGrams / 1000);
 }
 
-export function resolveCollectorAssignment(role: "administrador" | "coletor" | "morador", requestorUserId: number, requestedCollectorUserId: number | null | undefined) {
-  if (role === "morador") return null;
-  if (role === "coletor") return requestorUserId;
-  return requestedCollectorUserId ?? null;
-}
-
 export function prepareCollectionCompletion(input: { status: CompletionStatus; weightGrams?: number | null; notes?: string | null }, current: { weightGrams: number | null; notes: string | null; wasteType: WasteCategory }) {
   if (input.status === "concluida" && (input.weightGrams === undefined || input.weightGrams === null)) {
     throw new Error("Informe o peso para concluir uma coleta.");
