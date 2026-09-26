@@ -24,7 +24,7 @@ export default function Home() {
       <header className="mx-auto flex h-[76px] max-w-[1180px] items-center justify-between px-5 sm:px-8">
         <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-2xl bg-[linear-gradient(145deg,#0f7350,#0c4f3a)] text-white"><Leaf className="h-5 w-5" /></span><span><span className="block text-[15px] font-bold tracking-[-.03em]">EcoCondo</span><span className="block text-[10px] font-medium tracking-[.13em] text-muted-foreground uppercase">Gestão circular</span></span></div>
         <div className="flex items-center gap-3">
-          {import.meta.env.DEV && <a href="/api/dev/login" className="text-xs font-semibold text-muted-foreground underline-offset-2 hover:underline">Entrar em modo demonstração</a>}
+          {import.meta.env.DEV && <a href="/entrar" className="text-xs font-semibold text-muted-foreground underline-offset-2 hover:underline">Entrar em modo demonstração</a>}
           <Button onClick={() => startLogin()} className="h-10 rounded-xl bg-[#0f7350] px-4 text-sm font-semibold text-white hover:bg-[#0a6243]">Acessar plataforma <ArrowRight className="ml-2 h-4 w-4" /></Button>
         </div>
       </header>

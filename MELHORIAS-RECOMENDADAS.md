@@ -5,7 +5,7 @@ Este documento reúne sugestões de evolução do sistema. Os itens marcados com
 ## Já implementadas
 
 - ✅ **Comprovação fotográfica da coleta.** Foto obrigatória ao concluir uma coleta, reaproveitando `server/storage.ts`.
-- ✅ **Registro de aplicação do desconto.** Botão "marcar desconto como aplicado" no pódio, gravando data, percentual, observação e quem aplicou (`podio.marcarDescontoAplicado`).
+- ✅ **Registro de aplicação do desconto.** Botão "marcar desconto como aplicado" no pódio, gravando data, percentual, observação e quem aplicou (`podio.marcarDescontoAplicado`). Substituído no PR #4 pelo registro de entrega dos prêmios do pódio ("Marcar prêmio como entregue", `podio.marcarPremioEntregue`).
 - ✅ **Segunda aprovação para pesos muito altos.** Pesos sinalizados como suspeitos ficam com os pontos retidos até um segundo administrador aprovar ou rejeitar (`coletas.decidirAprovacaoPeso`).
 - ✅ **Certificado trimestral de sustentabilidade em PDF**, por bloco, com equivalências ambientais (`certificados.gerarTrimestral`).
 - ✅ **Meta pessoal do morador**, no mesmo padrão das metas por bloco (`metaPessoal.*`).

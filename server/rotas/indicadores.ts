@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt, gte, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { coletas, guiasDescarte, notificacoesLidas, notificacoes, moradores, ocorrencias, recompensas, resgates, relatoriosAnuais, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { rotuloResiduo } from "@shared/rotulos";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -43,7 +44,7 @@ function resumir(registros: Array<typeof coletas.$inferSelect>) {
   const reciclavelKg = gramasReciclaveis / 1000;
   const taxaReciclagem = totalGramas > 0 ? Number(((gramasReciclaveis / totalGramas) * 100).toFixed(1)) : null;
   const co2EstimadoKg = calcularEquivalenciasAmbientais(reciclavelKg).co2EvitadoKg;
-  const porTipoResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"].map((tipoResiduo) => ({
+  const porTipoResiduo = tiposResiduo.map((tipoResiduo) => ({
     wasteType: tipoResiduo,
     kilograms: Number((concluidas.filter((registro) => registro.tipoResiduo === tipoResiduo).reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0) / 1000).toFixed(2)),
   }));
@@ -98,7 +99,7 @@ export const analyticsRouter = router({
       const linhas = [
         ["Total coletado", `${relatorio.totalKg.toLocaleString("pt-BR")} kg`],
         ["Recicláveis", `${relatorio.recyclableKg.toLocaleString("pt-BR")} kg`],
-        ["Taxa de reciclagem", relatorio.recyclingRate === null ? "Sem dados" : `${relatorio.recyclingRate}%`],
+        ["Taxa de reciclagem", relatorio.recyclingRate === null ? "Sem dados" : `${relatorio.recyclingRate.toLocaleString("pt-BR")}%`],
         ["Coletas concluídas", `${relatorio.completedCount}`],
         ["Ocorrências", `${relatorio.occurrenceCount}`],
         ["CO2 evitado (estimativa)", `${relatorio.co2EstimateKg.toLocaleString("pt-BR")} kg CO2e`],
@@ -106,7 +107,7 @@ export const analyticsRouter = router({
       let y = 665;
       linhas.forEach(([rotulo, valor]) => { desenhar(rotulo, 54, y, 11); desenhar(valor, 350, y, 11, true, rgb(0.04, 0.39, 0.25)); y -= 31; });
       desenhar("Composição por categoria", 48, y - 15, 13, true); y -= 48;
-      relatorio.byWasteType.forEach((item) => { desenhar(`${item.wasteType}: ${item.kilograms.toLocaleString("pt-BR")} kg`, 54, y); y -= 23; });
+      relatorio.byWasteType.forEach((item) => { desenhar(`${rotuloResiduo[item.wasteType]}: ${item.kilograms.toLocaleString("pt-BR")} kg`, 54, y); y -= 23; });
       desenhar("Nota metodológica", 48, 180, 11, true);
       desenhar("A estimativa de CO2 utiliza o fator configurável de 0,75 kg CO2e por kg de reciclável.", 48, 162, 9);
       desenhar("Os dados devem ser interpretados como estimativas de apoio à gestão e à prestação de contas.", 48, 148, 9);

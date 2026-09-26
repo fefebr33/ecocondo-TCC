@@ -28,8 +28,10 @@ const ROTULOS: Record<string, string> = {
   city: "Cidade",
   address: "Endereço",
   blockCount: "Quantidade de blocos",
-  percentual: "Percentual",
   rating: "Nota",
+  titulo: "Nome do prêmio",
+  descricao: "Detalhes do prêmio",
+  observacao: "Observação",
 };
 
 function formatarLimite(campo: string, limite: number | bigint) {

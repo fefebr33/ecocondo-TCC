@@ -1,4 +1,5 @@
-export function reminderRecipients(input: { residentUserId: number | null; collectorUserId: number | null; alreadyNotifiedUserIds: number[] }) {
+/** Só o morador vinculado recebe o lembrete; o coletor_id de coletas antigas fica apenas no histórico. */
+export function reminderRecipients(input: { residentUserId: number | null; alreadyNotifiedUserIds: number[] }) {
   const alreadyNotified = new Set(input.alreadyNotifiedUserIds);
-  return Array.from(new Set([input.residentUserId, input.collectorUserId].filter((id): id is number => typeof id === "number"))).filter((id) => !alreadyNotified.has(id));
+  return [input.residentUserId].filter((id): id is number => typeof id === "number" && !alreadyNotified.has(id));
 }

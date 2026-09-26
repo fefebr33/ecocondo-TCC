@@ -28,7 +28,7 @@ drizzle/*.sql       Migrações geradas a partir do schema (aplicadas por pnpm d
 shared/             Código compartilhado entre cliente e servidor (permissões, constantes)
 ```
 
-Cada arquivo em `server/rotas/` expõe um grupo de rotas (ex.: `podio.ts` expõe `podio.ranking` e `podio.configurarDescontos`). A lógica de negócio mais complexa fica isolada em `server/dominio/`, testada separadamente do banco de dados.
+Cada arquivo em `server/rotas/` expõe um grupo de rotas (ex.: `podio.ts` expõe `podio.ranking`, `podio.configurarPremios` e `podio.marcarPremioEntregue`). A lógica de negócio mais complexa fica isolada em `server/dominio/`, testada separadamente do banco de dados.
 
 ## Rodando na nuvem
 

@@ -171,7 +171,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <div className="mt-auto pt-6">
             <div className="rounded-2xl border border-[#dcebe2] bg-[linear-gradient(145deg,#f0f8f3,#fbfdfb)] p-3.5">
               <p className="text-xs font-semibold text-[#0c563d]">Dica de operação</p>
-              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">Atualize o status das coletas no mesmo dia para manter os indicadores consistentes.</p>
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{role === "administrador" ? "Atualize o status das coletas no mesmo dia para manter os indicadores consistentes." : "Gere o código em Coletas e registre sua reciclagem na estação de pesagem. Os recicláveis valem 1 ponto por kg completo."}</p>
             </div>
           </div>
         </div>

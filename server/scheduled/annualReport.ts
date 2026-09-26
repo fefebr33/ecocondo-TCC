@@ -23,7 +23,7 @@ async function gerarPdfRelatorioAnual(condominioNome: string, ano: number, total
     ["Total coletado no ano", `${totalKg.toLocaleString("pt-BR")} kg`],
     ["Recicláveis", `${reciclavelKg.toLocaleString("pt-BR")} kg`],
     ["Coletas concluídas", `${coletasConcluidas}`],
-    ["Árvores poupadas (estimativa)", `${equivalencias.arvoresPoupadas}`],
+    ["Árvores poupadas (estimativa)", equivalencias.arvoresPoupadas.toLocaleString("pt-BR")],
     ["Água poupada (estimativa)", `${equivalencias.litrosAguaPoupados.toLocaleString("pt-BR")} litros`],
     ["CO2 evitado (estimativa)", `${equivalencias.co2EvitadoKg.toLocaleString("pt-BR")} kg CO2e`],
   ];

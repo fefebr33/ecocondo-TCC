@@ -5,6 +5,7 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { coletas, estacoesPesagem, statusColeta, notificacoes, pessoas, moradores, statusMorador, perfisAcesso, usuarios, tiposResiduo } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { residuoNaFrase, rotuloStatusColeta } from "@shared/rotulos";
 
 const gerarCodigoMorador = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 import { administratorOnly, withProfile } from "./nucleo";
@@ -192,7 +193,7 @@ export const operationsRouter = router({
         tipoEntidade: "coleta",
         entidadeId: coletaId,
         acao: "coleta_criada",
-        resumo: `Coleta de ${input.wasteType} criada para o bloco ${bloco}.`,
+        resumo: `Coleta de ${residuoNaFrase[input.wasteType]} criada para o bloco ${bloco}.`,
         estadoNovo: { status: "agendada", tipoResiduo: input.wasteType, bloco, agendadaPara: input.scheduledAt, moradorId, observacoes: input.notes || null },
       });
       if (morador?.usuarioId) {
@@ -202,7 +203,7 @@ export const operationsRouter = router({
           coletaId,
           tipo: "coleta_agendada",
           titulo: "Coleta agendada",
-          mensagem: `Uma coleta de ${input.wasteType} foi agendada para o bloco ${bloco}.`,
+          mensagem: `Uma coleta de ${residuoNaFrase[input.wasteType]} foi agendada para o bloco ${bloco}.`,
         });
       }
       return { id: coletaId };
@@ -292,7 +293,7 @@ export const operationsRouter = router({
         tipoEntidade: "coleta",
         entidadeId: coleta.id,
         acao: "coleta_atualizada",
-        resumo: `Coleta atualizada para o status ${input.status}.`,
+        resumo: `Coleta atualizada para o status "${rotuloStatusColeta[input.status]}".`,
         estadoAnterior: collectionAuditState({ status: coleta.status, pesoGramas: coleta.pesoGramas, pontosConcedidos: coleta.pontosConcedidos, coletorId: coleta.coletorId, agendadaPara: coleta.agendadaPara, concluidaEm: coleta.concluidaEm, observacoes: coleta.observacoes }),
         estadoNovo: {
           status: input.status,
@@ -303,13 +304,14 @@ export const operationsRouter = router({
         },
       });
       if (pesoAnomalo) {
+        const kg = ((novoPeso ?? 0) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
         await writeAuditLog(db, {
           condominioId: ctx.eco.condominio.id,
           autorId: ctx.user.id,
           tipoEntidade: "coleta",
           entidadeId: coleta.id,
           acao: "coleta_sinalizada_suspeita",
-          resumo: `Peso informado (${((novoPeso ?? 0) / 1000).toFixed(1)} kg) muito acima do histórico do morador. Pontos retidos até aprovação de um segundo administrador.`,
+          resumo: `Peso informado (${kg} kg) muito acima do histórico do morador. Pontos retidos até aprovação de um segundo administrador.`,
           estadoNovo: { pesoGramas: novoPeso, moradorId: coleta.moradorId, pontosPendentes: pontosCalculados },
         });
         // Avisa os demais administradores: quem concluiu a coleta não pode aprovar o próprio lançamento.
@@ -322,7 +324,7 @@ export const operationsRouter = router({
             coletaId: coleta.id,
             tipo: "sistema",
             titulo: "Peso aguardando aprovação",
-            mensagem: `Uma coleta de ${coleta.tipoResiduo} do bloco ${coleta.bloco} foi concluída com ${((novoPeso ?? 0) / 1000).toFixed(1)} kg, bem acima do histórico do morador. Revise em Coletas > Registros aguardando aprovação.`,
+            mensagem: `Uma coleta de ${residuoNaFrase[coleta.tipoResiduo]} do bloco ${coleta.bloco} foi concluída com ${kg} kg, bem acima do histórico do morador. Revise em Coletas > Registros aguardando aprovação.`,
           });
         }
       }
@@ -341,7 +343,7 @@ export const operationsRouter = router({
             titulo: input.status === "concluida" ? "Coleta concluída" : "Atualização de coleta",
             mensagem: pesoAnomalo
               ? "Sua coleta foi concluída. O peso está acima do padrão histórico e os pontos ficarão pendentes até a revisão de um administrador."
-              : input.status === "concluida" ? `Sua coleta foi concluída${novosPontos ? ` e gerou ${novosPontos} ponto(s).` : "."}` : `O status da sua coleta foi atualizado para ${input.status}.`,
+              : input.status === "concluida" ? `Sua coleta foi concluída${novosPontos ? ` e gerou ${novosPontos} ponto(s).` : "."}` : `O status da sua coleta foi atualizado para "${rotuloStatusColeta[input.status]}".`,
           });
         }
       }
@@ -397,9 +399,13 @@ export const operationsRouter = router({
         tipoEntidade: "coleta",
         entidadeId: coleta.id,
         acao: input.aprovar ? "peso_suspeito_aprovado" : "peso_suspeito_rejeitado",
-        resumo: input.aprovar
-          ? `Peso suspeito aprovado por segundo administrador; ${novosPontos} ponto(s) liberado(s).`
-          : "Peso suspeito rejeitado por segundo administrador; nenhum ponto concedido.",
+        resumo: coleta.estacaoId !== null
+          ? (input.aprovar
+            ? `Registro da estação conferido e aprovado pela administração; ${novosPontos} ponto(s) liberado(s).`
+            : "Registro da estação conferido e rejeitado pela administração; nenhum ponto concedido.")
+          : (input.aprovar
+            ? `Peso suspeito aprovado por segundo administrador; ${novosPontos} ponto(s) liberado(s).`
+            : "Peso suspeito rejeitado por segundo administrador; nenhum ponto concedido."),
         estadoNovo: { aprovacaoPesoStatus: input.aprovar ? "aprovado" : "rejeitado", pontosConcedidos: novosPontos, observacao: input.observacao || null },
       });
 

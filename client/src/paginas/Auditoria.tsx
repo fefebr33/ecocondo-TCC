@@ -30,7 +30,7 @@ export default function Audit() {
       <PageIntro
         eyebrow="Governança operacional"
         title="Histórico de auditoria"
-        description="Acompanhe quem criou ou alterou coletas e ocorrências. Os registros preservam o estado anterior e posterior das ações críticas."
+        description="Acompanhe quem criou, aprovou ou alterou coletas (inclusive as registradas na estação de pesagem), ocorrências e estações de pesagem, e quem registrou a entrega de prêmios do pódio. Os registros preservam o estado anterior e posterior das ações críticas."
         action={<span className="grid h-11 w-11 place-items-center rounded-2xl bg-[#e7f4ed] text-[#0f7350]"><ShieldCheck className="h-5 w-5" /></span>}
       />
       <section className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
@@ -54,7 +54,7 @@ export default function Audit() {
               {(entry.beforeState || entry.afterState) && <details className="mt-4 rounded-xl border border-[#e5eee8] bg-white px-3 py-2.5 text-xs"><summary className="flex cursor-pointer list-none items-center gap-2 font-semibold text-[#0f7350]"><Search className="h-3.5 w-3.5" />Ver estados registrados</summary><div className="mt-3 grid gap-3 lg:grid-cols-2"><pre className="overflow-auto rounded-lg bg-[#f6faf7] p-3 text-[11px] leading-5 text-foreground"><b>Antes</b>{"\n"}{JSON.stringify(entry.beforeState, null, 2) || "Sem estado anterior."}</pre><pre className="overflow-auto rounded-lg bg-[#f6faf7] p-3 text-[11px] leading-5 text-foreground"><b>Depois</b>{"\n"}{JSON.stringify(entry.afterState, null, 2) || "Sem estado posterior."}</pre></div></details>}
             </li>; })}
           </ol>
-        ) : <div className="py-14 text-center"><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#edf7f1] text-[#0f7350]"><History className="h-5 w-5" /></span><p className="mt-4 font-semibold">Nenhuma ação encontrada</p><p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">Quando coletas ou ocorrências forem criadas e atualizadas, seus registros aparecerão aqui.</p></div>}
+        ) : <div className="py-14 text-center"><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#edf7f1] text-[#0f7350]"><History className="h-5 w-5" /></span><p className="mt-4 font-semibold">Nenhuma ação encontrada</p><p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">Quando coletas, ocorrências, estações de pesagem ou entregas de prêmios forem registradas ou alteradas, as ações aparecerão aqui.</p></div>}
       </section>
     </div>
   );

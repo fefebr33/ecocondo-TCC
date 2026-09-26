@@ -16,6 +16,7 @@ import {
   tiposResiduo,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { residuoNaFrase, rotuloStatusOcorrencia } from "@shared/rotulos";
 import { salvarImagemBase64 } from "../storage";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
@@ -91,7 +92,7 @@ export const sustainabilityRouter = router({
         tipoEntidade: "ocorrencia",
         entidadeId: ocorrenciaId,
         acao: "ocorrencia_criada",
-        resumo: `Ocorrência de ${input.wasteType} registrada no bloco ${bloco}.`,
+        resumo: `Ocorrência de ${residuoNaFrase[input.wasteType]} registrada no bloco ${bloco}.`,
         estadoNovo: { status: "aberta", bloco, tipoResiduo: input.wasteType, local: input.location, descricao: input.description, hasImage: Boolean(imagem.key) },
       });
       return { id: ocorrenciaId };
@@ -112,7 +113,7 @@ export const sustainabilityRouter = router({
         tipoEntidade: "ocorrencia",
         entidadeId: ocorrencia.id,
         acao: "ocorrencia_atualizada",
-        resumo: `Ocorrência atualizada para o status ${input.status}.`,
+        resumo: `Ocorrência atualizada para o status "${rotuloStatusOcorrencia[input.status]}".`,
         estadoAnterior,
         estadoNovo: { ...estadoAnterior, status: input.status, notaResolucao, resolvidoPorId, resolvidaEm },
       });

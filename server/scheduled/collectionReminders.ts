@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { coletas, notificacoes, moradores } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { residuoNaFrase } from "@shared/rotulos";
 import { reminderRecipients } from "../dominio/regrasLembrete";
 import { exigirAdministrador } from "../_core/acesso";
 
@@ -16,9 +17,9 @@ export async function runCollectionReminders() {
   for (const coleta of proximas) {
     const moradorVinculado = coleta.moradorId ? await db.select({ usuarioId: moradores.usuarioId }).from(moradores).where(eq(moradores.id, coleta.moradorId)).limit(1) : [];
     const existentes = await db.select({ destinatarioId: notificacoes.destinatarioId }).from(notificacoes).where(and(eq(notificacoes.coletaId, coleta.id), eq(notificacoes.tipo, "lembrete_coleta")));
-    const destinatarios = reminderRecipients({ residentUserId: moradorVinculado[0]?.usuarioId ?? null, collectorUserId: coleta.coletorId, alreadyNotifiedUserIds: existentes.map((item) => item.destinatarioId).filter((id): id is number => id !== null) });
+    const destinatarios = reminderRecipients({ residentUserId: moradorVinculado[0]?.usuarioId ?? null, alreadyNotifiedUserIds: existentes.map((item) => item.destinatarioId).filter((id): id is number => id !== null) });
     for (const destinatarioId of destinatarios) {
-      await db.insert(notificacoes).values({ condominioId: coleta.condominioId, destinatarioId, coletaId: coleta.id, tipo: "lembrete_coleta", titulo: "Lembrete de coleta", mensagem: `A coleta de ${coleta.tipoResiduo} do bloco ${coleta.bloco} está programada para as próximas 24 horas.` });
+      await db.insert(notificacoes).values({ condominioId: coleta.condominioId, destinatarioId, coletaId: coleta.id, tipo: "lembrete_coleta", titulo: "Lembrete de coleta", mensagem: `A coleta de ${residuoNaFrase[coleta.tipoResiduo]} do bloco ${coleta.bloco} está programada para as próximas 24 horas.` });
       lembretesCriados += 1;
     }
   }

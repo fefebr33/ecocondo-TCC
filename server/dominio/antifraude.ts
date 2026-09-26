@@ -25,7 +25,7 @@ export function verificarSegregacaoDeFuncao(usuarioResponsavelId: number, usuari
 /** Impede um único lançamento de peso irrealista para uma coleta residencial. */
 export function verificarLimitePorColeta(pesoGramas: number, limite = LIMITE_PESO_POR_COLETA_GRAMAS) {
   if (pesoGramas > limite) {
-    throw new LimiteAntifraudeExcedidoError(`O peso informado (${(pesoGramas / 1000).toFixed(1)} kg) excede o limite plausível por coleta (${(limite / 1000).toFixed(0)} kg). Revise o lançamento ou divida em coletas separadas.`);
+    throw new LimiteAntifraudeExcedidoError(`O peso informado (${(pesoGramas / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg) excede o limite plausível por coleta (${(limite / 1000).toFixed(0)} kg). Revise o lançamento ou divida em coletas separadas.`);
   }
 }
 

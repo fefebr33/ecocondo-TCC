@@ -155,7 +155,7 @@ export default function Collections() {
         </DialogHeader>
         <form onSubmit={submitConclude} className="grid gap-3">
           <label className="grid gap-1.5 text-xs font-semibold">Peso coletado (kg)<Input required type="number" min="0" max="120" step="0.1" value={concludeForm.weightKg} onChange={(event) => setConcludeForm({ ...concludeForm, weightKg: event.target.value })} className="h-10 rounded-xl bg-white" /></label>
-          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-[#b9d8c5] bg-[#f6faf7] px-3 py-3 text-sm text-[#0f7350]"><ImagePlus className="h-4 w-4" />{concludeForm.imageDataUrl ? "Foto pronta para envio" : "Anexar foto da coleta (obrigatório, até 4 MB)"}<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={onConcludeImageChange} /></label>
+          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-[#b9d8c5] bg-[#f6faf7] px-3 py-3 text-sm text-[#0f7350]"><ImagePlus className="h-4 w-4" />{concludeForm.imageDataUrl ? "Foto pronta para envio" : "Anexar foto da coleta (obrigatório)"}<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={onConcludeImageChange} /></label>
           {concludeForm.imageDataUrl && <img src={concludeForm.imageDataUrl} alt="Pré-visualização da foto da coleta" className="max-h-40 w-full rounded-xl border border-[#e2ebe5] object-cover" />}
           <DialogFooter>
             <Button type="submit" disabled={updateStatus.isPending} className="h-10 rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]">{updateStatus.isPending ? "Concluindo..." : "Confirmar conclusão"}</Button>

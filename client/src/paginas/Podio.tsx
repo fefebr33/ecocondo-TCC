@@ -2,6 +2,7 @@ import PageIntro from "@/components/PageIntro";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
+import { formatarNumero } from "@/lib/utils";
 import { CheckCircle2, EyeOff, Gift, History, Lightbulb, Medal, Trophy, UserRound } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -96,14 +97,14 @@ export default function Podio() {
                 <p className="mt-1 text-sm font-semibold">{linha.nome}{linha.voce ? " (você)" : ""}</p>
                 <p className="text-xs text-muted-foreground">Bloco {linha.bloco}{linha.apartamento ? ` · ${linha.apartamento}` : ""}</p>
                 <p className="mt-3 text-lg font-bold text-[#0f7350]">{linha.pontos} pts</p>
-                <p className="text-xs text-muted-foreground">{linha.pesoKg} kg reciclados</p>
+                <p className="text-xs text-muted-foreground">{formatarNumero(linha.pesoKg)} kg reciclados</p>
                 <p className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-[#fff8ec] px-2 py-1.5 text-[11px] font-semibold text-[#7a4d0a]"><Gift className="h-3.5 w-3.5 shrink-0" />{linha.premio ? linha.premio.titulo : "Prêmio a definir"}</p>
                 {isAdmin && linha.moradorId !== null && (
                   linha.premioEntregue ? (
                     <p className="mt-2 flex items-center justify-center gap-1.5 rounded-lg bg-[#e8f4ed] px-2 py-1.5 text-[11px] font-semibold text-[#0a7048]"><CheckCircle2 className="h-3.5 w-3.5" />Entregue em {formatDate(linha.premioEntregue.entregueEm)}</p>
                   ) : marcandoId === linha.moradorId ? (
                     <div className="mt-2 grid gap-2">
-                      <Input aria-label="Observação da entrega do prêmio" placeholder="Observação (opcional)" value={observacao} onChange={(event) => setObservacao(event.target.value)} className="h-9 rounded-lg bg-white text-xs" />
+                      <Input aria-label="Observação da entrega do prêmio" placeholder="Observação (opcional)" maxLength={500} value={observacao} onChange={(event) => setObservacao(event.target.value)} className="h-9 rounded-lg bg-white text-xs" />
                       <div className="flex gap-2">
                         <Button size="sm" disabled={marcarEntregue.isPending} onClick={() => marcarEntregue.mutate({ moradorId: linha.moradorId!, periodo, observacao: observacao.trim() || undefined })} className="h-8 flex-1 rounded-lg bg-[#0f7350] text-xs text-white hover:bg-[#0a6243]">Confirmar</Button>
                         <Button size="sm" variant="ghost" onClick={() => setMarcandoId(null)} className="h-8 rounded-lg text-xs">Cancelar</Button>
@@ -124,7 +125,7 @@ export default function Podio() {
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]"><UserRound className="h-4 w-4" /></span>
               <div>
                 <p className="text-sm font-semibold">{data?.minhaPosicao ? `Sua posição: ${data.minhaPosicao.position}º de ${data.totalParticipantes}` : "Você ainda não pontuou neste período"}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{data?.minhaPosicao ? `${data.minhaPosicao.pontos} pts · ${data.minhaPosicao.pesoKg} kg reciclados. Só você vê a sua posição.` : "Registre sua reciclagem na estação de pesagem para entrar na disputa."}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{data?.minhaPosicao ? `${data.minhaPosicao.pontos} pts · ${formatarNumero(data.minhaPosicao.pesoKg)} kg reciclados. Só você vê a sua posição.` : "Registre sua reciclagem na estação de pesagem para entrar na disputa."}</p>
               </div>
             </div>
             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#e0ebe4] bg-white p-4">
@@ -204,8 +205,8 @@ function PremiosDoPeriodo({ periodo, premios }: { periodo: Periodo; premios?: Ar
         {form.map((premio, indice) => (
           <div key={premio.posicao} className="grid gap-2 rounded-2xl border border-[#e5eee8] bg-[#fbfdfc] p-3 sm:grid-cols-[90px_1fr_1fr] sm:items-center">
             <span className="text-sm font-semibold">{premio.posicao}º lugar</span>
-            <Input aria-label={`Prêmio do ${premio.posicao}º lugar`} placeholder="Nome do prêmio (vazio = sem prêmio)" value={premio.titulo} onChange={(event) => setForm(form.map((item, posicao) => (posicao === indice ? { ...item, titulo: event.target.value } : item)))} className="h-10 rounded-xl bg-white" />
-            <Input aria-label={`Detalhes do prêmio do ${premio.posicao}º lugar`} placeholder="Detalhes (opcional)" value={premio.descricao} onChange={(event) => setForm(form.map((item, posicao) => (posicao === indice ? { ...item, descricao: event.target.value } : item)))} className="h-10 rounded-xl bg-white" />
+            <Input aria-label={`Prêmio do ${premio.posicao}º lugar`} placeholder="Nome do prêmio (vazio = sem prêmio)" maxLength={120} value={premio.titulo} onChange={(event) => setForm(form.map((item, posicao) => (posicao === indice ? { ...item, titulo: event.target.value } : item)))} className="h-10 rounded-xl bg-white" />
+            <Input aria-label={`Detalhes do prêmio do ${premio.posicao}º lugar`} placeholder="Detalhes (opcional)" maxLength={500} value={premio.descricao} onChange={(event) => setForm(form.map((item, posicao) => (posicao === indice ? { ...item, descricao: event.target.value } : item)))} className="h-10 rounded-xl bg-white" />
           </div>
         ))}
         <div><Button disabled={salvar.isPending} className="h-10 rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]">Salvar prêmios</Button></div>
