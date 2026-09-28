@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateCollectionPoints, prepareCollectionCompletion } from "./regrasColeta";
+import { calculateCollectionPoints, prepareCollectionCompletion, verificarTransicaoColeta } from "./regrasColeta";
 
 describe("calculateCollectionPoints", () => {
   it("concede um ponto por quilograma completo em coleta reciclável concluída", () => {
@@ -25,5 +25,22 @@ describe("calculateCollectionPoints", () => {
       completedAt: "completed",
       notes: "Aguardar portaria",
     });
+  });
+});
+
+describe("regras de peso e de status", () => {
+  const current = { weightGrams: null, notes: null, wasteType: "reciclavel" as const };
+
+  it("bloqueia peso zero ou negativo na conclusão", () => {
+    expect(() => prepareCollectionCompletion({ status: "concluida", weightGrams: 0 }, current)).toThrow("maior que zero");
+    expect(() => prepareCollectionCompletion({ status: "concluida", weightGrams: -500 }, current)).toThrow("maior que zero");
+  });
+
+  it("não deixa pesar de novo uma coleta concluída nem reabrir uma cancelada", () => {
+    expect(() => verificarTransicaoColeta("concluida", "concluida")).toThrow("já foi concluída");
+    expect(() => verificarTransicaoColeta("concluida", "cancelada")).toThrow("já foi concluída");
+    expect(() => verificarTransicaoColeta("cancelada", "agendada")).toThrow("cancelada");
+    expect(() => verificarTransicaoColeta("agendada", "concluida")).not.toThrow();
+    expect(() => verificarTransicaoColeta("ocorrencia", "agendada")).not.toThrow();
   });
 });

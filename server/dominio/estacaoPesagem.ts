@@ -45,8 +45,10 @@ export function avaliarRegistroEstacao(dados: {
   registrosHoje: RegistroAnterior[];
   mediaHistoricaGramas: number;
   agora: Date;
+  /** Sorteio de 10% para conferência; desligado no modo demonstração, para a apresentação ter resultado previsível. */
+  amostragem?: boolean;
 }) {
-  const { pesoGramas, registrosHoje, mediaHistoricaGramas, agora } = dados;
+  const { pesoGramas, registrosHoje, mediaHistoricaGramas, agora, amostragem = true } = dados;
   if (pesoGramas < PESO_MINIMO_ESTACAO_GRAMAS) {
     throw new LimiteAntifraudeExcedidoError(`O peso mínimo por registro é ${(PESO_MINIMO_ESTACAO_GRAMAS / 1000).toLocaleString("pt-BR")} kg.`);
   }
@@ -68,7 +70,7 @@ export function avaliarRegistroEstacao(dados: {
   const motivosRevisao: string[] = [];
   if (pesoGramas > PESO_REVISAO_OBRIGATORIA_GRAMAS) motivosRevisao.push(`peso acima de ${PESO_REVISAO_OBRIGATORIA_GRAMAS / 1000} kg`);
   if (ehPesoAnomalo(pesoGramas, mediaHistoricaGramas)) motivosRevisao.push("peso muito acima do histórico do morador");
-  if (!motivosRevisao.length && sorteio() < FRACAO_AMOSTRAGEM_REVISAO) motivosRevisao.push("sorteado para conferência por amostragem");
+  if (!motivosRevisao.length && amostragem && sorteio() < FRACAO_AMOSTRAGEM_REVISAO) motivosRevisao.push("sorteado para conferência por amostragem");
   return { motivosRevisao };
 }
 
@@ -96,13 +98,21 @@ export function verificarBloqueioTentativas(estacaoId: number, agora = Date.now(
   }
 }
 
+/** Estações com o tablet bloqueado agora por excesso de códigos errados (alerta no painel do administrador). */
+export function estacoesBloqueadas(agora = Date.now()) {
+  return Array.from(tentativas.entries()).filter(([, registro]) => registro.bloqueadoAte > agora).map(([estacaoId]) => estacaoId);
+}
+
+/** Registra um código errado; devolve true quando esta tentativa acabou de bloquear o tablet. */
 export function registrarTentativaErrada(estacaoId: number, agora = Date.now()) {
   const janela = BLOQUEIO_TENTATIVAS_MINUTOS * 60_000;
   const atual = tentativas.get(estacaoId);
   const registro = !atual || agora - atual.primeiraEm > janela ? { erros: 0, primeiraEm: agora, bloqueadoAte: 0 } : atual;
   registro.erros += 1;
+  const bloqueouAgora = registro.erros >= LIMITE_TENTATIVAS_CODIGO && registro.bloqueadoAte <= agora;
   if (registro.erros >= LIMITE_TENTATIVAS_CODIGO) registro.bloqueadoAte = agora + janela;
   tentativas.set(estacaoId, registro);
+  return bloqueouAgora;
 }
 
 export function limparTentativas(estacaoId: number) {

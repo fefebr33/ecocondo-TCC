@@ -6,6 +6,8 @@ import { getDb } from "../db";
 import { obterOuCriarPerfil } from "../db/ecocondo";
 import { buildPendingResidentPerson } from "../dominio/regrasPessoas";
 import { protectedProcedure, router } from "../_core/trpc";
+import { writeAuditLog } from "../audit";
+import { notificarAdministradores, notificarUsuario } from "../notificacoes";
 
 export const withProfile = protectedProcedure.use(async ({ ctx, next }) => {
   const contextoPerfil = await obterOuCriarPerfil(ctx.user);
@@ -70,6 +72,8 @@ export const ecoRouter = router({
         papel: input.role,
         statusAcesso: "pendente",
       }).$returningId();
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pessoa", entidadeId: inserido[0].id, acao: "pessoa_cadastrada", resumo: `${input.name} cadastrado(a) como ${input.role}.`, estadoNovo: { nome: input.name, email, papel: input.role, bloco: input.block || null, apartamento: input.apartment || null } });
+      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "novo_cadastro", titulo: "Novo cadastro", mensagem: `${input.name} foi cadastrado(a) como ${input.role === "administrador" ? "administrador(a)" : "morador(a)"}. O acesso fica pendente até o primeiro login.` }, ctx.user.id);
       return { id: inserido[0].id, residentId: moradorId };
     }),
     definirPapel: administratorOnly.input(z.object({ id: z.number().int().positive(), role: z.enum(papeisEco) })).mutation(async ({ ctx, input }) => {
@@ -88,6 +92,10 @@ export const ecoRouter = router({
       }
       await db.update(pessoas).set({ papel: input.role, atualizadoEm: new Date() }).where(eq(pessoas.id, input.id));
       if (alvo[0].usuarioId) await db.update(perfisAcesso).set({ papel: input.role, moradorId: input.role === "morador" ? alvo[0].moradorId : null, atualizadoEm: new Date() }).where(eq(perfisAcesso.usuarioId, alvo[0].usuarioId));
+      if (input.role !== alvo[0].papel) {
+        await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pessoa", entidadeId: alvo[0].id, acao: "perfil_alterado", resumo: `Perfil de ${alvo[0].nome} alterado de ${alvo[0].papel} para ${input.role}.`, estadoAnterior: { papel: alvo[0].papel }, estadoNovo: { papel: input.role } });
+        await notificarUsuario(db, alvo[0].usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "cadastro_alterado", titulo: "Seu perfil de acesso mudou", mensagem: `Seu perfil no EcoCondo agora é ${input.role === "administrador" ? "administrador(a)" : "morador(a)"}. Saia e entre de novo se o menu não atualizar.` });
+      }
       return { success: true };
     }),
   }),

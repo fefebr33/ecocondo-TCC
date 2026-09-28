@@ -11,10 +11,10 @@ import { classificarPodio } from "../dominio/regrasPodio";
 import { nomePublico, recortarRankingPublico } from "../dominio/privacidadeRanking";
 
 const periodos = periodosPodio;
-type Periodo = (typeof periodos)[number];
+export type Periodo = (typeof periodos)[number];
 
 /** Soma pontos e peso confirmado de cada morador nas coletas concluídas do período. */
-function somarPorMorador(registros: Array<typeof coletas.$inferSelect>) {
+export function somarPorMorador(registros: Array<typeof coletas.$inferSelect>) {
   const totais = new Map<number, { moradorId: number; pontos: number; pesoGramas: number }>();
   for (const registro of registros) {
     if (!registro.moradorId) continue;
@@ -27,7 +27,7 @@ function somarPorMorador(registros: Array<typeof coletas.$inferSelect>) {
 }
 
 /** Calcula o intervalo [inicio, fim] do período de apuração do pódio, a partir de uma data de referência (padrão: hoje). */
-function calcularIntervalo(periodo: Periodo, dataReferencia: Date) {
+export function calcularIntervalo(periodo: Periodo, dataReferencia: Date) {
   const ano = dataReferencia.getFullYear();
   if (periodo === "mensal") {
     const mes = dataReferencia.getMonth();
@@ -49,7 +49,7 @@ async function premiosDoPeriodo(condominioId: number, periodo: Periodo) {
   return linhas.map((linha) => ({ posicao: linha.posicao, titulo: linha.titulo, descricao: linha.descricao }));
 }
 
-async function classificacaoDoPeriodo(condominioId: number, inicio: Date, fim: Date) {
+export async function classificacaoDoPeriodo(condominioId: number, inicio: Date, fim: Date) {
   const db = await getDb();
   const registros = await db.select().from(coletas).where(and(
     eq(coletas.condominioId, condominioId),
@@ -133,6 +133,7 @@ export const podioRouter = router({
       })).max(3),
     })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
+      const anteriores = await premiosDoPeriodo(ctx.eco.condominio.id, input.periodo);
       for (const premio of input.premios) {
         const filtro = and(eq(premiosPodio.condominioId, ctx.eco.condominio.id), eq(premiosPodio.periodo, input.periodo), eq(premiosPodio.posicao, premio.posicao));
         if (!premio.titulo) {
@@ -143,6 +144,17 @@ export const podioRouter = router({
         await db.insert(premiosPodio).values({ condominioId: ctx.eco.condominio.id, periodo: input.periodo, posicao: premio.posicao, titulo: premio.titulo, descricao: premio.descricao || null })
           .onDuplicateKeyUpdate({ set: { titulo: premio.titulo, descricao: premio.descricao || null, atualizadoEm: new Date() } });
       }
+      const atuais = await premiosDoPeriodo(ctx.eco.condominio.id, input.periodo);
+      await writeAuditLog(db, {
+        condominioId: ctx.eco.condominio.id,
+        autorId: ctx.user.id,
+        tipoEntidade: "premio_podio",
+        entidadeId: 0,
+        acao: "premios_podio_configurados",
+        resumo: `Prêmios do pódio ${input.periodo} atualizados.`,
+        estadoAnterior: { premios: anteriores.map((premio) => `${premio.posicao}º: ${premio.titulo}`) },
+        estadoNovo: { premios: atuais.map((premio) => `${premio.posicao}º: ${premio.titulo}`) },
+      });
       return { success: true };
     }),
     marcarPremioEntregue: administratorOnly.input(z.object({
@@ -193,7 +205,7 @@ export const podioRouter = router({
         estadoNovo: { moradorId: input.moradorId, periodo: input.periodo, posicao: classificado.posicao, premio: premio.titulo, observacao: input.observacao || null },
       });
       if (morador[0].usuarioId) {
-        await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: morador[0].usuarioId, tipo: "sistema", titulo: "Prêmio do pódio", mensagem: `Parabéns pelo ${classificado.posicao}º lugar! Seu prêmio "${premio.titulo}" foi registrado como entregue.` });
+        await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: morador[0].usuarioId, tipo: "premio_podio", titulo: "Prêmio do pódio", mensagem: `Parabéns pelo ${classificado.posicao}º lugar! Seu prêmio "${premio.titulo}" foi registrado como entregue.` });
       }
       return { id: inserido[0].id };
     }),

@@ -1,0 +1,44 @@
+import { and, eq } from "drizzle-orm";
+import { condominios, notificacoes, perfisAcesso, tiposNotificacao } from "../drizzle/schema";
+import { getDb } from "./db";
+
+type TipoNotificacao = (typeof tiposNotificacao)[number];
+
+type DadosNotificacao = {
+  condominioId: number;
+  tipo: TipoNotificacao;
+  titulo: string;
+  mensagem: string;
+  coletaId?: number | null;
+};
+
+/** Notificação para uma pessoa (morador ou administrador). Sem usuário vinculado (morador sem login), não há a quem avisar. */
+export async function notificarUsuario(db: any, destinatarioId: number | null | undefined, dados: DadosNotificacao) {
+  if (!destinatarioId) return;
+  await db.insert(notificacoes).values({ condominioId: dados.condominioId, destinatarioId, coletaId: dados.coletaId ?? null, tipo: dados.tipo, titulo: dados.titulo.slice(0, 255), mensagem: dados.mensagem });
+}
+
+/** Notificação para cada administrador do condomínio; `exceto` pula quem fez a ação (ele já sabe o que fez). */
+export async function notificarAdministradores(db: any, dados: DadosNotificacao, exceto?: number | null) {
+  const administradores = await db.select({ usuarioId: perfisAcesso.usuarioId }).from(perfisAcesso).where(and(eq(perfisAcesso.condominioId, dados.condominioId), eq(perfisAcesso.papel, "administrador")));
+  for (const administrador of administradores as Array<{ usuarioId: number }>) {
+    if (exceto && administrador.usuarioId === exceto) continue;
+    await notificarUsuario(db, administrador.usuarioId, dados);
+  }
+}
+
+/**
+ * Falha operacional (rotina agendada que quebrou, tablet bloqueado etc.): avisa os administradores de todos os condomínios.
+ * Nunca lança erro, para não esconder a falha original.
+ */
+export async function notificarFalhaOperacional(titulo: string, detalhe: string, condominioId?: number) {
+  try {
+    const db = await getDb();
+    const alvos = condominioId ? [{ id: condominioId }] : await db.select({ id: condominios.id }).from(condominios);
+    for (const alvo of alvos) {
+      await notificarAdministradores(db, { condominioId: alvo.id, tipo: "falha_operacional", titulo, mensagem: detalhe.slice(0, 1000) });
+    }
+  } catch (error) {
+    console.error("[Notificações] não foi possível avisar a falha operacional:", error);
+  }
+}

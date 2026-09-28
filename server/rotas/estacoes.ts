@@ -1,15 +1,19 @@
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
+import QRCode from "qrcode";
 import { and, asc, desc, eq, gt, gte, isNotNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, estacoesPesagem, moradores, notificacoes, perfisAcesso, tiposResiduo } from "../../drizzle/schema";
-import type { EstacaoPesagem } from "../../drizzle/schema";
+import { coletas, estacoesPesagem, moradores, tiposResiduo } from "../../drizzle/schema";
+import type { EstacaoPesagem, Morador } from "../../drizzle/schema";
+import { rotuloResiduo, residuoNaFrase } from "@shared/rotulos";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./nucleo";
 import { publicProcedure, router } from "../_core/trpc";
 import { writeAuditLog } from "../audit";
 import { salvarImagemBase64 } from "../storage";
 import { calculateCollectionPoints } from "../dominio/regrasColeta";
+import { MovimentacaoDuplicadaError, movimentarPontos } from "../pontos";
+import { notificarAdministradores, notificarFalhaOperacional, notificarUsuario } from "../notificacoes";
 import { LimiteAntifraudeExcedidoError } from "../dominio/antifraude";
 import {
   LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS,
@@ -55,7 +59,9 @@ async function moradorPorCodigo(estacao: EstacaoPesagem, codigo: string) {
   )).limit(1);
   const morador = encontrado[0];
   if (!morador || morador.status !== "ativo" || !morador.usuarioId) {
-    registrarTentativaErrada(estacao.id);
+    if (registrarTentativaErrada(estacao.id)) {
+      await notificarFalhaOperacional("Estação de pesagem bloqueada", `O tablet "${estacao.nome}" (${estacao.local}) recebeu muitos códigos errados seguidos e ficou bloqueado por alguns minutos. Se não foi um morador confuso, confira quem está usando o tablet.`, estacao.condominioId);
+    }
     throw new TRPCError({ code: "NOT_FOUND", message: "Código inválido ou vencido. Gere um novo código no aplicativo EcoCondo." });
   }
   limparTentativas(estacao.id);
@@ -66,6 +72,34 @@ function inicioDoDia(data: Date) {
   const inicio = new Date(data);
   inicio.setHours(0, 0, 0, 0);
   return inicio;
+}
+
+function formatarKg(pesoGramas: number) {
+  return (pesoGramas / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * Confere um registro antes de gravar: limites rígidos (bloqueiam) e motivos para a revisão do administrador.
+ * No modo demonstração não há sorteio de conferência, para a apresentação ter resultado previsível.
+ */
+async function avaliarRegistro(estacao: EstacaoPesagem, morador: Morador, tipoResiduo: (typeof tiposResiduo)[number], pesoGramas: number, agora: Date) {
+  const db = await getDb();
+  const registrosHoje = await db.select({ pesoGramas: coletas.pesoGramas, concluidaEm: coletas.concluidaEm }).from(coletas).where(and(
+    eq(coletas.moradorId, morador.id),
+    isNotNull(coletas.estacaoId),
+    eq(coletas.status, "concluida"),
+    gte(coletas.concluidaEm, inicioDoDia(agora)),
+  ));
+  const historico = await db.select().from(coletas).where(and(
+    eq(coletas.moradorId, morador.id),
+    eq(coletas.status, "concluida"),
+    eq(coletas.tipoResiduo, tipoResiduo),
+    or(sql`${coletas.aprovacaoPesoStatus} IS NULL`, ne(coletas.aprovacaoPesoStatus, "rejeitado")),
+  )).orderBy(desc(coletas.concluidaEm)).limit(10);
+  const pesos = historico.map((registro) => registro.pesoGramas ?? 0);
+  const mediaHistoricaGramas = pesos.length ? pesos.reduce((soma, peso) => soma + peso, 0) / pesos.length : 0;
+  const { motivosRevisao } = avaliarRegistroEstacao({ pesoGramas, registrosHoje, mediaHistoricaGramas, agora, amostragem: !estacao.modoDemonstracao });
+  return { motivosRevisao, pontosCalculados: calculateCollectionPoints("concluida", tipoResiduo, pesoGramas) };
 }
 
 export const estacoesRouter = router({
@@ -116,6 +150,19 @@ export const estacoesRouter = router({
       await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "estacao", entidadeId: input.id, acao: input.active ? "estacao_ativada" : "estacao_desativada", resumo: input.active ? "Estação de pesagem reativada." : "Estação de pesagem desativada." });
       return { success: true };
     }),
+    /** Liga o modo demonstração (sem balança real): o peso é digitado como se viesse da balança e a foto do visor fica opcional. */
+    definirModoDemonstracao: administratorOnly.input(z.object({ id: z.number().int().positive(), enabled: z.boolean() })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      const [resultado] = await db.update(estacoesPesagem).set({ modoDemonstracao: input.enabled, atualizadoEm: new Date() }).where(and(eq(estacoesPesagem.id, input.id), eq(estacoesPesagem.condominioId, ctx.eco.condominio.id)));
+      if (!resultado.affectedRows) throw new TRPCError({ code: "NOT_FOUND", message: "Estação não encontrada." });
+      await writeAuditLog(db, {
+        condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "estacao", entidadeId: input.id,
+        acao: input.enabled ? "estacao_modo_demonstracao_ligado" : "estacao_modo_demonstracao_desligado",
+        resumo: input.enabled ? "Modo demonstração ligado: balança simulada, foto opcional e sem sorteio de conferência." : "Modo demonstração desligado: a estação volta a exigir a foto do visor da balança.",
+        estadoAnterior: { modoDemonstracao: !input.enabled }, estadoNovo: { modoDemonstracao: input.enabled },
+      });
+      return { success: true };
+    }),
   }),
   estacao: router({
     /** No app do morador: gera o código de 6 dígitos (uso único, vale poucos minutos) para digitar no tablet. */
@@ -135,88 +182,109 @@ export const estacoesRouter = router({
         )).limit(1);
         if (emUso[0]) continue;
         await db.update(moradores).set({ codigoEstacao: codigo, codigoEstacaoExpiraEm: expiraEm, atualizadoEm: new Date() }).where(eq(moradores.id, ctx.eco.morador.id));
-        return { code: codigo, expiresAt: expiraEm };
+        // O código em si não vai para a notificação (ela fica guardada); só o aviso de que há um código válido.
+        await notificarUsuario(db, ctx.user.id, { condominioId: ctx.eco.condominio.id, tipo: "codigo_estacao", titulo: "Código da estação disponível", mensagem: `Seu código (e o QR) para a estação de pesagem está na página Coletas e vale até ${expiraEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}. Ele só pode ser usado uma vez.` });
+        const qrDataUrl = await QRCode.toDataURL(codigo, { margin: 1, width: 240 });
+        return { code: codigo, expiresAt: expiraEm, qrDataUrl };
       }
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível gerar o código agora. Tente de novo." });
     }),
-    status: estacaoPareada.query(({ ctx }) => ({ id: ctx.estacao.id, nome: ctx.estacao.nome, local: ctx.estacao.local, limitePorRegistroKg: LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS / 1000 })),
+    status: estacaoPareada.query(({ ctx }) => ({ id: ctx.estacao.id, nome: ctx.estacao.nome, local: ctx.estacao.local, limitePorRegistroKg: LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS / 1000, modoDemonstracao: ctx.estacao.modoDemonstracao })),
     /** Mostra no tablet de quem é o código, para o morador confirmar antes de pesar (não consome o código). */
     identificar: estacaoPareada.input(z.object({ code: codigoInput })).mutation(async ({ ctx, input }) => {
       const morador = await moradorPorCodigo(ctx.estacao, input.code);
       return { firstName: morador.nome.split(" ")[0], block: morador.bloco, apartment: morador.apartamento };
     }),
+    /**
+     * Conferência antes de confirmar: mostra peso, unidade, material e o resultado previsto (pontos na hora, revisão ou bloqueio)
+     * sem gravar nada e sem consumir o código. O sorteio de conferência só acontece na confirmação.
+     */
+    previa: estacaoPareada.input(z.object({
+      code: codigoInput,
+      wasteType: z.enum(tiposResiduo),
+      weightGrams: z.number().int().max(LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS * 2),
+    })).mutation(async ({ ctx, input }) => {
+      const morador = await moradorPorCodigo(ctx.estacao, input.code);
+      const resumo = { estacao: ctx.estacao.nome, morador: morador.nome.split(" ")[0], bloco: morador.bloco, material: rotuloResiduo[input.wasteType], pesoKg: formatarKg(Math.max(0, input.weightGrams)), unidade: "kg", pesagemSimulada: ctx.estacao.modoDemonstracao };
+      try {
+        const { motivosRevisao, pontosCalculados } = await avaliarRegistro(ctx.estacao, morador, input.wasteType, input.weightGrams, new Date());
+        return { ...resumo, bloqueio: null as string | null, pontosPrevistos: pontosCalculados, motivosRevisao, sujeitoASorteio: !ctx.estacao.modoDemonstracao && motivosRevisao.length === 0 };
+      } catch (error) {
+        if (error instanceof LimiteAntifraudeExcedidoError) return { ...resumo, bloqueio: error.message, pontosPrevistos: 0, motivosRevisao: [] as string[], sujeitoASorteio: false };
+        throw error;
+      }
+    }),
     registrar: estacaoPareada.input(z.object({
       code: codigoInput,
       wasteType: z.enum(tiposResiduo),
-      weightGrams: z.number().int().min(0).max(LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS * 2),
-      imageDataUrl: z.string().min(30, "Tire a foto do visor da balança para registrar.").max(5_500_000),
+      weightGrams: z.number().int().max(LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS * 2),
+      imageDataUrl: z.string().max(5_500_000).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       const estacao = ctx.estacao;
+      const simulada = estacao.modoDemonstracao;
+      if (!simulada && (!input.imageDataUrl || input.imageDataUrl.length < 30)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Tire a foto do visor da balança para registrar." });
+      }
       const morador = await moradorPorCodigo(estacao, input.code);
       const agora = new Date();
 
-      const registrosHoje = await db.select({ pesoGramas: coletas.pesoGramas, concluidaEm: coletas.concluidaEm }).from(coletas).where(and(
-        eq(coletas.moradorId, morador.id),
-        isNotNull(coletas.estacaoId),
-        eq(coletas.status, "concluida"),
-        gte(coletas.concluidaEm, inicioDoDia(agora)),
-      ));
-      const historico = await db.select().from(coletas).where(and(
-        eq(coletas.moradorId, morador.id),
-        eq(coletas.status, "concluida"),
-        eq(coletas.tipoResiduo, input.wasteType),
-        or(sql`${coletas.aprovacaoPesoStatus} IS NULL`, ne(coletas.aprovacaoPesoStatus, "rejeitado")),
-      )).orderBy(desc(coletas.concluidaEm)).limit(10);
-      const pesos = historico.map((registro) => registro.pesoGramas ?? 0);
-      const mediaHistoricaGramas = pesos.length ? pesos.reduce((soma, peso) => soma + peso, 0) / pesos.length : 0;
-
-      let motivosRevisao: string[];
+      let avaliacao;
       try {
-        ({ motivosRevisao } = avaliarRegistroEstacao({ pesoGramas: input.weightGrams, registrosHoje, mediaHistoricaGramas, agora }));
+        avaliacao = await avaliarRegistro(estacao, morador, input.wasteType, input.weightGrams, agora);
       } catch (error) {
         if (error instanceof LimiteAntifraudeExcedidoError) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
         throw error;
       }
+      const { motivosRevisao, pontosCalculados } = avaliacao;
 
-      let foto;
-      try {
-        foto = await salvarImagemBase64(input.imageDataUrl, `coletas/${estacao.condominioId}/estacao-${estacao.id}-${nanoid(8)}`);
-      } catch (error) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Não foi possível salvar a foto da balança." });
+      let foto: { key: string | null; url: string | null } = { key: null, url: null };
+      if (input.imageDataUrl) {
+        try {
+          foto = await salvarImagemBase64(input.imageDataUrl, `coletas/${estacao.condominioId}/estacao-${estacao.id}-${nanoid(8)}`);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Não foi possível salvar a foto da balança." });
+        }
       }
 
-      // Consome o código antes de gravar: dois envios simultâneos com o mesmo código geram um único registro.
-      const [consumo] = await db.update(moradores).set({ codigoEstacao: null, codigoEstacaoExpiraEm: null }).where(and(eq(moradores.id, morador.id), eq(moradores.codigoEstacao, input.code)));
-      if (!consumo.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Este código já foi usado. Gere um novo código no aplicativo." });
-
       const emRevisao = motivosRevisao.length > 0;
-      const pontosCalculados = calculateCollectionPoints("concluida", input.wasteType, input.weightGrams);
       const pontos = emRevisao ? 0 : pontosCalculados;
-      const inserida = await db.insert(coletas).values({
-        condominioId: estacao.condominioId,
-        moradorId: morador.id,
-        criadoPorId: morador.usuarioId,
-        concluidoPorId: morador.usuarioId,
-        estacaoId: estacao.id,
-        tipoResiduo: input.wasteType,
-        bloco: morador.bloco,
-        agendadaPara: agora,
-        concluidaEm: agora,
-        pesoGramas: input.weightGrams,
-        pontosConcedidos: pontos,
-        status: "concluida",
-        observacoes: emRevisao ? `Em revisão: ${motivosRevisao.join("; ")}.` : null,
-        chaveFoto: foto.key,
-        urlFoto: foto.url,
-        pendenteAprovacaoPeso: emRevisao,
-        aprovacaoPesoStatus: emRevisao ? "pendente" : null,
-      }).$returningId();
-      const coletaId = inserida[0].id;
-      if (pontos) await db.update(moradores).set({ pontos: sql`${moradores.pontos} + ${pontos}`, atualizadoEm: new Date() }).where(eq(moradores.id, morador.id));
-      await db.update(estacoesPesagem).set({ ultimoUsoEm: agora }).where(eq(estacoesPesagem.id, estacao.id));
+      const kg = formatarKg(input.weightGrams);
+      const observacoes = [simulada ? "Pesagem simulada (modo demonstração)." : null, emRevisao ? `Em revisão: ${motivosRevisao.join("; ")}.` : null].filter(Boolean).join(" ") || null;
+      let coletaId = 0;
+      let saldo: number | null = null;
+      await db.transaction(async (tx) => {
+        // Consome o código na mesma transação do registro: dois envios simultâneos com o mesmo código geram um único registro.
+        const [consumo] = await tx.update(moradores).set({ codigoEstacao: null, codigoEstacaoExpiraEm: null }).where(and(eq(moradores.id, morador.id), eq(moradores.codigoEstacao, input.code)));
+        if (!consumo.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Este código já foi usado. Gere um novo código no aplicativo." });
+        const inserida = await tx.insert(coletas).values({
+          condominioId: estacao.condominioId,
+          moradorId: morador.id,
+          criadoPorId: morador.usuarioId,
+          concluidoPorId: morador.usuarioId,
+          estacaoId: estacao.id,
+          tipoResiduo: input.wasteType,
+          bloco: morador.bloco,
+          agendadaPara: agora,
+          concluidaEm: agora,
+          pesoGramas: input.weightGrams,
+          pontosConcedidos: pontos,
+          status: "concluida",
+          observacoes,
+          chaveFoto: foto.key,
+          urlFoto: foto.url,
+          pendenteAprovacaoPeso: emRevisao,
+          aprovacaoPesoStatus: emRevisao ? "pendente" : null,
+          pesagemSimulada: simulada,
+        }).$returningId();
+        coletaId = inserida[0].id;
+        if (pontos) saldo = await movimentarPontos(tx, { condominioId: estacao.condominioId, moradorId: morador.id, tipo: "credito_coleta", pontos, coletaId, autorId: morador.usuarioId, descricao: `Coleta nº ${coletaId} na estação "${estacao.nome}" (${kg} kg${simulada ? ", balança simulada" : ""})` });
+        await tx.update(estacoesPesagem).set({ ultimoUsoEm: agora }).where(eq(estacoesPesagem.id, estacao.id));
+      }).catch((error: unknown) => {
+        if (error instanceof MovimentacaoDuplicadaError) throw new TRPCError({ code: "CONFLICT", message: "Os pontos deste registro já foram lançados." });
+        throw error;
+      });
 
-      const kg = (input.weightGrams / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
       await writeAuditLog(db, {
         condominioId: estacao.condominioId,
         autorId: morador.usuarioId,
@@ -225,33 +293,25 @@ export const estacoesRouter = router({
         acao: emRevisao ? "coleta_sinalizada_suspeita" : "registro_estacao",
         resumo: emRevisao
           ? `Registro de ${kg} kg na estação "${estacao.nome}" enviado para revisão (${motivosRevisao.join("; ")}). Pontos retidos até a aprovação.`
-          : `Registro de ${kg} kg na estação "${estacao.nome}".`,
-        estadoNovo: { estacaoId: estacao.id, moradorId: morador.id, tipoResiduo: input.wasteType, pesoGramas: input.weightGrams, pontosConcedidos: pontos, pontosPendentes: emRevisao ? pontosCalculados : 0, motivosRevisao },
+          : `Registro de ${kg} kg na estação "${estacao.nome}"${simulada ? " (balança simulada, modo demonstração)" : ""}; ${pontos} ponto(s).`,
+        estadoNovo: { estacaoId: estacao.id, moradorId: morador.id, tipoResiduo: input.wasteType, pesoGramas: input.weightGrams, pontosConcedidos: pontos, pontosPendentes: emRevisao ? pontosCalculados : 0, motivosRevisao, pesagemSimulada: simulada },
       });
+
+      const base = { condominioId: estacao.condominioId, coletaId };
       if (emRevisao) {
-        const administradores = await db.select({ usuarioId: perfisAcesso.usuarioId }).from(perfisAcesso).where(and(eq(perfisAcesso.condominioId, estacao.condominioId), eq(perfisAcesso.papel, "administrador")));
-        for (const administrador of administradores) {
-          await db.insert(notificacoes).values({
-            condominioId: estacao.condominioId,
-            destinatarioId: administrador.usuarioId,
-            coletaId,
-            tipo: "sistema",
-            titulo: "Registro da estação para conferir",
-            mensagem: `Registro de ${kg} kg na estação "${estacao.nome}" (bloco ${morador.bloco}): ${motivosRevisao.join("; ")}. Confira a foto da balança em Coletas > Registros aguardando aprovação.`,
-          });
-        }
+        const anomalo = motivosRevisao.some((motivo) => motivo.includes("histórico"));
+        await notificarAdministradores(db, { ...base, tipo: anomalo ? "peso_suspeito" : "pontos_pendentes", titulo: anomalo ? "Peso suspeito na estação" : "Pontos pendentes de conferência", mensagem: `Registro nº ${coletaId}: ${kg} kg na estação "${estacao.nome}" (bloco ${morador.bloco}). Motivo: ${motivosRevisao.join("; ")}. Confira a foto da balança em Coletas > Registros aguardando aprovação.` });
+      } else {
+        await notificarAdministradores(db, { ...base, tipo: "coleta_concluida", titulo: "Reciclagem registrada na estação", mensagem: `Registro nº ${coletaId}: ${kg} kg de ${residuoNaFrase[input.wasteType]} na estação "${estacao.nome}" (bloco ${morador.bloco}); ${pontos} ponto(s).` });
       }
-      await db.insert(notificacoes).values({
-        condominioId: estacao.condominioId,
-        destinatarioId: morador.usuarioId,
-        coletaId,
-        tipo: "coleta_concluida",
-        titulo: emRevisao ? "Registro em conferência" : "Reciclagem registrada",
-        mensagem: emRevisao
-          ? `Seu registro de ${kg} kg foi recebido e será conferido pela administração. Os pontos entram depois da aprovação.`
-          : `Seu registro de ${kg} kg na estação "${estacao.nome}" gerou ${pontos} ponto(s).`,
-      });
-      return { id: coletaId, pointsAwarded: pontos, pendingApproval: emRevisao, pendingPoints: emRevisao ? pontosCalculados : 0 };
+      await notificarUsuario(db, morador.usuarioId, { ...base, tipo: "pesagem_registrada", titulo: "Pesagem registrada", mensagem: `A estação "${estacao.nome}" registrou ${kg} kg de ${residuoNaFrase[input.wasteType]} (coleta nº ${coletaId})${simulada ? ", em modo demonstração" : ""}.` });
+      if (emRevisao) {
+        await notificarUsuario(db, morador.usuarioId, { ...base, tipo: "pontos_pendentes", titulo: "Registro em conferência", mensagem: `Seu registro de ${kg} kg será conferido pela administração. ${pontosCalculados ? `Os ${pontosCalculados} ponto(s) entram depois da aprovação.` : "Material sem pontuação, mas o peso conta nos indicadores depois da aprovação."}` });
+      } else {
+        await notificarUsuario(db, morador.usuarioId, { ...base, tipo: "coleta_concluida", titulo: "Coleta concluída", mensagem: `Sua coleta nº ${coletaId} foi concluída e já conta nos indicadores do condomínio.` });
+        if (pontos) await notificarUsuario(db, morador.usuarioId, { ...base, tipo: "pontos_ganhos", titulo: `+${pontos} ponto(s)`, mensagem: `Você ganhou ${pontos} ponto(s) pela coleta nº ${coletaId}. Saldo atual: ${saldo} ponto(s).` });
+      }
+      return { id: coletaId, status: "concluida" as const, pointsAwarded: pontos, pendingApproval: emRevisao, pendingPoints: emRevisao ? pontosCalculados : 0, reviewReasons: motivosRevisao, simulated: simulada, weightKg: kg, notificationsSent: true };
     }),
   }),
 });

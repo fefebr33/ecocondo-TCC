@@ -1,10 +1,14 @@
 import type { Request, Response } from "express";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte } from "drizzle-orm";
 import { coletas, notificacoes, moradores } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { residuoNaFrase } from "@shared/rotulos";
 import { reminderRecipients } from "../dominio/regrasLembrete";
 import { exigirAdministrador } from "../_core/acesso";
+import { notificarAdministradores } from "../notificacoes";
+
+/** Depois deste tempo sem conclusão, a coleta agendada vira "aguardando pesagem" para a administração. */
+export const HORAS_PARA_AGUARDANDO_PESAGEM = 2;
 
 /** Cria uma única notificação de lembrete para cada destinatário nas 24h anteriores à coleta. */
 export async function runCollectionReminders() {
@@ -24,7 +28,18 @@ export async function runCollectionReminders() {
     }
   }
 
-  return { evaluatedCollections: proximas.length, remindersCreated: lembretesCriados };
+  // Coletas cuja hora já passou e que ainda não foram pesadas: um único aviso por coleta aos administradores.
+  const limite = new Date(agora.getTime() - HORAS_PARA_AGUARDANDO_PESAGEM * 60 * 60 * 1000);
+  const atrasadas = await db.select().from(coletas).where(and(inArray(coletas.status, ["agendada", "em_andamento"]), lt(coletas.agendadaPara, limite)));
+  let avisosAtraso = 0;
+  for (const coleta of atrasadas) {
+    const jaAvisado = await db.select({ id: notificacoes.id }).from(notificacoes).where(and(eq(notificacoes.coletaId, coleta.id), eq(notificacoes.tipo, "aguardando_pesagem"))).limit(1);
+    if (jaAvisado[0]) continue;
+    await notificarAdministradores(db, { condominioId: coleta.condominioId, coletaId: coleta.id, tipo: "aguardando_pesagem", titulo: "Coleta aguardando pesagem", mensagem: `A coleta nº ${coleta.id} de ${residuoNaFrase[coleta.tipoResiduo]} (bloco ${coleta.bloco}) estava marcada para ${coleta.agendadaPara.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" })} e ainda não foi concluída. Conclua com o peso ou cancele informando o motivo.` });
+    avisosAtraso += 1;
+  }
+
+  return { evaluatedCollections: proximas.length, remindersCreated: lembretesCriados, overdueWarnings: avisosAtraso };
 }
 
 /** Endpoint manual para disparar os lembretes (apenas administradores). */

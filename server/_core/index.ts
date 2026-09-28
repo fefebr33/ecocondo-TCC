@@ -12,6 +12,15 @@ import { serveStatic, setupVite } from "./vite";
 import { runCollectionReminders, sendCollectionReminders } from "../scheduled/collectionReminders";
 import { runAnnualReport, sendAnnualReportCheck } from "../scheduled/annualReport";
 import { runRecurringCollections, sendRecurringCollectionsCheck } from "../scheduled/recurringCollections";
+import { notificarFalhaOperacional } from "../notificacoes";
+
+/** Registra a falha no log do servidor e avisa os administradores (notificação de falha operacional). */
+function falhaDaRotina(rotina: string) {
+  return (error: unknown) => {
+    console.error(`[${rotina}] falha na verificação:`, error);
+    return notificarFalhaOperacional(`Falha na rotina: ${rotina}`, `A rotina automática "${rotina}" falhou: ${error instanceof Error ? error.message : String(error)}. Ela roda de novo na próxima hora; se o aviso se repetir, confira o servidor e o banco de dados.`);
+  };
+}
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -90,16 +99,16 @@ async function startServer() {
   // cria os lembretes das coletas das próximas 24h (a ordem garante que a coleta recém-gerada já receba o lembrete).
   const verificarColetas = () =>
     runRecurringCollections()
-      .catch((error) => console.error("[Recorrência] falha na verificação:", error))
+      .catch(falhaDaRotina("Coletas recorrentes"))
       .then(() => runCollectionReminders())
-      .catch((error) => console.error("[Lembretes] falha na verificação:", error));
+      .catch(falhaDaRotina("Lembretes e coletas atrasadas"));
   verificarColetas();
   setInterval(verificarColetas, HOUR_MS);
 
   // Em janeiro, gera o relatório anual consolidado.
-  runAnnualReport().catch((error) => console.error("[Relatório anual] falha na verificação inicial:", error));
+  runAnnualReport().catch(falhaDaRotina("Relatório anual"));
   setInterval(() => {
-    runAnnualReport().catch((error) => console.error("[Relatório anual] falha na verificação periódica:", error));
+    runAnnualReport().catch(falhaDaRotina("Relatório anual"));
   }, DAY_MS);
 }
 

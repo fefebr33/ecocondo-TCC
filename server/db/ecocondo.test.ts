@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../db", () => ({ getDb: vi.fn() }));
 vi.mock("../_core/env", () => ({ ENV: { ownerOpenId: "owner" } }));
+vi.mock("../notificacoes", () => ({ notificarAdministradores: vi.fn(async () => undefined) }));
 
 import { getDb } from "../db";
 import { obterOuCriarPerfil } from "./ecocondo";
