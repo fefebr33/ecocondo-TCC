@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { formatarNumero } from "@/lib/utils";
-import { CheckCircle2, EyeOff, Gift, History, Lightbulb, Medal, Trophy, UserRound } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, EyeOff, Gift, History, Lightbulb, Medal, Trophy, UserRound } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -19,6 +19,20 @@ const periodos = [
 type Periodo = (typeof periodos)[number]["value"];
 
 const medalha = ["#c99a2e", "#9aa4ad", "#a5672f"];
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+/** Anda um período para trás (-1) ou para a frente (+1) a partir da data de referência. */
+function deslocar(periodo: Periodo, referencia: Date, passo: number) {
+  const meses = periodo === "mensal" ? 1 : periodo === "semestral" ? 6 : 12;
+  return new Date(referencia.getFullYear(), referencia.getMonth() + passo * meses, 1);
+}
+
+function nomeDoPeriodo(periodo: Periodo, referencia: Date) {
+  const ano = referencia.getFullYear();
+  if (periodo === "mensal") return `${MESES[referencia.getMonth()]} de ${ano}`;
+  if (periodo === "semestral") return `${referencia.getMonth() < 6 ? "1º" : "2º"} semestre de ${ano}`;
+  return `ano de ${ano}`;
+}
 
 /** Ideias de prêmio que não pesam no bolso dos outros moradores (não saem da taxa condominial). */
 const ideiasDePremio = [
@@ -34,9 +48,13 @@ const premiosVazios = () => [1, 2, 3].map((posicao) => ({ posicao, titulo: "", d
 
 export default function Podio() {
   const [periodo, setPeriodo] = useState<Periodo>("mensal");
+  const [referencia, setReferencia] = useState(() => { const hoje = new Date(); return new Date(hoje.getFullYear(), hoje.getMonth(), 1); });
   const utils = trpc.useUtils();
   const profile = trpc.perfil.meuPerfil.useQuery();
-  const { data, isLoading } = trpc.podio.ranking.useQuery({ periodo });
+  const { data, isLoading, error } = trpc.podio.ranking.useQuery({ periodo, dataReferencia: referencia });
+  const proximo = deslocar(periodo, referencia, 1);
+  const podeAvancar = proximo <= new Date();
+  const periodoAtual = !podeAvancar;
   const isAdmin = profile.data?.role === "administrador";
   const isResident = profile.data?.role === "morador";
   const historico = trpc.podio.historicoPremios.useQuery(undefined, { enabled: isAdmin });
@@ -69,7 +87,7 @@ export default function Podio() {
         title="Pódio de reciclagem"
         description="Os três moradores que mais reciclaram no período sobem ao pódio e ganham o prêmio definido pelo síndico. Para proteger a privacidade de todos, ninguém abaixo do 3º lugar é mostrado aos moradores."
         action={<div className="flex gap-2 rounded-xl border border-[#dce8e0] bg-white p-1">{periodos.map((item) => (
-          <Button key={item.value} size="sm" variant="ghost" onClick={() => setPeriodo(item.value)} className={`h-8 rounded-lg px-3 text-xs font-semibold ${periodo === item.value ? "bg-[#0f7350] text-white hover:bg-[#0a6243] hover:text-white" : "text-muted-foreground"}`}>{item.label}</Button>
+          <Button key={item.value} size="sm" variant="ghost" onClick={() => { setPeriodo(item.value); const hoje = new Date(); setReferencia(new Date(hoje.getFullYear(), hoje.getMonth(), 1)); }} className={`h-8 rounded-lg px-3 text-xs font-semibold ${periodo === item.value ? "bg-[#0f7350] text-white hover:bg-[#0a6243] hover:text-white" : "text-muted-foreground"}`}>{item.label}</Button>
         ))}</div>}
       />
 
@@ -77,13 +95,20 @@ export default function Podio() {
         <div className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff3df] text-[#7a4d0a]"><Trophy className="h-5 w-5" /></span>
           <div>
-            <p className="font-semibold">Top 3 do período {periodos.find((item) => item.value === periodo)?.label.toLowerCase()}</p>
-            <p className="text-sm text-muted-foreground">Pontuação das coletas concluídas neste período. Empate nos pontos é decidido pelo peso; se continuar, os moradores dividem a posição.</p>
+            <p className="font-semibold">Top 3 de {nomeDoPeriodo(periodo, referencia)}{periodoAtual ? " (em andamento)" : ""}</p>
+            <p className="text-sm text-muted-foreground">Pontos ganhos com coletas concluídas{data ? ` de ${formatDate(data.intervalo.inicio)} a ${formatDate(data.intervalo.fim)}` : " no período"}. Empate nos pontos é decidido pelo peso confirmado; se continuar, os moradores dividem a posição.</p>
           </div>
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-[#e0ebe4] bg-[#fbfdfc] p-1.5" role="group" aria-label="Escolher o período do pódio">
+          <Button size="sm" variant="ghost" onClick={() => setReferencia(deslocar(periodo, referencia, -1))} className="h-8 rounded-lg px-2 text-xs"><ChevronLeft className="mr-1 h-4 w-4" />Anterior</Button>
+          <span className="text-center text-sm font-semibold capitalize">{nomeDoPeriodo(periodo, referencia)}</span>
+          <Button size="sm" variant="ghost" disabled={!podeAvancar} onClick={() => setReferencia(proximo)} className="h-8 rounded-lg px-2 text-xs">Próximo<ChevronRight className="ml-1 h-4 w-4" /></Button>
         </div>
 
         {isLoading ? (
           <p className="mt-6 text-sm text-muted-foreground">Calculando ranking do período...</p>
+        ) : error ? (
+          <p role="alert" className="mt-6 text-sm text-destructive">Não foi possível carregar o pódio: {error.message}</p>
         ) : top3.length === 0 ? (
           <p className="mt-6 text-sm leading-6 text-muted-foreground">Ainda não há coletas concluídas suficientes neste período para formar o pódio.</p>
         ) : (
@@ -97,7 +122,7 @@ export default function Podio() {
                 <p className="mt-1 text-sm font-semibold">{linha.nome}{linha.voce ? " (você)" : ""}</p>
                 <p className="text-xs text-muted-foreground">Bloco {linha.bloco}{linha.apartamento ? ` · ${linha.apartamento}` : ""}</p>
                 <p className="mt-3 text-lg font-bold text-[#0f7350]">{linha.pontos} pts</p>
-                <p className="text-xs text-muted-foreground">{formatarNumero(linha.pesoKg)} kg reciclados</p>
+                <p className="text-xs text-muted-foreground">{formatarNumero(linha.pesoKg)} kg de peso confirmado</p>
                 <p className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-[#fff8ec] px-2 py-1.5 text-[11px] font-semibold text-[#7a4d0a]"><Gift className="h-3.5 w-3.5 shrink-0" />{linha.premio ? linha.premio.titulo : "Prêmio a definir"}</p>
                 {isAdmin && linha.moradorId !== null && (
                   linha.premioEntregue ? (
@@ -106,7 +131,7 @@ export default function Podio() {
                     <div className="mt-2 grid gap-2">
                       <Input aria-label="Observação da entrega do prêmio" placeholder="Observação (opcional)" maxLength={500} value={observacao} onChange={(event) => setObservacao(event.target.value)} className="h-9 rounded-lg bg-white text-xs" />
                       <div className="flex gap-2">
-                        <Button size="sm" disabled={marcarEntregue.isPending} onClick={() => marcarEntregue.mutate({ moradorId: linha.moradorId!, periodo, observacao: observacao.trim() || undefined })} className="h-8 flex-1 rounded-lg bg-[#0f7350] text-xs text-white hover:bg-[#0a6243]">Confirmar</Button>
+                        <Button size="sm" disabled={marcarEntregue.isPending} onClick={() => marcarEntregue.mutate({ moradorId: linha.moradorId!, periodo, dataReferencia: referencia, observacao: observacao.trim() || undefined })} className="h-8 flex-1 rounded-lg bg-[#0f7350] text-xs text-white hover:bg-[#0a6243]">Confirmar</Button>
                         <Button size="sm" variant="ghost" onClick={() => setMarcandoId(null)} className="h-8 rounded-lg text-xs">Cancelar</Button>
                       </div>
                     </div>
@@ -124,8 +149,8 @@ export default function Podio() {
             <div className="flex items-start gap-3 rounded-2xl border border-[#cfe1d7] bg-[#f7fbf8] p-4">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]"><UserRound className="h-4 w-4" /></span>
               <div>
-                <p className="text-sm font-semibold">{data?.minhaPosicao ? `Sua posição: ${data.minhaPosicao.position}º de ${data.totalParticipantes}` : "Você ainda não pontuou neste período"}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{data?.minhaPosicao ? `${data.minhaPosicao.pontos} pts · ${formatarNumero(data.minhaPosicao.pesoKg)} kg reciclados. Só você vê a sua posição.` : "Registre sua reciclagem na estação de pesagem para entrar na disputa."}</p>
+                <p className="text-sm font-semibold">{data?.minhaPosicao ? `Sua posição: ${data.minhaPosicao.position}º de ${data.totalParticipantes}` : "Você não pontuou neste período"}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{data?.minhaPosicao ? `${data.minhaPosicao.pontos} pts · ${formatarNumero(data.minhaPosicao.pesoKg)} kg de peso confirmado. Só você vê a sua posição.` : periodoAtual ? "Registre sua reciclagem na estação de pesagem para entrar na disputa." : "Nenhuma coleta sua foi concluída neste período."}</p>
               </div>
             </div>
             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#e0ebe4] bg-white p-4">
@@ -148,7 +173,7 @@ export default function Podio() {
                     <b className="grid h-8 w-8 place-items-center rounded-xl bg-[#f0f5f2] text-xs text-muted-foreground">{linha.position}</b>
                     <span><span className="block text-sm font-semibold">{linha.nome}</span><span className="text-xs text-muted-foreground">Bloco {linha.bloco} · {linha.apartamento}</span></span>
                   </span>
-                  <span className="text-sm font-bold text-[#0f7350]">{linha.pontos} pts</span>
+                  <span className="text-right"><span className="block text-sm font-bold text-[#0f7350]">{linha.pontos} pts</span><span className="text-xs text-muted-foreground">{formatarNumero(linha.pesoKg)} kg</span></span>
                 </li>
               ))}
             </ol>

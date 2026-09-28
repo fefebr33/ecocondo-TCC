@@ -15,6 +15,13 @@ Este documento reúne sugestões de evolução do sistema. Os itens marcados com
 - ✅ **QR code por apartamento**, escaneado ou digitado pelo administrador para identificar o morador num registro manual (`moradores.codigoQr`/`porCodigo`).
 - ✅ **Estação de pesagem no lugar do coletor**: o morador registra a reciclagem num tablet com balança, com travas antifraude e revisão do administrador (`estacao.*`, `estacoes.*`).
 - ✅ **Pódio só com o top 3 para os moradores** e **prêmios configuráveis** no lugar do desconto na taxa condominial (`podio.*`).
+- ✅ **Plano de melhorias da banca** (ver [BANCA.md](BANCA.md)):
+  - **Extrato de pontos** (`movimentacoes_pontos`): cada entrada e saída com o saldo depois dela; a migração monta o extrato a partir do histórico e o painel avisa se algum saldo não fechar (`engajamento.extrato`).
+  - **Reprovação com motivo** de coleta já concluída, com estorno dos pontos (`coletas.reprovar`); coleta concluída não é mais cancelada nem pesada de novo.
+  - **Notificações** do morador e da administração em cada etapa (solicitação, código, pesagem, pontos, reprovação, estorno, resgate, estoque, cadastro, falha operacional), com abrir e marcar como lida.
+  - **Auditoria com motivo**, valor anterior e novo em coletas, resgates, recompensas, cadastros, estação e comunicados, com exportação CSV.
+  - **Modo demonstração da estação** (balança simulada): pesos rápidos, foto opcional, conferência antes de confirmar e QR do código.
+  - **Painel** com mês atual × anterior, evolução de 6 meses, taxa de conclusão, pontos movimentados, top 3 e alertas; **relatórios** com pontos, resgates, reprovações e planilhas de coletas, pontos, resgates e auditoria.
 
 ## Reciclagem, pódio e antifraude
 

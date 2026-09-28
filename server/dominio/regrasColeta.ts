@@ -11,6 +11,9 @@ export function prepareCollectionCompletion(input: { status: CompletionStatus; w
   if (input.status === "concluida" && (input.weightGrams === undefined || input.weightGrams === null)) {
     throw new Error("Informe o peso para concluir uma coleta.");
   }
+  if (input.status === "concluida" && (input.weightGrams as number) <= 0) {
+    throw new Error("O peso precisa ser maior que zero para concluir uma coleta.");
+  }
   const weightGrams = input.weightGrams === undefined ? current.weightGrams : input.weightGrams;
   return {
     weightGrams,
@@ -18,4 +21,16 @@ export function prepareCollectionCompletion(input: { status: CompletionStatus; w
     completedAt: input.status === "concluida" ? "completed" : null,
     notes: input.notes === undefined ? current.notes : input.notes || null,
   };
+}
+
+/**
+ * Coleta concluída ou cancelada é definitiva: não pode ser pesada de novo, reaberta ou pontuar outra vez.
+ * Uma coleta concluída só muda por reprovação do administrador (com motivo e estorno dos pontos), fora deste fluxo.
+ */
+export const STATUS_FINAIS_COLETA: CompletionStatus[] = ["concluida", "cancelada"];
+
+export function verificarTransicaoColeta(atual: CompletionStatus, proximo: CompletionStatus) {
+  if (atual === "concluida") throw new Error("Esta coleta já foi concluída e pesada. Para corrigir, reprove o registro informando o motivo.");
+  if (atual === "cancelada") throw new Error("Esta coleta foi cancelada e não pode mais ser alterada.");
+  if (atual === proximo) throw new Error("A coleta já está com este status.");
 }

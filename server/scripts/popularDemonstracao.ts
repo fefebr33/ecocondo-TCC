@@ -5,8 +5,8 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
-import { eq, sql } from "drizzle-orm";
-import { coletas } from "../../drizzle/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { coletas, movimentacoesPontos, notificacoes } from "../../drizzle/schema";
 import type { Usuario } from "../../drizzle/schema";
 import { fecharDb, getDb, getUserByOpenId, prepararBanco, upsertUser } from "../db";
 import { appRouter } from "../rotas";
@@ -14,6 +14,7 @@ import type { TrpcContext } from "../_core/context";
 import { garantirContaDemonstracao } from "../_core/login";
 import { definirSorteioAmostragem } from "../dominio/estacaoPesagem";
 import { CABECALHO_TOKEN_ESTACAO } from "../rotas/estacoes";
+import { saldosInconsistentes } from "../pontos";
 
 const pastaUploads = path.resolve("data", "uploads");
 const FOTO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -85,12 +86,20 @@ async function main() {
   const agora = new Date();
   const emHoras = (horas: number) => new Date(agora.getTime() + horas * 60 * 60 * 1000);
 
+  /** Leva uma coleta já registrada para uma data passada, junto com a linha do extrato de pontos e as notificações dela (já lidas). */
+  async function moverParaData(id: number, data: Date) {
+    await db.update(coletas).set({ agendadaPara: data, concluidaEm: data, criadoEm: data, atualizadoEm: data }).where(eq(coletas.id, id));
+    await db.update(movimentacoesPontos).set({ criadoEm: data }).where(eq(movimentacoesPontos.coletaId, id));
+    await db.update(notificacoes).set({ criadoEm: data, lidaEm: data }).where(eq(notificacoes.coletaId, id));
+  }
+
   /** Agenda e conclui pela API (registro manual da administração; regras antifraude valem) e depois move a coleta para a data histórica. */
   async function coletaConcluida(nome: string, tipo: "reciclavel" | "organico" | "eletronico", pesoGramas: number, data: Date | null) {
     const alvo = porNome[nome];
     const { id } = await admin.coletas.criar({ residentId: alvo.id, wasteType: tipo, block: alvo.bloco, scheduledAt: emHoras(1), notes: null });
     await admin.coletas.atualizarStatus({ id, status: "concluida", weightGrams: pesoGramas, imageDataUrl: FOTO });
-    if (data) await db.update(coletas).set({ agendadaPara: data, concluidaEm: data, criadoEm: data, atualizadoEm: data }).where(eq(coletas.id, id));
+    if (data) await moverParaData(id, data);
+    return id;
   }
 
   // Histórico dos últimos cinco meses e do mês atual: alimenta relatórios, metas, pódio e certificados.
@@ -112,18 +121,27 @@ async function main() {
   }
   await coletaConcluida("Pedro Almeida", "eletronico", 1800, null);
   await coletaConcluida("Beatriz Lima", "reciclavel", 6400, null);
+  // Uma coleta reprovada com motivo: os pontos voltam (estorno no extrato) e o caso aparece na auditoria.
+  const idReprovada = await coletaConcluida("João Pereira", "reciclavel", 5200, null);
+  await admin.coletas.reprovar({ id: idReprovada, motivo: "Saco com rejeito e restos de comida misturados; não conta como reciclável." });
 
   // Estação de pesagem (tablet + balança ao lado das lixeiras): Marina registra um saco comum e ganha os pontos na hora;
   // Luísa registra 26 kg, bem acima do padrão dela, e o registro fica aguardando a conferência do administrador.
-  const { token: tokenEstacao } = await admin.estacoes.criar({ name: "Lixeiras do térreo", location: "Garagem, ao lado do bloco A" });
+  const { id: idEstacao, token: tokenEstacao } = await admin.estacoes.criar({ name: "Lixeiras do térreo", location: "Garagem, ao lado do bloco A" });
   const estacao = tablet(tokenEstacao);
   const { code: codigoMarina } = await morador.estacao.gerarCodigo();
-  await estacao.estacao.registrar({ code: codigoMarina, wasteType: "reciclavel", weightGrams: 4200, imageDataUrl: FOTO });
+  const registroMarina = await estacao.estacao.registrar({ code: codigoMarina, wasteType: "reciclavel", weightGrams: 4200, imageDataUrl: FOTO });
+  // O registro da Marina vai para ontem: assim o intervalo mínimo e o limite diário não atrapalham a demonstração ao vivo.
+  const ontem = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - 1, 18, 40);
+  await moverParaData(registroMarina.id, ontem);
+  await db.update(notificacoes).set({ lidaEm: ontem, criadoEm: ontem }).where(and(eq(notificacoes.destinatarioId, usuarioMorador.id), eq(notificacoes.tipo, "codigo_estacao")));
   await upsertUser({ idExterno: "demo-luisa", nome: "Luísa Martins", email: "luisa@parquedasflores.com", metodoLogin: "demo", papel: "usuario" });
   const luisa = chamador((await getUserByOpenId("demo-luisa"))!);
   await luisa.perfil.meuPerfil();
   const { code: codigoLuisa } = await luisa.estacao.gerarCodigo();
   await estacao.estacao.registrar({ code: codigoLuisa, wasteType: "reciclavel", weightGrams: 26000, imageDataUrl: FOTO });
+  // Modo demonstração (balança simulada): pesos rápidos na tela, foto opcional e sem sorteio de conferência.
+  await admin.estacoes.definirModoDemonstracao({ id: idEstacao, enabled: true });
 
   // Próximas coletas, uma em andamento, uma cancelada e um pedido do próprio morador.
   const futuras: Array<[string | null, "reciclavel" | "organico" | "perigoso", number, string?]> = [
@@ -137,6 +155,10 @@ async function main() {
   }
   await admin.coletas.atualizarStatus({ id: idsFuturas[1], status: "em_andamento" });
   await admin.coletas.atualizarStatus({ id: idsFuturas[3], status: "cancelada", notes: "Morador em viagem" });
+  // Uma coleta que passou da data sem pesagem: aparece nos alertas do painel do administrador.
+  const { id: idAtrasada } = await admin.coletas.criar({ residentId: porNome["Camila Rocha"].id, wasteType: "reciclavel", block: porNome["Camila Rocha"].bloco, scheduledAt: emHoras(2), notes: null });
+  const vencida = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - 1, 15, 0);
+  await db.update(coletas).set({ agendadaPara: vencida, criadoEm: vencida }).where(eq(coletas.id, idAtrasada));
   await morador.coletas.criar({ wasteType: "eletronico", block: "A", scheduledAt: emHoras(52), notes: "Monitor antigo e cabos" });
 
   // Recorrência, metas, recompensas e resgates.
@@ -150,6 +172,7 @@ async function main() {
   const cafe = await admin.engajamento.criarRecompensa({ title: "Vale-café na padaria parceira", description: "Um café e um pão de queijo na Padaria Central.", pointsCost: 5, stock: 10 });
   const sacolas = await admin.engajamento.criarRecompensa({ title: "Kit sacolas retornáveis", description: "Três sacolas de algodão para compras.", pointsCost: 12, stock: 6 });
   await admin.engajamento.criarRecompensa({ title: "Muda de árvore nativa", description: "Muda de ipê ou pitanga para o jardim do condomínio.", pointsCost: 20, stock: null });
+  await admin.engajamento.criarRecompensa({ title: "Garrafa térmica do condomínio", description: "Garrafa de aço inox de 500 ml com o logo do Parque das Flores.", pointsCost: 30, stock: 2 });
   await morador.engajamento.resgatar({ rewardId: sacolas.id });
   const [resgateSacolas] = await admin.engajamento.listarResgates();
   await admin.engajamento.atualizarResgate({ id: resgateSacolas.id, status: "entregue" });
@@ -190,8 +213,10 @@ async function main() {
   await admin.notificacoes.criarComunicado({ title: "Nova coleta de eletrônicos", message: "No sábado teremos coleta especial de eletrônicos no hall do bloco C, das 9h às 12h." });
 
   const [{ criadas }] = await db.select({ criadas: sql<number>`count(*)` }).from(coletas);
+  const divergentes = await saldosInconsistentes(db);
   console.log(`Dados de demonstração criados: ${criadas} coletas, ${vizinhos.length + 1} moradores. Rode pnpm dev e entre como Administrador ou Morador.`);
-  console.log(`Estação de pesagem "Lixeiras do térreo": abra /estacao?codigo=${encodeURIComponent(tokenEstacao)} no tablet (ou em outra aba) para parear.`);
+  console.log(divergentes.length ? `ATENÇÃO: ${divergentes.length} saldo(s) de pontos não batem com o extrato.` : "Saldos de pontos conferidos com o extrato: tudo certo.");
+  console.log(`Estação de pesagem "Lixeiras do térreo" (modo demonstração ligado): abra /estacao?codigo=${encodeURIComponent(tokenEstacao)} no tablet (ou em outra aba) para parear.`);
 }
 
 main().then(fecharDb, (error) => {

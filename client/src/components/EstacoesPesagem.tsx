@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
-import { Copy, Plus, RefreshCw, Scale } from "lucide-react";
+import { Copy, FlaskConical, Plus, RefreshCw, Scale } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ export default function EstacoesPesagem() {
   });
   const novoCodigo = trpc.estacoes.novoCodigo.useMutation({ onError: (issue) => toast.error(issue.message) });
   const alternar = trpc.estacoes.alternar.useMutation({ onSuccess: () => utils.estacoes.listar.invalidate(), onError: (issue) => toast.error(issue.message) });
+  const demonstracao = trpc.estacoes.definirModoDemonstracao.useMutation({ onSuccess: (_dados, variaveis) => { utils.estacoes.listar.invalidate(); toast.success(variaveis.enabled ? "Modo demonstração ligado. Recarregue a tela da estação no tablet." : "Modo demonstração desligado."); }, onError: (issue) => toast.error(issue.message) });
   const link = pareamento ? `${window.location.origin}/estacao?codigo=${encodeURIComponent(pareamento.token)}` : "";
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -37,7 +38,7 @@ export default function EstacoesPesagem() {
 
   return <section className="mt-5 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]"><Scale className="h-5 w-5" /></span><div><p className="font-semibold">Estações de pesagem</p><p className="text-sm text-muted-foreground">Tablets com balança ao lado das lixeiras, onde o morador registra a própria reciclagem. Só tablets pareados aqui conseguem registrar.</p></div></div>
+      <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]"><Scale className="h-5 w-5" /></span><div><p className="font-semibold">Estações de pesagem</p><p className="text-sm text-muted-foreground">Tablets com balança ao lado das lixeiras, onde o morador registra a própria reciclagem. Só tablets pareados aqui conseguem registrar. Sem balança de verdade (por exemplo, na apresentação), ligue o modo demonstração: o peso é digitado como se viesse da balança e a tela avisa que é uma simulação.</p></div></div>
       <Button variant="outline" onClick={() => setAberto((valor) => !valor)} className="h-9 shrink-0 rounded-xl border-[#cfe1d7] text-xs font-semibold text-[#0f7350]"><Plus className="mr-1.5 h-3.5 w-3.5" />Nova estação</Button>
     </div>
     {aberto && <form onSubmit={submit} className="mt-4 grid gap-3 rounded-2xl bg-[#f5faf7] p-4 sm:grid-cols-2">
@@ -55,6 +56,8 @@ export default function EstacoesPesagem() {
         <span><b className="font-semibold">{estacao.nome}</b> · {estacao.local}<span className="block text-xs text-muted-foreground">Último registro: {formatDate(estacao.ultimoUsoEm)}</span></span>
         <span className="flex flex-wrap items-center gap-2">
           <Badge className={`border-0 ${estacao.ativo ? "bg-[#e8f4ed] text-[#0a7048]" : "bg-[#f0f4f2] text-muted-foreground"} hover:bg-inherit`}>{estacao.ativo ? "Ativa" : "Desativada"}</Badge>
+          {estacao.modoDemonstracao && <Badge className="border-0 bg-[#fff3df] text-[#7a4d0a] hover:bg-[#fff3df]">Modo demonstração</Badge>}
+          <Button size="sm" variant="ghost" disabled={demonstracao.isPending} onClick={() => demonstracao.mutate({ id: estacao.id, enabled: !estacao.modoDemonstracao })} className="h-8 rounded-lg text-xs font-semibold text-[#7a4d0a]"><FlaskConical className="mr-1.5 h-3.5 w-3.5" />{estacao.modoDemonstracao ? "Desligar demonstração" : "Ligar demonstração"}</Button>
           <Button size="sm" variant="ghost" onClick={() => gerarNovoCodigo(estacao.id, estacao.nome)} className="h-8 rounded-lg text-xs font-semibold text-[#0f7350]"><RefreshCw className="mr-1.5 h-3.5 w-3.5" />Novo código</Button>
           <Button size="sm" variant="ghost" onClick={() => alternar.mutate({ id: estacao.id, active: !estacao.ativo })} className="h-8 rounded-lg text-xs font-semibold">{estacao.ativo ? "Desativar" : "Reativar"}</Button>
         </span>

@@ -1,19 +1,22 @@
 import { TRPCError } from "@trpc/server";
 import QRCode from "qrcode";
 import { customAlphabet } from "nanoid";
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, estacoesPesagem, statusColeta, notificacoes, pessoas, moradores, statusMorador, perfisAcesso, usuarios, tiposResiduo } from "../../drizzle/schema";
+import { coletas, estacoesPesagem, statusColeta, pessoas, moradores, statusMorador, usuarios, tiposResiduo } from "../../drizzle/schema";
+import type { Coleta } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { residuoNaFrase, rotuloStatusColeta } from "@shared/rotulos";
 
 const gerarCodigoMorador = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
-import { calculateCollectionPoints, prepareCollectionCompletion } from "../dominio/regrasColeta";
+import { calculateCollectionPoints, prepareCollectionCompletion, verificarTransicaoColeta } from "../dominio/regrasColeta";
 import { buildPendingResidentPerson } from "../dominio/regrasPessoas";
 import { collectionAuditState, writeAuditLog } from "../audit";
 import { salvarImagemBase64 } from "../storage";
+import { MovimentacaoDuplicadaError, movimentarPontos } from "../pontos";
+import { notificarAdministradores, notificarUsuario } from "../notificacoes";
 import {
   LIMITE_PESO_POR_COLETA_GRAMAS,
   LimiteAntifraudeExcedidoError,
@@ -75,6 +78,8 @@ export const operationsRouter = router({
         apartamento: input.apartment,
         status: input.status,
       }).$returningId();
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "morador", entidadeId: inserido[0].id, acao: "morador_cadastrado", resumo: `Morador ${input.name} cadastrado (bloco ${input.block}, apto. ${input.apartment}).`, estadoNovo: { nome: input.name, bloco: input.block, apartamento: input.apartment, status: input.status } });
+      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "novo_cadastro", titulo: "Novo morador cadastrado", mensagem: `${input.name} (bloco ${input.block}, apto. ${input.apartment}) foi cadastrado.` }, ctx.user.id);
       return { id: inserido[0].id };
     }),
     atualizar: administratorOnly.input(moradorInput.partial().extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -93,6 +98,14 @@ export const operationsRouter = router({
         telefone: proximoTelefone,
         atualizadoEm: new Date(),
       }).where(eq(moradores.id, id));
+      const antes = { nome: existente[0].nome, bloco: existente[0].bloco, apartamento: existente[0].apartamento, status: existente[0].status, email: existente[0].email, telefone: existente[0].telefone };
+      const depois = { nome: atualizacao.name ?? existente[0].nome, bloco: atualizacao.block ?? existente[0].bloco, apartamento: atualizacao.apartment ?? existente[0].apartamento, status: atualizacao.status ?? existente[0].status, email: proximoEmail, telefone: proximoTelefone };
+      const alterados = (Object.keys(antes) as Array<keyof typeof antes>).filter((campo) => antes[campo] !== depois[campo]);
+      if (alterados.length) {
+        await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "morador", entidadeId: id, acao: "morador_atualizado", resumo: `Cadastro de ${depois.nome} alterado (${alterados.join(", ")}).`, estadoAnterior: antes, estadoNovo: depois });
+        const rotulos: Record<string, string> = { nome: "nome", bloco: "bloco", apartamento: "apartamento", status: "situação", email: "e-mail", telefone: "telefone" };
+        await notificarUsuario(db, existente[0].usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "cadastro_alterado", titulo: "Seu cadastro foi alterado", mensagem: `A administração alterou ${alterados.map((campo) => rotulos[campo]).join(", ")} do seu cadastro. Se algo estiver errado, fale com o síndico.` });
+      }
       const pessoa = await db.select().from(pessoas).where(eq(pessoas.moradorId, id)).limit(1);
       if (pessoa[0]) {
         await db.update(pessoas).set({ nome: atualizacao.name ?? existente[0].nome, email: proximoEmail || pessoa[0].email, telefone: proximoTelefone, bloco: atualizacao.block ?? existente[0].bloco, apartamento: atualizacao.apartment ?? existente[0].apartamento, atualizadoEm: new Date() }).where(eq(pessoas.id, pessoa[0].id));
@@ -163,8 +176,9 @@ export const operationsRouter = router({
       const db = await getDb();
       let moradorId = input.residentId ?? null;
       let bloco = input.block;
+      const pedidoDoMorador = ctx.eco.perfil.papel === "morador";
 
-      if (ctx.eco.perfil.papel === "morador") {
+      if (pedidoDoMorador) {
         if (!ctx.eco.morador || ctx.eco.morador.status !== "ativo") throw new TRPCError({ code: "FORBIDDEN", message: "O perfil do morador não está habilitado para solicitar coletas." });
         moradorId = ctx.eco.morador.id;
         bloco = ctx.eco.morador.bloco;
@@ -192,19 +206,16 @@ export const operationsRouter = router({
         autorId: ctx.user.id,
         tipoEntidade: "coleta",
         entidadeId: coletaId,
-        acao: "coleta_criada",
-        resumo: `Coleta de ${residuoNaFrase[input.wasteType]} criada para o bloco ${bloco}.`,
+        acao: pedidoDoMorador ? "coleta_solicitada" : "coleta_criada",
+        resumo: pedidoDoMorador ? `Coleta de ${residuoNaFrase[input.wasteType]} solicitada pelo morador (bloco ${bloco}).` : `Coleta de ${residuoNaFrase[input.wasteType]} criada para o bloco ${bloco}.`,
         estadoNovo: { status: "agendada", tipoResiduo: input.wasteType, bloco, agendadaPara: input.scheduledAt, moradorId, observacoes: input.notes || null },
       });
-      if (morador?.usuarioId) {
-        await db.insert(notificacoes).values({
-          condominioId: ctx.eco.condominio.id,
-          destinatarioId: morador.usuarioId,
-          coletaId,
-          tipo: "coleta_agendada",
-          titulo: "Coleta agendada",
-          mensagem: `Uma coleta de ${residuoNaFrase[input.wasteType]} foi agendada para o bloco ${bloco}.`,
-        });
+      const quando = dataHoraCurta(input.scheduledAt);
+      if (pedidoDoMorador) {
+        await notificarUsuario(db, ctx.user.id, { condominioId: ctx.eco.condominio.id, coletaId, tipo: "solicitacao_criada", titulo: "Solicitação de coleta recebida", mensagem: `Sua coleta de ${residuoNaFrase[input.wasteType]} foi registrada para ${quando} (coleta nº ${coletaId}). Você recebe um lembrete na véspera.` });
+        await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, coletaId, tipo: "nova_coleta", titulo: "Nova coleta solicitada", mensagem: `${morador?.nome ?? "Um morador"} (bloco ${bloco}) pediu uma coleta de ${residuoNaFrase[input.wasteType]} para ${quando}.` });
+      } else if (morador?.usuarioId) {
+        await notificarUsuario(db, morador.usuarioId, { condominioId: ctx.eco.condominio.id, coletaId, tipo: "coleta_agendada", titulo: "Coleta agendada", mensagem: `Uma coleta de ${residuoNaFrase[input.wasteType]} foi agendada para o bloco ${bloco} em ${quando}.` });
       }
       return { id: coletaId };
     }),
@@ -221,6 +232,7 @@ export const operationsRouter = router({
       if (!coleta) throw new TRPCError({ code: "NOT_FOUND", message: "Coleta não encontrada." });
       let conclusao;
       try {
+        verificarTransicaoColeta(coleta.status, input.status);
         conclusao = prepareCollectionCompletion(
           { status: input.status, weightGrams: input.weightGrams, notes: input.notes },
           { weightGrams: coleta.pesoGramas, notes: coleta.observacoes, wasteType: coleta.tipoResiduo },
@@ -231,14 +243,6 @@ export const operationsRouter = router({
 
       if (input.status === "concluida" && !coleta.chaveFoto && !input.imageDataUrl) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Anexe uma foto da coleta para concluir." });
-      }
-      let foto: { key: string | null; url: string | null } = { key: coleta.chaveFoto, url: coleta.urlFoto };
-      if (input.imageDataUrl) {
-        try {
-          foto = await salvarImagemBase64(input.imageDataUrl, `coletas/${ctx.eco.condominio.id}/${coleta.id}`);
-        } catch (error) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Não foi possível salvar a foto da coleta." });
-        }
       }
 
       let moradorBeneficiado = null;
@@ -268,25 +272,41 @@ export const operationsRouter = router({
         }
       }
 
+      let foto: { key: string | null; url: string | null } = { key: coleta.chaveFoto, url: coleta.urlFoto };
+      if (input.imageDataUrl) {
+        try {
+          foto = await salvarImagemBase64(input.imageDataUrl, `coletas/${ctx.eco.condominio.id}/${coleta.id}`);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Não foi possível salvar a foto da coleta." });
+        }
+      }
+
       const novoPeso = conclusao.weightGrams;
       // Peso anômalo em uma coleta concluída: os pontos ficam retidos até a aprovação de um segundo administrador (dupla aprovação).
       const pontosCalculados = conclusao.pointsAwarded;
       const novosPontos = pesoAnomalo ? 0 : pontosCalculados;
-      const deltaPontos = novosPontos - coleta.pontosConcedidos;
       const concluidaEm = conclusao.completedAt ? new Date() : null;
-      await db.update(coletas).set({
-        status: input.status,
-        pesoGramas: novoPeso,
-        pontosConcedidos: novosPontos,
-        concluidaEm,
-        concluidoPorId: input.status === "concluida" ? ctx.user.id : null,
-        observacoes: conclusao.notes,
-        chaveFoto: foto.key,
-        urlFoto: foto.url,
-        pendenteAprovacaoPeso: pesoAnomalo,
-        aprovacaoPesoStatus: pesoAnomalo ? "pendente" : coleta.aprovacaoPesoStatus === "pendente" ? null : coleta.aprovacaoPesoStatus,
-        atualizadoEm: new Date(),
-      }).where(eq(coletas.id, coleta.id));
+      const kg = formatarKg(novoPeso);
+      await db.transaction(async (tx) => {
+        // Só altera se ninguém mudou a coleta desde a leitura: dois cliques em "Concluir" não pesam nem pontuam duas vezes.
+        const [alteracao] = await tx.update(coletas).set({
+          status: input.status,
+          pesoGramas: novoPeso,
+          pontosConcedidos: novosPontos,
+          concluidaEm,
+          concluidoPorId: input.status === "concluida" ? ctx.user.id : null,
+          observacoes: conclusao.notes,
+          chaveFoto: foto.key,
+          urlFoto: foto.url,
+          pendenteAprovacaoPeso: pesoAnomalo,
+          aprovacaoPesoStatus: pesoAnomalo ? "pendente" : null,
+          atualizadoEm: new Date(),
+        }).where(and(eq(coletas.id, coleta.id), eq(coletas.status, coleta.status)));
+        if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "A coleta acabou de ser alterada por outra pessoa. Atualize a página e confira." });
+        if (coleta.moradorId && novosPontos > 0) {
+          await movimentarPontos(tx, { condominioId: ctx.eco.condominio.id, moradorId: coleta.moradorId, tipo: "credito_coleta", pontos: novosPontos, coletaId: coleta.id, autorId: ctx.user.id, descricao: `Coleta nº ${coleta.id} concluída (${kg} kg de ${residuoNaFrase[coleta.tipoResiduo]})` });
+        }
+      }).catch(converterDuplicidade);
       await writeAuditLog(db, {
         condominioId: ctx.eco.condominio.id,
         autorId: ctx.user.id,
@@ -302,9 +322,9 @@ export const operationsRouter = router({
           concluidaEm,
           observacoes: conclusao.notes,
         },
+        motivo: input.status === "cancelada" || input.status === "ocorrencia" ? conclusao.notes : null,
       });
       if (pesoAnomalo) {
-        const kg = ((novoPeso ?? 0) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
         await writeAuditLog(db, {
           condominioId: ctx.eco.condominio.id,
           autorId: ctx.user.id,
@@ -315,36 +335,19 @@ export const operationsRouter = router({
           estadoNovo: { pesoGramas: novoPeso, moradorId: coleta.moradorId, pontosPendentes: pontosCalculados },
         });
         // Avisa os demais administradores: quem concluiu a coleta não pode aprovar o próprio lançamento.
-        const administradores = await db.select({ usuarioId: perfisAcesso.usuarioId }).from(perfisAcesso).where(and(eq(perfisAcesso.condominioId, ctx.eco.condominio.id), eq(perfisAcesso.papel, "administrador")));
-        for (const administrador of administradores) {
-          if (administrador.usuarioId === ctx.user.id) continue;
-          await db.insert(notificacoes).values({
-            condominioId: ctx.eco.condominio.id,
-            destinatarioId: administrador.usuarioId,
-            coletaId: coleta.id,
-            tipo: "sistema",
-            titulo: "Peso aguardando aprovação",
-            mensagem: `Uma coleta de ${residuoNaFrase[coleta.tipoResiduo]} do bloco ${coleta.bloco} foi concluída com ${kg} kg, bem acima do histórico do morador. Revise em Coletas > Registros aguardando aprovação.`,
-          });
-        }
+        await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, coletaId: coleta.id, tipo: "peso_suspeito", titulo: "Peso suspeito aguardando aprovação", mensagem: `A coleta nº ${coleta.id} (${residuoNaFrase[coleta.tipoResiduo]}, bloco ${coleta.bloco}) foi concluída com ${kg} kg, bem acima do histórico do morador. Revise em Coletas > Registros aguardando aprovação.` }, ctx.user.id);
+      } else if (input.status === "concluida") {
+        await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, coletaId: coleta.id, tipo: "coleta_concluida", titulo: "Coleta concluída", mensagem: `A coleta nº ${coleta.id} (${residuoNaFrase[coleta.tipoResiduo]}, bloco ${coleta.bloco}) foi concluída com ${kg} kg.` }, ctx.user.id);
       }
 
-      if (coleta.moradorId && deltaPontos !== 0) {
-        await db.update(moradores).set({ pontos: sql`${moradores.pontos} + ${deltaPontos}`, atualizadoEm: new Date() }).where(eq(moradores.id, coleta.moradorId));
-      }
-      if (coleta.moradorId) {
-        const morador = await db.select().from(moradores).where(eq(moradores.id, coleta.moradorId)).limit(1);
-        if (morador[0]?.usuarioId) {
-          await db.insert(notificacoes).values({
-            condominioId: ctx.eco.condominio.id,
-            destinatarioId: morador[0].usuarioId,
-            coletaId: coleta.id,
-            tipo: input.status === "concluida" ? "coleta_concluida" : "sistema",
-            titulo: input.status === "concluida" ? "Coleta concluída" : "Atualização de coleta",
-            mensagem: pesoAnomalo
-              ? "Sua coleta foi concluída. O peso está acima do padrão histórico e os pontos ficarão pendentes até a revisão de um administrador."
-              : input.status === "concluida" ? `Sua coleta foi concluída${novosPontos ? ` e gerou ${novosPontos} ponto(s).` : "."}` : `O status da sua coleta foi atualizado para "${rotuloStatusColeta[input.status]}".`,
-          });
+      if (moradorBeneficiado?.usuarioId) {
+        const destino = moradorBeneficiado.usuarioId;
+        const base = { condominioId: ctx.eco.condominio.id, coletaId: coleta.id };
+        if (input.status === "concluida") {
+          await notificarUsuario(db, destino, { ...base, tipo: "coleta_concluida", titulo: "Coleta concluída", mensagem: pesoAnomalo ? `Sua coleta nº ${coleta.id} foi concluída com ${kg} kg. O peso está acima do seu padrão e os ${pontosCalculados} ponto(s) ficam pendentes até a revisão de um administrador.` : `Sua coleta nº ${coleta.id} foi concluída com ${kg} kg.` });
+          if (novosPontos > 0) await notificarUsuario(db, destino, { ...base, tipo: "pontos_ganhos", titulo: `+${novosPontos} ponto(s)`, mensagem: `Você ganhou ${novosPontos} ponto(s) pela coleta nº ${coleta.id}. Veja o extrato em Engajamento.` });
+        } else {
+          await notificarUsuario(db, destino, { ...base, tipo: "sistema", titulo: "Atualização de coleta", mensagem: `O status da sua coleta nº ${coleta.id} foi atualizado para "${rotuloStatusColeta[input.status]}"${conclusao.notes && input.status !== "em_andamento" ? `: ${conclusao.notes}` : "."}` });
         }
       }
       return { success: true, pointsAwarded: novosPontos, pendingApproval: pesoAnomalo };
@@ -362,69 +365,154 @@ export const operationsRouter = router({
         origin: origens(registro),
       }));
     }),
+    /** Decide um registro pendente: aprovar libera os pontos; reprovar exige motivo e cancela os pontos pendentes. */
     decidirAprovacaoPeso: administratorOnly.input(z.object({
       id: z.number().int().positive(),
       aprovar: z.boolean(),
       observacao: z.string().trim().max(500).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const encontrada = await db.select().from(coletas).where(and(eq(coletas.id, input.id), eq(coletas.condominioId, ctx.eco.condominio.id))).limit(1);
-      const coleta = encontrada[0];
-      if (!coleta) throw new TRPCError({ code: "NOT_FOUND", message: "Coleta não encontrada." });
+      const coleta = await coletaDoCondominio(ctx.eco.condominio.id, input.id);
       if (!coleta.pendenteAprovacaoPeso) throw new TRPCError({ code: "BAD_REQUEST", message: "Esta coleta não está pendente de aprovação." });
       if ((coleta.concluidoPorId ?? coleta.coletorId) === ctx.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Quem concluiu a coleta não pode ser quem aprova o peso suspeito. Peça para outro administrador revisar." });
       }
-
-      const pontosCalculados = calculateCollectionPoints(coleta.status, coleta.tipoResiduo, coleta.pesoGramas);
-      const novosPontos = input.aprovar ? pontosCalculados : 0;
-      const deltaPontos = novosPontos - coleta.pontosConcedidos;
-
-      await db.update(coletas).set({
-        pendenteAprovacaoPeso: false,
-        aprovacaoPesoStatus: input.aprovar ? "aprovado" : "rejeitado",
-        aprovacaoPesoPorId: ctx.user.id,
-        aprovacaoPesoEm: new Date(),
-        pontosConcedidos: novosPontos,
-        atualizadoEm: new Date(),
-      }).where(eq(coletas.id, coleta.id));
-
-      if (coleta.moradorId && deltaPontos !== 0) {
-        await db.update(moradores).set({ pontos: sql`${moradores.pontos} + ${deltaPontos}`, atualizadoEm: new Date() }).where(eq(moradores.id, coleta.moradorId));
+      if (!input.aprovar) {
+        if (!input.observacao || input.observacao.length < 5) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o motivo da reprovação (pelo menos 5 letras); ele é enviado ao morador." });
+        return reprovarColeta(ctx, coleta, input.observacao);
       }
+
+      const pontos = calculateCollectionPoints(coleta.status, coleta.tipoResiduo, coleta.pesoGramas);
+      const agora = new Date();
+      await db.transaction(async (tx) => {
+        const [alteracao] = await tx.update(coletas).set({
+          pendenteAprovacaoPeso: false,
+          aprovacaoPesoStatus: "aprovado",
+          aprovacaoPesoPorId: ctx.user.id,
+          aprovacaoPesoEm: agora,
+          motivoDecisao: input.observacao || null,
+          pontosConcedidos: pontos,
+          atualizadoEm: agora,
+        }).where(and(eq(coletas.id, coleta.id), eq(coletas.pendenteAprovacaoPeso, true)));
+        if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Outro administrador já decidiu este registro." });
+        if (coleta.moradorId && pontos > 0) {
+          await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "credito_coleta", pontos, coletaId: coleta.id, autorId: ctx.user.id, descricao: `Coleta nº ${coleta.id} aprovada na revisão (${formatarKg(coleta.pesoGramas)} kg)` });
+        }
+      }).catch(converterDuplicidade);
 
       await writeAuditLog(db, {
         condominioId: ctx.eco.condominio.id,
         autorId: ctx.user.id,
         tipoEntidade: "coleta",
         entidadeId: coleta.id,
-        acao: input.aprovar ? "peso_suspeito_aprovado" : "peso_suspeito_rejeitado",
+        acao: "peso_suspeito_aprovado",
         resumo: coleta.estacaoId !== null
-          ? (input.aprovar
-            ? `Registro da estação conferido e aprovado pela administração; ${novosPontos} ponto(s) liberado(s).`
-            : "Registro da estação conferido e rejeitado pela administração; nenhum ponto concedido.")
-          : (input.aprovar
-            ? `Peso suspeito aprovado por segundo administrador; ${novosPontos} ponto(s) liberado(s).`
-            : "Peso suspeito rejeitado por segundo administrador; nenhum ponto concedido."),
-        estadoNovo: { aprovacaoPesoStatus: input.aprovar ? "aprovado" : "rejeitado", pontosConcedidos: novosPontos, observacao: input.observacao || null },
+          ? `Registro da estação conferido e aprovado pela administração; ${pontos} ponto(s) liberado(s).`
+          : `Peso suspeito aprovado por segundo administrador; ${pontos} ponto(s) liberado(s).`,
+        estadoAnterior: { aprovacaoPesoStatus: "pendente", pontosConcedidos: 0, pontosPendentes: pontos },
+        estadoNovo: { aprovacaoPesoStatus: "aprovado", pontosConcedidos: pontos, efeitoPontos: pontos ? `${pontos} ponto(s) creditado(s)` : "sem pontos (material não reciclável ou menos de 1 kg)" },
+        motivo: input.observacao || null,
       });
 
-      if (coleta.moradorId) {
-        const morador = await db.select().from(moradores).where(eq(moradores.id, coleta.moradorId)).limit(1);
-        if (morador[0]?.usuarioId) {
-          await db.insert(notificacoes).values({
-            condominioId: ctx.eco.condominio.id,
-            destinatarioId: morador[0].usuarioId,
-            coletaId: coleta.id,
-            tipo: "sistema",
-            titulo: input.aprovar ? "Pontos liberados" : "Coleta revisada",
-            mensagem: input.aprovar
-              ? `O peso da sua coleta foi revisado e aprovado. ${novosPontos} ponto(s) foram creditados.`
-              : "O peso da sua coleta foi revisado e não pôde ser confirmado. Nenhum ponto foi concedido para este lançamento.",
-          });
-        }
+      const usuarioMorador = await usuarioDoMorador(coleta.moradorId);
+      const base = { condominioId: ctx.eco.condominio.id, coletaId: coleta.id };
+      await notificarUsuario(db, usuarioMorador, { ...base, tipo: "revisao_administrativa", titulo: "Registro aprovado na revisão", mensagem: `A administração conferiu e aprovou a coleta nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg).${input.observacao ? ` Observação: ${input.observacao}` : ""}` });
+      if (pontos > 0) await notificarUsuario(db, usuarioMorador, { ...base, tipo: "pontos_ganhos", titulo: `+${pontos} ponto(s)`, mensagem: `${pontos} ponto(s) da coleta nº ${coleta.id} foram creditados depois da revisão.` });
+      return { success: true, pointsAwarded: pontos };
+    }),
+    /**
+     * Reprova uma coleta concluída (pendente ou já aprovada), com motivo obrigatório. Pontos pendentes são cancelados;
+     * pontos já lançados são estornados do saldo (que pode ficar negativo se o morador já os gastou).
+     */
+    reprovar: administratorOnly.input(z.object({
+      id: z.number().int().positive(),
+      motivo: z.string().trim().min(5, "Informe o motivo da reprovação (pelo menos 5 letras).").max(500),
+    })).mutation(async ({ ctx, input }) => {
+      const coleta = await coletaDoCondominio(ctx.eco.condominio.id, input.id);
+      if (coleta.pendenteAprovacaoPeso && (coleta.concluidoPorId ?? coleta.coletorId) === ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Quem concluiu a coleta não pode decidir a revisão dela. Peça para outro administrador revisar." });
       }
-      return { success: true, pointsAwarded: novosPontos };
+      return reprovarColeta(ctx, coleta, input.motivo);
     }),
   }),
 });
+
+type ContextoAdministrador = { user: { id: number }; eco: { condominio: { id: number } } };
+
+async function coletaDoCondominio(condominioId: number, id: number) {
+  const db = await getDb();
+  const encontrada = await db.select().from(coletas).where(and(eq(coletas.id, id), eq(coletas.condominioId, condominioId))).limit(1);
+  if (!encontrada[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Coleta não encontrada." });
+  return encontrada[0];
+}
+
+async function usuarioDoMorador(moradorId: number | null) {
+  if (!moradorId) return null;
+  const db = await getDb();
+  const encontrado = await db.select({ usuarioId: moradores.usuarioId }).from(moradores).where(eq(moradores.id, moradorId)).limit(1);
+  return encontrado[0]?.usuarioId ?? null;
+}
+
+function formatarKg(pesoGramas: number | null) {
+  return ((pesoGramas ?? 0) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
+function dataHoraCurta(data: Date) {
+  return data.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
+}
+
+/** O índice único do extrato recusou pontuar a mesma coleta duas vezes: vira um erro legível na tela. */
+function converterDuplicidade(error: unknown): never {
+  if (error instanceof MovimentacaoDuplicadaError) throw new TRPCError({ code: "CONFLICT", message: "Os pontos desta coleta já foram lançados." });
+  throw error;
+}
+
+async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo: string) {
+  if (coleta.status !== "concluida") throw new TRPCError({ code: "BAD_REQUEST", message: "Só coletas concluídas podem ser reprovadas. Para uma coleta ainda não feita, use Cancelar." });
+  if (coleta.aprovacaoPesoStatus === "rejeitado") throw new TRPCError({ code: "BAD_REQUEST", message: "Esta coleta já foi reprovada." });
+  const db = await getDb();
+  const agora = new Date();
+  const eraPendente = coleta.pendenteAprovacaoPeso;
+  const pontosPendentes = eraPendente ? calculateCollectionPoints(coleta.status, coleta.tipoResiduo, coleta.pesoGramas) : 0;
+  const pontosEstornados = coleta.pontosConcedidos;
+  await db.transaction(async (tx) => {
+    const [alteracao] = await tx.update(coletas).set({
+      pendenteAprovacaoPeso: false,
+      aprovacaoPesoStatus: "rejeitado",
+      aprovacaoPesoPorId: ctx.user.id,
+      aprovacaoPesoEm: agora,
+      motivoDecisao: motivo,
+      pontosConcedidos: 0,
+      atualizadoEm: agora,
+    }).where(and(eq(coletas.id, coleta.id), eq(coletas.status, "concluida"), or(isNull(coletas.aprovacaoPesoStatus), ne(coletas.aprovacaoPesoStatus, "rejeitado"))));
+    if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Esta coleta já foi reprovada por outro administrador." });
+    if (coleta.moradorId && pontosEstornados > 0) {
+      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "estorno_coleta", pontos: -pontosEstornados, coletaId: coleta.id, autorId: ctx.user.id, descricao: `Estorno: coleta nº ${coleta.id} reprovada (${motivo})` });
+    }
+  }).catch((error: unknown) => {
+    if (error instanceof MovimentacaoDuplicadaError) throw new TRPCError({ code: "CONFLICT", message: "Os pontos desta coleta já foram estornados." });
+    throw error;
+  });
+
+  const efeito = pontosEstornados > 0 ? `${pontosEstornados} ponto(s) estornado(s)` : pontosPendentes > 0 ? `${pontosPendentes} ponto(s) pendente(s) cancelado(s)` : "nenhum ponto envolvido";
+  await writeAuditLog(db, {
+    condominioId: coleta.condominioId,
+    autorId: ctx.user.id,
+    tipoEntidade: "coleta",
+    entidadeId: coleta.id,
+    acao: eraPendente ? "peso_suspeito_rejeitado" : "coleta_reprovada",
+    resumo: `Coleta nº ${coleta.id} reprovada pela administração; ${efeito}.`,
+    estadoAnterior: { status: coleta.status, pesoGramas: coleta.pesoGramas, aprovacaoPesoStatus: coleta.aprovacaoPesoStatus, pendenteAprovacaoPeso: eraPendente, pontosConcedidos: coleta.pontosConcedidos },
+    estadoNovo: { status: coleta.status, aprovacaoPesoStatus: "rejeitado", pontosConcedidos: 0, pontosEstornados, pontosPendentesCancelados: pontosPendentes, efeitoPontos: efeito, reprovadaEm: agora },
+    motivo,
+  });
+
+  const usuarioMorador = await usuarioDoMorador(coleta.moradorId);
+  const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
+  await notificarUsuario(db, usuarioMorador, { ...base, tipo: "coleta_reprovada", titulo: "Coleta reprovada", mensagem: `A administração reprovou a coleta nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg). Motivo: ${motivo}` });
+  if (pontosEstornados > 0 || pontosPendentes > 0) {
+    await notificarUsuario(db, usuarioMorador, { ...base, tipo: "pontos_estornados", titulo: pontosEstornados > 0 ? `-${pontosEstornados} ponto(s) estornado(s)` : "Pontos pendentes cancelados", mensagem: pontosEstornados > 0 ? `Os ${pontosEstornados} ponto(s) da coleta nº ${coleta.id} foram retirados do seu saldo porque o registro foi reprovado.` : `Os ${pontosPendentes} ponto(s) pendente(s) da coleta nº ${coleta.id} não serão creditados porque o registro foi reprovado.` });
+  }
+  await notificarAdministradores(db, { ...base, tipo: "coleta_reprovada", titulo: "Coleta reprovada", mensagem: `A coleta nº ${coleta.id} (bloco ${coleta.bloco}) foi reprovada: ${motivo}. Efeito: ${efeito}.` }, ctx.user.id);
+  return { success: true, pointsAwarded: 0, pointsReversed: pontosEstornados, pendingPointsCancelled: pontosPendentes };
+}
