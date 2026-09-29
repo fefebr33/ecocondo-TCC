@@ -9,12 +9,13 @@ import { auditRouter } from "./rotas/auditoria";
 import { podioRouter } from "./rotas/podio";
 import { personalGoalsRouter } from "./rotas/metasPessoais";
 import { certificatesRouter } from "./rotas/certificados";
-import { recurrenceRouter } from "./rotas/recorrencia";
 import { estacoesRouter } from "./rotas/estacoes";
+import { contaRouter } from "./rotas/conta";
+import { configuracoesDescarteRouter } from "./rotas/configuracoesDescarte";
 
 export const appRouter = router({
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    ...contaRouter._def.record,
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -32,8 +33,8 @@ export const appRouter = router({
   ...podioRouter._def.record,
   ...personalGoalsRouter._def.record,
   ...certificatesRouter._def.record,
-  ...recurrenceRouter._def.record,
   ...estacoesRouter._def.record,
+  ...configuracoesDescarteRouter._def.record,
 });
 
 export type AppRouter = typeof appRouter;

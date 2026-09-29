@@ -12,7 +12,8 @@
     "test": "node scripts/ensure-data-dir.mjs && vitest run",
     "db:push": "tsx server/scripts/migrar.ts",
     "db:generate": "drizzle-kit generate",
-    "db:seed": "node scripts/ensure-data-dir.mjs && tsx server/scripts/popularDemonstracao.ts"
+    "db:seed": "node scripts/ensure-data-dir.mjs && tsx server/scripts/popularDemonstracao.ts",
+    "tema:escuro": "tsx scripts/temaEscuro.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

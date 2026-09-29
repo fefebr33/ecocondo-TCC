@@ -20,9 +20,9 @@ async function gerarPdfRelatorioAnual(condominioNome: string, ano: number, total
   desenhar(`Relatório anual de sustentabilidade — ${ano}`, 48, 765, 14, true);
   desenhar(`Condomínio: ${condominioNome}`, 48, 735);
   const linhas = [
-    ["Total coletado no ano", `${totalKg.toLocaleString("pt-BR")} kg`],
+    ["Total descartado no ano", `${totalKg.toLocaleString("pt-BR")} kg`],
     ["Recicláveis", `${reciclavelKg.toLocaleString("pt-BR")} kg`],
-    ["Coletas concluídas", `${coletasConcluidas}`],
+    ["Descartes concluídos", `${coletasConcluidas}`],
     ["Árvores poupadas (estimativa)", equivalencias.arvoresPoupadas.toLocaleString("pt-BR")],
     ["Água poupada (estimativa)", `${equivalencias.litrosAguaPoupados.toLocaleString("pt-BR")} litros`],
     ["CO2 evitado (estimativa)", `${equivalencias.co2EvitadoKg.toLocaleString("pt-BR")} kg CO2e`],

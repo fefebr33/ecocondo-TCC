@@ -49,7 +49,9 @@ A cada push na branch `Desenvolvimento`, o Render publica a versão nova sozinho
 
 ### Login de demonstração
 
-O botão de entrar sem senha fica **ativado** (`LOGIN_DEMONSTRACAO=ativado`) para a apresentação. Como qualquer pessoa com o endereço pode entrar como administrador, fora da apresentação troque para `desativado` em **Environment** no painel do Render (ele reinicia sozinho).
+Os botões de entrar sem senha ficam **ativados** (`LOGIN_DEMONSTRACAO=ativado`) para a apresentação; o login com e-mail e senha (dados de demonstração: senha `ecocondo123`) funciona sempre. Como qualquer pessoa com o endereço pode entrar como administrador pelos botões, fora da apresentação troque para `desativado` em **Environment** no painel do Render (ele reinicia sozinho).
+
+Se o banco da Aiven foi criado antes da versão com senha, as contas antigas ainda não têm senha: entre pelo botão **Administrador** e gere o link de primeiro acesso de cada pessoa em **Pessoas e acessos** (ou recrie os dados de demonstração rodando `pnpm db:seed --limpar` com o `DATABASE_URL` da Aiven no `.env`).
 
 ### Limites do plano gratuito
 

@@ -27,7 +27,27 @@ export const usuarios = mysqlTable("usuarios", {
   criadoEm: dataHora("criado_em").default(agora).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
   ultimoAcesso: dataHora("ultimo_acesso").default(agora).notNull(),
+  /** Hash scrypt da senha (login com e-mail e senha). Nulo nas contas de demonstração e em quem ainda não criou a senha. */
+  senhaHash: varchar("senha_hash", { length: 255 }),
+  /** Quando a pessoa leu o manual e marcou "Li e entendi"; enquanto for nulo, o sistema abre o manual no primeiro acesso. */
+  manualLidoEm: dataHora("manual_lido_em"),
 });
+
+/** Link de uso único para criar a senha no primeiro acesso ou recuperar uma senha esquecida (no banco fica só o hash). */
+export const tiposTokenSenha = ["primeiro_acesso", "recuperacao"] as const;
+export const tokensSenha = mysqlTable("tokens_senha", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+  tipo: mysqlEnum("tipo", tiposTokenSenha).notNull(),
+  expiraEm: dataHora("expira_em").notNull(),
+  usadoEm: dataHora("usado_em"),
+  criadoPorId: int("criado_por_id"),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [
+  uniqueIndex("tokens_senha_hash_unique").on(table.tokenHash),
+  index("tokens_senha_email_idx").on(table.email),
+]);
 
 export const condominios = mysqlTable("condominios", {
   id: int("id").autoincrement().primaryKey(),
@@ -37,6 +57,8 @@ export const condominios = mysqlTable("condominios", {
   estado: varchar("estado", { length: 2 }),
   quantidadeBlocos: int("quantidade_blocos").default(1).notNull(),
   ativo: boolean("ativo").default(true).notNull(),
+  /** Início do ciclo de pontos atual: quando o administrador zera os pontos de todos, o ranking geral recomeça desta data. */
+  pontosZeradosEm: dataHora("pontos_zerados_em"),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
 });
@@ -57,17 +79,22 @@ export const tiposNotificacao = [
   "solicitacao_criada", "codigo_estacao", "pesagem_registrada", "pontos_ganhos", "coleta_reprovada", "pontos_estornados",
   "revisao_administrativa", "premio_resgatado", "resgate_atualizado", "resgate_recusado", "novo_premio", "cadastro_alterado", "premio_podio",
   "nova_coleta", "aguardando_pesagem", "peso_suspeito", "pontos_pendentes", "novo_resgate", "estoque_baixo", "sem_estoque", "novo_cadastro", "falha_operacional",
+  "auditoria_aberta", "auditoria_concluida", "pontos_zerados", "pontos_ajustados", "descarte_aguardando_aprovacao",
 ] as const;
 /** "desconto_podio" fica só para os registros antigos, de quando o pódio dava desconto na taxa condominial. */
-export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio", "premio_podio", "estacao", "resgate", "recompensa", "pessoa", "morador", "comunicado"] as const;
+export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio", "premio_podio", "estacao", "resgate", "recompensa", "pessoa", "morador", "comunicado", "pontos", "configuracao", "usuario"] as const;
 /** Movimentações do extrato de pontos: entradas (coleta, devolução de resgate) e saídas (estorno de coleta reprovada, resgate). */
-export const tiposMovimentacaoPontos = ["credito_coleta", "estorno_coleta", "resgate", "devolucao_resgate", "ajuste"] as const;
+export const tiposMovimentacaoPontos = ["credito_coleta", "estorno_coleta", "resgate", "devolucao_resgate", "ajuste", "zeragem", "penalidade"] as const;
 export const statusResgate = ["solicitado", "aprovado", "entregue", "cancelado"] as const;
 export const statusOcorrencia = ["aberta", "em_analise", "resolvida"] as const;
 export const statusCampanha = ["planejada", "ativa", "encerrada"] as const;
 export const statusAvaliacao = ["nova", "respondida", "arquivada"] as const;
 export const periodosPodio = ["mensal", "semestral", "anual"] as const;
-export const statusAprovacaoPeso = ["pendente", "aprovado", "rejeitado"] as const;
+/**
+ * Situação do descarte registrado na estação: pendente de aprovação -> aprovado ou reprovado pelo administrador.
+ * "auditoria": caso grave (suspeita de fraude, furto, tentativa de burlar) em investigação; o morador é avisado.
+ */
+export const statusAprovacaoPeso = ["pendente", "aprovado", "rejeitado", "auditoria"] as const;
 
 export const moradores = mysqlTable("moradores", {
   id: int("id").autoincrement().primaryKey(),
@@ -162,6 +189,11 @@ export const coletas = mysqlTable("coletas", {
   motivoDecisao: text("motivo_decisao"),
   /** Peso informado numa estação em modo demonstração (balança simulada), e não lido/fotografado de uma balança real. */
   pesagemSimulada: boolean("pesagem_simulada").default(false).notNull(),
+  /** Descartes de tipos diferentes feitos juntos na estação, com o mesmo código, compartilham o mesmo lote. */
+  lote: varchar("lote", { length: 24 }),
+  /** Motivo informado ao abrir a auditoria (caso grave); o resultado fica no motivo da decisão e na trilha de auditoria. */
+  motivoAuditoria: text("motivo_auditoria"),
+  auditoriaAbertaEm: dataHora("auditoria_aberta_em"),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
 }, (table) => [
@@ -173,6 +205,7 @@ export const coletas = mysqlTable("coletas", {
   index("coletas_condominio_bloco_agendada_idx").on(table.condominioId, table.bloco, table.agendadaPara),
   index("coletas_pendente_aprovacao_idx").on(table.condominioId, table.pendenteAprovacaoPeso),
   index("coletas_morador_concluida_idx").on(table.moradorId, table.concluidaEm),
+  index("coletas_lote_idx").on(table.lote),
 ]);
 
 export const logsAuditoria = mysqlTable("logs_auditoria", {
@@ -253,6 +286,9 @@ export const guiasDescarte = mysqlTable("guias_descarte", {
   itensAceitos: text("itens_aceitos").notNull(),
   itensRejeitados: text("itens_rejeitados").notNull(),
   instrucoes: text("instrucoes").notNull(),
+  /** Cor do saco fornecido pelo condomínio para este tipo (ex.: #1f6fd1) e o nome dela ("Azul"). */
+  corSaco: varchar("cor_saco", { length: 7 }),
+  nomeCorSaco: varchar("nome_cor_saco", { length: 40 }),
   publicado: boolean("publicado").default(true).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
 }, (table) => [
@@ -421,6 +457,31 @@ export const movimentacoesPontos = mysqlTable("movimentacoes_pontos", {
   uniqueIndex("movimentacoes_pontos_resgate_unique").on(table.tipo, table.resgateId),
 ]);
 
+/** Regra de cada tipo de descarte, definida pelo administrador: peso mínimo e máximo por descarte e pontos por kg. */
+export const regrasResiduo = mysqlTable("regras_residuo", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  tipoResiduo: mysqlEnum("tipo_residuo", tiposResiduo).notNull(),
+  pesoMinimoGramas: int("peso_minimo_gramas").notNull(),
+  pesoMaximoGramas: int("peso_maximo_gramas").notNull(),
+  pontosPorKg: double("pontos_por_kg").notNull(),
+  atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
+}, (table) => [
+  uniqueIndex("regras_residuo_unique").on(table.condominioId, table.tipoResiduo),
+]);
+
+/** Quais notificações cada perfil recebe (sem linha = recebe). O administrador liga e desliga em Configurações. */
+export const preferenciasNotificacao = mysqlTable("preferencias_notificacao", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  papel: mysqlEnum("papel", papeisEco).notNull(),
+  tipo: mysqlEnum("tipo", tiposNotificacao).notNull(),
+  ativo: boolean("ativo").default(true).notNull(),
+  atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
+}, (table) => [
+  uniqueIndex("preferencias_notificacao_unique").on(table.condominioId, table.papel, table.tipo),
+]);
+
 /** Meta pessoal de reciclagem definida pelo próprio morador (mesma lógica de acompanhamento das metas por bloco). */
 export const metasPessoais = mysqlTable("metas_pessoais", {
   id: int("id").autoincrement().primaryKey(),
@@ -493,3 +554,4 @@ export type Coleta = typeof coletas.$inferSelect;
 export type Pessoa = typeof pessoas.$inferSelect;
 export type EstacaoPesagem = typeof estacoesPesagem.$inferSelect;
 export type MovimentacaoPontos = typeof movimentacoesPontos.$inferSelect;
+export type RegraResiduo = typeof regrasResiduo.$inferSelect;

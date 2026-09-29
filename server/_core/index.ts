@@ -9,9 +9,7 @@ import { appRouter } from "../rotas";
 import { prepararBanco, urlDoBanco } from "../db";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { runCollectionReminders, sendCollectionReminders } from "../scheduled/collectionReminders";
 import { runAnnualReport, sendAnnualReportCheck } from "../scheduled/annualReport";
-import { runRecurringCollections, sendRecurringCollectionsCheck } from "../scheduled/recurringCollections";
 import { notificarFalhaOperacional } from "../notificacoes";
 
 /** Registra a falha no log do servidor e avisa os administradores (notificação de falha operacional). */
@@ -22,8 +20,7 @@ function falhaDaRotina(rotina: string) {
   };
 }
 
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -66,9 +63,7 @@ async function startServer() {
   registerStorageProxy(app);
   registerLoginRoute(app);
   app.get("/api/health", (_req, res) => res.json({ ok: true, timestamp: Date.now() }));
-  app.post("/api/scheduled/collection-reminders", sendCollectionReminders);
   app.post("/api/scheduled/annual-report", sendAnnualReportCheck);
-  app.post("/api/scheduled/recurring-collections", sendRecurringCollectionsCheck);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -94,16 +89,6 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
-
-  // A cada hora, sem agendador externo: gera as coletas recorrentes ("toda terça, bloco B") com um dia de antecedência e, em seguida,
-  // cria os lembretes das coletas das próximas 24h (a ordem garante que a coleta recém-gerada já receba o lembrete).
-  const verificarColetas = () =>
-    runRecurringCollections()
-      .catch(falhaDaRotina("Coletas recorrentes"))
-      .then(() => runCollectionReminders())
-      .catch(falhaDaRotina("Lembretes e coletas atrasadas"));
-  verificarColetas();
-  setInterval(verificarColetas, HOUR_MS);
 
   // Em janeiro, gera o relatório anual consolidado.
   runAnnualReport().catch(falhaDaRotina("Relatório anual"));

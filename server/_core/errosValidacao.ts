@@ -16,7 +16,7 @@ const ROTULOS: Record<string, string> = {
   targetKg: "Meta (kg)",
   pointsCost: "Pontos necessários",
   stock: "Estoque",
-  scheduledAt: "Data da coleta",
+  scheduledAt: "Data do descarte",
   startDate: "Data inicial",
   endDate: "Data final",
   time: "Horário",

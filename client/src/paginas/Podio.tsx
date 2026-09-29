@@ -96,7 +96,7 @@ export default function Podio() {
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#fff3df] text-[#7a4d0a]"><Trophy className="h-5 w-5" /></span>
           <div>
             <p className="font-semibold">Top 3 de {nomeDoPeriodo(periodo, referencia)}{periodoAtual ? " (em andamento)" : ""}</p>
-            <p className="text-sm text-muted-foreground">Pontos ganhos com coletas concluídas{data ? ` de ${formatDate(data.intervalo.inicio)} a ${formatDate(data.intervalo.fim)}` : " no período"}. Empate nos pontos é decidido pelo peso confirmado; se continuar, os moradores dividem a posição.</p>
+            <p className="text-sm text-muted-foreground">Pontos ganhos com descartes aprovados{data ? ` de ${formatDate(data.intervalo.inicio)} a ${formatDate(data.intervalo.fim)}` : " no período"}. Empate nos pontos é decidido pelo peso confirmado; se continuar, os moradores dividem a posição.</p>
           </div>
         </div>
         <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-[#e0ebe4] bg-[#fbfdfc] p-1.5" role="group" aria-label="Escolher o período do pódio">
@@ -110,7 +110,7 @@ export default function Podio() {
         ) : error ? (
           <p role="alert" className="mt-6 text-sm text-destructive">Não foi possível carregar o pódio: {error.message}</p>
         ) : top3.length === 0 ? (
-          <p className="mt-6 text-sm leading-6 text-muted-foreground">Ainda não há coletas concluídas suficientes neste período para formar o pódio.</p>
+          <p className="mt-6 text-sm leading-6 text-muted-foreground">Ainda não há descartes aprovados suficientes neste período para formar o pódio.</p>
         ) : (
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
             {top3.map((linha, indice) => (
@@ -150,7 +150,7 @@ export default function Podio() {
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]"><UserRound className="h-4 w-4" /></span>
               <div>
                 <p className="text-sm font-semibold">{data?.minhaPosicao ? `Sua posição: ${data.minhaPosicao.position}º de ${data.totalParticipantes}` : "Você não pontuou neste período"}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{data?.minhaPosicao ? `${data.minhaPosicao.pontos} pts · ${formatarNumero(data.minhaPosicao.pesoKg)} kg de peso confirmado. Só você vê a sua posição.` : periodoAtual ? "Registre sua reciclagem na estação de pesagem para entrar na disputa." : "Nenhuma coleta sua foi concluída neste período."}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{data?.minhaPosicao ? `${data.minhaPosicao.pontos} pts · ${formatarNumero(data.minhaPosicao.pesoKg)} kg de peso confirmado. Só você vê a sua posição.` : periodoAtual ? "Registre sua reciclagem na estação de pesagem para entrar na disputa." : "Nenhum descarte seu foi aprovado neste período."}</p>
               </div>
             </div>
             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#e0ebe4] bg-white p-4">

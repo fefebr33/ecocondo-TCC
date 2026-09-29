@@ -52,14 +52,21 @@ describe("autorização de procedimentos EcoCondo", () => {
     await expect(caller.relatorios.visaoGeral({})).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("bloqueia morador na conclusão de coleta e publicação de comunicados", async () => {
+  it("bloqueia morador na aprovação e auditoria de descartes, no controle de pontos e na publicação de comunicados", async () => {
     mockProfile.mockResolvedValue({
       perfil: { id: 3, usuarioId: 77, condominioId: 1, moradorId: 10, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() },
       condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
       morador: null,
     });
     const caller = appRouter.createCaller(contextFor("morador"));
-    await expect(caller.coletas.atualizarStatus({ id: 1, status: "concluida", weightGrams: 1000 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.coletas.decidirAprovacaoPeso({ id: 1, aprovar: true })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.coletas.aprovarVarios({ ids: [1] })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.coletas.abrirAuditoria({ id: 1, motivo: "Motivo de teste suficiente" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.pontos.zerarTodos({ confirmation: "ZERAR", reason: "Novo ciclo de teste" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.pontos.ajustar({ residentId: 10, points: 5, reason: "Ajuste de teste válido" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.regrasDescarte.salvar({ wasteType: "reciclavel", minGrams: 100, maxGrams: 1000, pointsPerKg: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.preferenciasNotificacao.salvar({ role: "morador", type: "comunicado", active: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.auth.gerarLinkAcesso({ personId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.notificacoes.criarComunicado({ title: "Aviso", message: "Mensagem de teste" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -97,7 +104,7 @@ describe("autorização de procedimentos EcoCondo", () => {
   it("exige tablet pareado para os procedimentos da estação de pesagem", async () => {
     const caller = appRouter.createCaller({ ...contextFor("morador"), user: null } as unknown as TrpcContext);
     await expect(caller.estacao.status()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    await expect(caller.estacao.registrar({ code: "123456", wasteType: "reciclavel", weightGrams: 1000, imageDataUrl: "data:image/png;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.estacao.registrar({ code: "123456", itens: [{ wasteType: "reciclavel", weightGrams: 1000, imageDataUrl: "data:image/png;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }] })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("rejeita datas inválidas e conteúdo insuficiente antes de acessar o banco", async () => {

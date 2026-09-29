@@ -1,77 +1,85 @@
 /**
  * Regras antifraude da estação de pesagem: um tablet com balança ao lado das lixeiras, onde o próprio morador
- * pesa e registra a reciclagem. Sem um coletor conferindo, as travas abaixo substituem a conferência humana:
- * limites rígidos bloqueiam o registro, e os sinais de risco mandam o registro para a revisão do administrador
- * (os pontos só entram depois da aprovação).
+ * pesa e registra o descarte. Limites rígidos bloqueiam o registro; todo descarte registrado fica pendente até o
+ * administrador conferir a foto do visor e o peso (os pontos só entram depois da aprovação), e os sinais de risco viram
+ * alertas para essa conferência.
  */
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { LimiteAntifraudeExcedidoError, ehPesoAnomalo } from "./antifraude";
 
-/** Peso mínimo de um registro: evita registros vazios só para testar a balança. */
+/** Peso mínimo de um descarte quando o tipo não tem regra própria (as regras de cada tipo ficam em Configurações). */
 export const PESO_MINIMO_ESTACAO_GRAMAS = 100;
-/** Um saco de recicláveis de um apartamento raramente passa disso. */
+/** Um saco de recicláveis de um apartamento raramente passa disso (limite padrão por item, se o tipo não tiver regra). */
 export const LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS = 30_000;
 /** Soma máxima registrada por morador no mesmo dia. */
 export const LIMITE_PESO_DIARIO_ESTACAO_GRAMAS = 40_000;
-/** Quantidade máxima de registros por morador no mesmo dia. */
+/** Quantidade máxima de descartes (idas à estação, cada uma com um ou vários tipos) por morador no mesmo dia. */
 export const LIMITE_REGISTROS_DIARIOS_ESTACAO = 4;
-/** Intervalo mínimo entre dois registros do mesmo morador (impede pesar o mesmo saco várias vezes seguidas). */
+/** Intervalo mínimo entre duas idas do mesmo morador à estação (impede pesar o mesmo saco várias vezes seguidas). */
 export const INTERVALO_MINIMO_ENTRE_REGISTROS_MINUTOS = 10;
-/** Acima deste peso o registro sempre passa pela revisão do administrador. */
+/** Tipos diferentes que cabem num mesmo descarte (um código, várias pesagens). */
+export const MAXIMO_ITENS_POR_DESCARTE = 5;
+/** Acima deste peso o item recebe um alerta para o administrador olhar com mais cuidado. */
 export const PESO_REVISAO_OBRIGATORIA_GRAMAS = 10_000;
-/** Fração dos registros sorteada para revisão, mesmo sem nenhum sinal de risco (auditoria por amostragem). */
-export const FRACAO_AMOSTRAGEM_REVISAO = 0.1;
 /** Validade do código temporário que o morador gera no app para se identificar no tablet. */
 export const VALIDADE_CODIGO_ESTACAO_MINUTOS = 5;
 /** Tentativas de código errado aceitas por tablet antes de bloqueá-lo por alguns minutos. */
 export const LIMITE_TENTATIVAS_CODIGO = 8;
 export const BLOQUEIO_TENTATIVAS_MINUTOS = 15;
 
-type RegistroAnterior = { pesoGramas: number | null; concluidaEm: Date | null };
+type RegistroAnterior = { pesoGramas: number | null; concluidaEm: Date | null; lote?: string | null; id?: number };
 
-let sorteio: () => number = Math.random;
+export type ItemDescarte = {
+  rotulo: string;
+  pesoGramas: number;
+  pesoMinimoGramas?: number;
+  pesoMaximoGramas?: number;
+  mediaHistoricaGramas: number;
+};
 
-/** Permite fixar o sorteio da amostragem (testes e dados de demonstração). */
-export function definirSorteioAmostragem(funcao: () => number) {
-  sorteio = funcao;
-}
+const kg = (gramas: number) => (gramas / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
 /**
- * Confere um registro da estação. Lança LimiteAntifraudeExcedidoError quando um limite rígido é violado;
- * caso contrário, devolve os motivos para revisão (lista vazia = pontos liberados na hora).
+ * Confere um descarte (um ou vários tipos pesados com o mesmo código). Lança LimiteAntifraudeExcedidoError quando um
+ * limite rígido é violado. Todo descarte vai para a aprovação do administrador; os alertas devolvidos (por item)
+ * mostram o que merece mais atenção na conferência da foto e do peso.
  */
-export function avaliarRegistroEstacao(dados: {
-  pesoGramas: number;
-  registrosHoje: RegistroAnterior[];
-  mediaHistoricaGramas: number;
-  agora: Date;
-  /** Sorteio de 10% para conferência; desligado no modo demonstração, para a apresentação ter resultado previsível. */
-  amostragem?: boolean;
-}) {
-  const { pesoGramas, registrosHoje, mediaHistoricaGramas, agora, amostragem = true } = dados;
-  if (pesoGramas < PESO_MINIMO_ESTACAO_GRAMAS) {
-    throw new LimiteAntifraudeExcedidoError(`O peso mínimo por registro é ${(PESO_MINIMO_ESTACAO_GRAMAS / 1000).toLocaleString("pt-BR")} kg.`);
+export function avaliarDescarteEstacao(dados: { itens: ItemDescarte[]; registrosHoje: RegistroAnterior[]; agora: Date }) {
+  const { itens, registrosHoje, agora } = dados;
+  if (!itens.length) throw new LimiteAntifraudeExcedidoError("Escolha pelo menos um tipo de descarte.");
+  if (itens.length > MAXIMO_ITENS_POR_DESCARTE) throw new LimiteAntifraudeExcedidoError(`Registre no máximo ${MAXIMO_ITENS_POR_DESCARTE} tipos por descarte.`);
+  for (const item of itens) {
+    const minimo = item.pesoMinimoGramas ?? PESO_MINIMO_ESTACAO_GRAMAS;
+    const maximo = item.pesoMaximoGramas ?? LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS;
+    if (!Number.isFinite(item.pesoGramas) || item.pesoGramas < minimo) {
+      throw new LimiteAntifraudeExcedidoError(`${item.rotulo}: o peso mínimo por descarte é ${kg(minimo)} kg.`);
+    }
+    if (item.pesoGramas > maximo) {
+      throw new LimiteAntifraudeExcedidoError(`${item.rotulo}: o peso informado passa do limite de ${kg(maximo)} kg por descarte. Procure a administração para volumes maiores.`);
+    }
   }
-  if (pesoGramas > LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS) {
-    throw new LimiteAntifraudeExcedidoError(`O peso informado passa do limite de ${LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS / 1000} kg por registro. Procure a administração para registrar volumes maiores.`);
-  }
-  if (registrosHoje.length >= LIMITE_REGISTROS_DIARIOS_ESTACAO) {
-    throw new LimiteAntifraudeExcedidoError(`Você já fez ${LIMITE_REGISTROS_DIARIOS_ESTACAO} registros hoje, o máximo por dia. Tente de novo amanhã.`);
+  // Cada ida à estação conta uma vez, mesmo com vários tipos (registros antigos, sem lote, contam um a um).
+  const idasHoje = new Set(registrosHoje.map((registro, indice) => registro.lote ?? `avulso-${registro.id ?? indice}`)).size;
+  if (idasHoje >= LIMITE_REGISTROS_DIARIOS_ESTACAO) {
+    throw new LimiteAntifraudeExcedidoError(`Você já fez ${LIMITE_REGISTROS_DIARIOS_ESTACAO} descartes hoje, o máximo por dia. Tente de novo amanhã.`);
   }
   const pesoHoje = registrosHoje.reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
-  if (pesoHoje + pesoGramas > LIMITE_PESO_DIARIO_ESTACAO_GRAMAS) {
-    throw new LimiteAntifraudeExcedidoError(`Este registro passaria do limite diário de ${LIMITE_PESO_DIARIO_ESTACAO_GRAMAS / 1000} kg por morador.`);
+  const pesoAgora = itens.reduce((soma, item) => soma + item.pesoGramas, 0);
+  if (pesoHoje + pesoAgora > LIMITE_PESO_DIARIO_ESTACAO_GRAMAS) {
+    throw new LimiteAntifraudeExcedidoError(`Este descarte passaria do limite diário de ${LIMITE_PESO_DIARIO_ESTACAO_GRAMAS / 1000} kg por morador.`);
   }
   const ultimo = registrosHoje.reduce<Date | null>((maisRecente, registro) => (registro.concluidaEm && (!maisRecente || registro.concluidaEm > maisRecente) ? registro.concluidaEm : maisRecente), null);
   if (ultimo && agora.getTime() - ultimo.getTime() < INTERVALO_MINIMO_ENTRE_REGISTROS_MINUTOS * 60_000) {
-    throw new LimiteAntifraudeExcedidoError(`Aguarde ${INTERVALO_MINIMO_ENTRE_REGISTROS_MINUTOS} minutos entre um registro e outro.`);
+    throw new LimiteAntifraudeExcedidoError(`Aguarde ${INTERVALO_MINIMO_ENTRE_REGISTROS_MINUTOS} minutos entre um descarte e outro.`);
   }
-
-  const motivosRevisao: string[] = [];
-  if (pesoGramas > PESO_REVISAO_OBRIGATORIA_GRAMAS) motivosRevisao.push(`peso acima de ${PESO_REVISAO_OBRIGATORIA_GRAMAS / 1000} kg`);
-  if (ehPesoAnomalo(pesoGramas, mediaHistoricaGramas)) motivosRevisao.push("peso muito acima do histórico do morador");
-  if (!motivosRevisao.length && amostragem && sorteio() < FRACAO_AMOSTRAGEM_REVISAO) motivosRevisao.push("sorteado para conferência por amostragem");
-  return { motivosRevisao };
+  return {
+    alertasPorItem: itens.map((item) => {
+      const alertas: string[] = [];
+      if (item.pesoGramas > PESO_REVISAO_OBRIGATORIA_GRAMAS) alertas.push(`peso acima de ${PESO_REVISAO_OBRIGATORIA_GRAMAS / 1000} kg`);
+      if (ehPesoAnomalo(item.pesoGramas, item.mediaHistoricaGramas)) alertas.push("peso muito acima do histórico do morador");
+      return alertas;
+    }),
+  };
 }
 
 /** Código de pareamento do tablet: longo e aleatório, mostrado uma única vez ao administrador. */
