@@ -3,7 +3,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import AppShell from "@/components/AppShell";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import Painel from "@/paginas/Painel";
-import Coletas from "@/paginas/Coletas";
+import Descartes from "@/paginas/Descartes";
+import Manual from "@/paginas/Manual";
+import PainelMorador from "@/paginas/PainelMorador";
+import DefinirSenha from "@/paginas/DefinirSenha";
 import GuiaDescarte from "@/paginas/GuiaDescarte";
 import Engajamento from "@/paginas/Engajamento";
 import Podio from "@/paginas/Podio";
@@ -20,7 +23,7 @@ import Sustentabilidade from "@/paginas/Sustentabilidade";
 import Comunidade from "@/paginas/Comunidade";
 import Auditoria from "@/paginas/Auditoria";
 import Estacao from "@/paginas/Estacao";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -34,7 +37,11 @@ function Router() {
       <Route path="/entrar" component={Entrar} />
       <Route path="/estacao" component={Estacao} />
       <Route path="/dashboard"><ProtectedRoute><Painel /></ProtectedRoute></Route>
-      <Route path="/coletas"><ProtectedRoute><Coletas /></ProtectedRoute></Route>
+      <Route path="/definir-senha" component={DefinirSenha} />
+      <Route path="/descartes"><ProtectedRoute><Descartes /></ProtectedRoute></Route>
+      <Route path="/coletas"><Redirect to="/descartes" replace /></Route>
+      <Route path="/manual"><ProtectedRoute><Manual /></ProtectedRoute></Route>
+      <Route path="/moradores/painel"><ProtectedRoute><PainelMorador /></ProtectedRoute></Route>
       <Route path="/moradores"><ProtectedRoute><Moradores /></ProtectedRoute></Route>
       <Route path="/pessoas"><ProtectedRoute><Pessoas /></ProtectedRoute></Route>
       <Route path="/relatorios"><ProtectedRoute><Relatorios /></ProtectedRoute></Route>
@@ -53,5 +60,5 @@ function Router() {
 }
 
 export default function App() {
-  return <ErrorBoundary><ThemeProvider defaultTheme="light"><TooltipProvider><Toaster /><Router /></TooltipProvider></ThemeProvider></ErrorBoundary>;
+  return <ErrorBoundary><ThemeProvider defaultTheme="light" switchable><TooltipProvider><Toaster /><Router /></TooltipProvider></ThemeProvider></ErrorBoundary>;
 }

@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { condominios, papeisEco, pessoas, moradores, perfisAcesso, usuarios } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -21,6 +21,9 @@ export const administratorOnly = withProfile.use(async ({ ctx, next }) => {
   return next();
 });
 
+/** Colunas do usuário que podem ir para a tela (nunca o hash da senha). */
+const usuarioPublico = { id: usuarios.id, nome: usuarios.nome, email: usuarios.email, metodoLogin: usuarios.metodoLogin, papel: usuarios.papel, criadoEm: usuarios.criadoEm, ultimoAcesso: usuarios.ultimoAcesso, temSenha: sql<number>`${usuarios.senhaHash} is not null`, manualLidoEm: usuarios.manualLidoEm };
+
 export const ecoRouter = router({
   pessoas: router({
     diretorio: administratorOnly.query(async ({ ctx }) => {
@@ -32,7 +35,7 @@ export const ecoRouter = router({
         if (!emailMorador || pessoasExistentes.some((pessoa) => pessoa.moradorId === morador.id || pessoa.email === emailMorador)) continue;
         await db.insert(pessoas).values({ condominioId: ctx.eco.condominio.id, ...buildPendingResidentPerson({ id: morador.id, usuarioId: morador.usuarioId, nome: morador.nome, email: emailMorador, telefone: morador.telefone, bloco: morador.bloco, apartamento: morador.apartamento }) });
       }
-      return db.select({ pessoa: pessoas, usuario: usuarios, morador: moradores }).from(pessoas).leftJoin(usuarios, eq(usuarios.id, pessoas.usuarioId)).leftJoin(moradores, eq(moradores.id, pessoas.moradorId)).where(eq(pessoas.condominioId, ctx.eco.condominio.id)).orderBy(asc(pessoas.nome));
+      return db.select({ pessoa: pessoas, usuario: usuarioPublico, morador: moradores }).from(pessoas).leftJoin(usuarios, eq(usuarios.id, pessoas.usuarioId)).leftJoin(moradores, eq(moradores.id, pessoas.moradorId)).where(eq(pessoas.condominioId, ctx.eco.condominio.id)).orderBy(asc(pessoas.nome));
     }),
     criar: administratorOnly.input(z.object({
       name: z.string().trim().min(3).max(180),
@@ -107,7 +110,7 @@ export const ecoRouter = router({
     })),
     membros: administratorOnly.query(async ({ ctx }) => {
       const db = await getDb();
-      return db.select({ profile: perfisAcesso, user: usuarios, resident: moradores }).from(perfisAcesso).leftJoin(usuarios, eq(usuarios.id, perfisAcesso.usuarioId)).leftJoin(moradores, eq(moradores.id, perfisAcesso.moradorId)).where(eq(perfisAcesso.condominioId, ctx.eco.condominio.id));
+      return db.select({ profile: perfisAcesso, user: usuarioPublico, resident: moradores }).from(perfisAcesso).leftJoin(usuarios, eq(usuarios.id, perfisAcesso.usuarioId)).leftJoin(moradores, eq(moradores.id, perfisAcesso.moradorId)).where(eq(perfisAcesso.condominioId, ctx.eco.condominio.id));
     }),
   }),
   condominio: router({

@@ -23,6 +23,7 @@ import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { calculateComplianceOverview, calculateGoalProgress, compareBlocks, compareBlocksOverTime } from "../dominio/regrasSustentabilidade";
 import { pesoConfirmadoGramas } from "../dominio/antifraude";
+import { situacaoDescarte } from "@shared/descarte";
 import { incidentAuditState, writeAuditLog } from "../audit";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
@@ -120,18 +121,6 @@ export const sustainabilityRouter = router({
       return { success: true };
     }),
   }),
-  calendario: router({
-    eventos: withProfile.input(periodInput).query(async ({ ctx, input }) => {
-      const db = await getDb();
-      const condicoes = condicoesPeriodo(ctx.eco.condominio.id, input);
-      if (ctx.eco.perfil.papel === "morador") {
-        if (!ctx.eco.morador) return [];
-        condicoes.push(eq(coletas.moradorId, ctx.eco.morador.id));
-      }
-      const registros = await db.select().from(coletas).where(and(...condicoes)).orderBy(asc(coletas.agendadaPara));
-      return registros.map((registro) => ({ id: registro.id, scheduledAt: registro.agendadaPara, wasteType: registro.tipoResiduo, block: registro.bloco, status: registro.status, isReminder: registro.status === "agendada" || registro.status === "em_andamento" }));
-    }),
-  }),
   campanhas: router({
     listar: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
@@ -185,14 +174,18 @@ export const sustainabilityRouter = router({
         db.select().from(ocorrencias).where(and(eq(ocorrencias.condominioId, ctx.eco.condominio.id), or(eq(ocorrencias.status, "aberta"), eq(ocorrencias.status, "em_analise")))),
         db.select().from(avaliacoesColeta).where(and(eq(avaliacoesColeta.condominioId, ctx.eco.condominio.id), eq(avaliacoesColeta.status, "nova"))),
       ]);
-      return calculateComplianceOverview({
-        residents: todosMoradores.map((morador) => ({ email: morador.email })),
-        people: todasPessoas.map((pessoa) => ({ accessStatus: pessoa.statusAcesso })),
-        collections: registros.map(paraRegroSustentabilidade),
-        openIncidents: ocorrenciasAbertas.length,
-        pendingFeedback: todasAvaliacoes.length,
-        now: new Date(),
-      });
+      return {
+        ...calculateComplianceOverview({
+          residents: todosMoradores.map((morador) => ({ email: morador.email })),
+          people: todasPessoas.map((pessoa) => ({ accessStatus: pessoa.statusAcesso })),
+          collections: registros.map(paraRegroSustentabilidade),
+          openIncidents: ocorrenciasAbertas.length,
+          pendingFeedback: todasAvaliacoes.length,
+          now: new Date(),
+        }),
+        awaitingApproval: registros.filter((registro) => situacaoDescarte(registro) === "pendente").length,
+        inAudit: registros.filter((registro) => situacaoDescarte(registro) === "auditoria").length,
+      };
     }),
   }),
   comparacao: router({

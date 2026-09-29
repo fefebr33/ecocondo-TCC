@@ -8,7 +8,11 @@
       content="width=device-width, initial-scale=1.0" />
     <title>EcoCondo — Gestão circular para condomínios</title>
     <meta name="theme-color" content="#0f7350" />
-    <meta name="description" content="Plataforma de gestão de coleta seletiva para condomínios residenciais." />
+    <meta name="description" content="Plataforma de gestão de descartes e reciclagem para condomínios residenciais." />
+    <script>
+      // Aplica o modo escuro antes de a página desenhar, para não piscar branco.
+      try { if (localStorage.getItem("theme") === "dark") document.documentElement.classList.add("dark"); } catch (e) {}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

@@ -16,6 +16,6 @@ export const ENV = {
   databaseUrl: process.env.DATABASE_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   isProduction,
-  /** O login de demonstração (sem senha) é o único acesso do protótipo; LOGIN_DEMONSTRACAO=desativado o desliga num servidor público. */
+  /** Botões "Entrar como" (sem senha) e link de senha na tela, para a banca e testes; LOGIN_DEMONSTRACAO=desativado os desliga num servidor público (o login com e-mail e senha continua). */
   loginDemonstracaoAtivo: process.env.LOGIN_DEMONSTRACAO !== "desativado",
 };

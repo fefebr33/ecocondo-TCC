@@ -26,7 +26,7 @@ async function gerarPdfCertificado(condominioNome: string, bloco: string, rotulo
   desenhar(`Bloco ${bloco} reciclou ${kg.toLocaleString("pt-BR")} kg neste trimestre (${rotuloTrimestre})`, 90, 275, 13);
   desenhar(`Equivalente a aproximadamente ${equivalencias.arvoresPoupadas.toLocaleString("pt-BR")} árvore(s) poupada(s),`, 90, 240, 11);
   desenhar(`${equivalencias.litrosAguaPoupados.toLocaleString("pt-BR")} litros de água e ${equivalencias.co2EvitadoKg.toLocaleString("pt-BR")} kg de CO2e evitados.`, 90, 224, 11);
-  desenhar("Reconhecimento emitido automaticamente pelo sistema EcoCondo com base nas coletas registradas.", 90, 180, 9, false, rgb(0.35, 0.4, 0.38));
+  desenhar("Reconhecimento emitido automaticamente pelo sistema EcoCondo com base nos descartes registrados.", 90, 180, 9, false, rgb(0.35, 0.4, 0.38));
   desenhar(`Emitido em ${new Date().toLocaleDateString("pt-BR")}`, 90, 60, 9);
   const bytes = await pdf.save();
   return Buffer.from(bytes);
@@ -55,7 +55,7 @@ export const certificatesRouter = router({
       ));
       const gramas = registros.reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
       const kg = Number((gramas / 1000).toFixed(1));
-      if (kg <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Não há coletas concluídas suficientes neste bloco no trimestre selecionado." });
+      if (kg <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Não há descartes aprovados suficientes neste bloco no trimestre selecionado." });
 
       const pdfBuffer = await gerarPdfCertificado(ctx.eco.condominio.nome, input.block, rotulo, kg);
       const arquivo = await storagePut(`certificados/${ctx.eco.condominio.id}/${input.block}-${rotulo}.pdf`, pdfBuffer, "application/pdf");

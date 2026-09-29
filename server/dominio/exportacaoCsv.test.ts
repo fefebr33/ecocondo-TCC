@@ -16,7 +16,7 @@ describe("exportação CSV de coletas", () => {
       origin: "Estação \"Térreo\"",
       notes: "Material separado",
     }]);
-    expect(csv.startsWith("\ufeff\"ID\";\"Status\"" )).toBe(true);
+    expect(csv.startsWith("\ufeff\"ID\";\"Situação\"" )).toBe(true);
     expect(csv).toContain('"1,25"');
     expect(csv).toContain('"Ana; Silva"');
     expect(csv).toContain('"Estação ""Térreo"""');

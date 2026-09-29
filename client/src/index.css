@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./tema-escuro.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -50,6 +51,27 @@
   --radius: 0.75rem;
 }
 
+.dark {
+  --background: oklch(0.165 0.012 155);
+  --foreground: oklch(0.93 0.01 150);
+  --card: oklch(0.215 0.014 155);
+  --card-foreground: oklch(0.93 0.01 150);
+  --popover: oklch(0.225 0.014 155);
+  --popover-foreground: oklch(0.93 0.01 150);
+  --primary: oklch(0.66 0.13 155);
+  --primary-foreground: oklch(0.16 0.02 155);
+  --secondary: oklch(0.27 0.02 155);
+  --secondary-foreground: oklch(0.92 0.01 150);
+  --muted: oklch(0.26 0.015 155);
+  --muted-foreground: oklch(0.73 0.02 155);
+  --accent: oklch(0.29 0.025 155);
+  --accent-foreground: oklch(0.93 0.01 150);
+  --destructive: oklch(0.68 0.19 25);
+  --border: oklch(0.31 0.018 155);
+  --input: oklch(0.34 0.018 155);
+  --ring: oklch(0.66 0.13 155);
+}
+
 * { border-color: var(--border); }
 
 html { scroll-behavior: smooth; }
@@ -70,4 +92,21 @@ button:active, [role="button"]:active { transform: scale(0.98); }
 
 @media (prefers-reduced-motion: no-preference) {
   a, button { transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+}
+
+/* Folha do QR do guia: só aparece na impressão pedida pelo botão "Imprimir só o QR" (o resto da página some). */
+.so-impressao { display: none; }
+@media print {
+  body.imprimindo-qr > *:not(.so-impressao) { display: none !important; }
+  body.imprimindo-qr { background: #fff !important; }
+  body.imprimindo-qr .so-impressao { display: block; }
+  .folha-qr { color: #10241a; font-family: "Inter", "Segoe UI", sans-serif; text-align: center; padding: 12mm 0; }
+  .folha-qr-marca { font-size: 11pt; letter-spacing: .12em; text-transform: uppercase; color: #0f563e; margin: 0; }
+  .folha-qr h1 { font-size: 22pt; margin: 4mm 0 6mm; }
+  .folha-qr img { display: block; width: 70mm; height: 70mm; margin: 0 auto; }
+  .folha-qr > p { font-size: 12pt; margin: 6mm auto 0; max-width: 120mm; }
+  .folha-qr ul { list-style: none; padding: 0; margin: 8mm auto 0; display: inline-grid; gap: 2.5mm; text-align: left; font-size: 11pt; }
+  .folha-qr li { display: flex; align-items: center; gap: 3mm; }
+  .folha-qr li span { width: 5mm; height: 5mm; border-radius: 50%; border: 1px solid #0003; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { size: A4; margin: 12mm; }
 }

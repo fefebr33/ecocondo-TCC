@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { LimiteAntifraudeExcedidoError } from "./antifraude";
 import {
-  avaliarRegistroEstacao,
-  definirSorteioAmostragem,
+  avaliarDescarteEstacao,
   gerarCodigoEstacao,
   hashTokenEstacao,
   registrarTentativaErrada,
@@ -12,40 +11,39 @@ import {
 
 const agora = new Date("2026-09-25T15:00:00");
 const minutosAntes = (minutos: number) => new Date(agora.getTime() - minutos * 60_000);
-
-afterEach(() => definirSorteioAmostragem(Math.random));
+const item = (pesoGramas: number, extra: Partial<Parameters<typeof avaliarDescarteEstacao>[0]["itens"][number]> = {}) => ({ rotulo: "Reciclável", pesoGramas, mediaHistoricaGramas: 0, ...extra });
 
 describe("regras antifraude da estação de pesagem", () => {
-  it("libera um registro comum sem revisão", () => {
-    definirSorteioAmostragem(() => 0.99);
-    expect(avaliarRegistroEstacao({ pesoGramas: 3200, registrosHoje: [], mediaHistoricaGramas: 3000, agora }).motivosRevisao).toEqual([]);
+  it("aceita um descarte comum sem alertas", () => {
+    expect(avaliarDescarteEstacao({ itens: [item(3200, { mediaHistoricaGramas: 3000 })], registrosHoje: [], agora }).alertasPorItem).toEqual([[]]);
   });
 
-  it("bloqueia peso abaixo do mínimo, acima do limite por registro e acima do limite diário", () => {
-    expect(() => avaliarRegistroEstacao({ pesoGramas: 50, registrosHoje: [], mediaHistoricaGramas: 0, agora })).toThrow(LimiteAntifraudeExcedidoError);
-    expect(() => avaliarRegistroEstacao({ pesoGramas: 31_000, registrosHoje: [], mediaHistoricaGramas: 0, agora })).toThrow(LimiteAntifraudeExcedidoError);
-    expect(() => avaliarRegistroEstacao({ pesoGramas: 15_000, registrosHoje: [{ pesoGramas: 28_000, concluidaEm: minutosAntes(120) }], mediaHistoricaGramas: 0, agora })).toThrow(/limite diário/);
+  it("aceita vários tipos no mesmo descarte e confere o peso mínimo e máximo de cada tipo", () => {
+    const resultado = avaliarDescarteEstacao({ itens: [item(2000), item(800, { rotulo: "Eletrônico", pesoMinimoGramas: 50, pesoMaximoGramas: 20_000 })], registrosHoje: [], agora });
+    expect(resultado.alertasPorItem).toHaveLength(2);
+    expect(() => avaliarDescarteEstacao({ itens: [item(30, { rotulo: "Orgânico", pesoMinimoGramas: 100 })], registrosHoje: [], agora })).toThrow(/Orgânico: o peso mínimo/);
+    expect(() => avaliarDescarteEstacao({ itens: [item(6000, { rotulo: "Perigoso", pesoMaximoGramas: 5000 })], registrosHoje: [], agora })).toThrow(/Perigoso: o peso informado passa do limite de 5 kg/);
+    expect(() => avaliarDescarteEstacao({ itens: [], registrosHoje: [], agora })).toThrow(LimiteAntifraudeExcedidoError);
   });
 
-  it("bloqueia registros seguidos e o excesso de registros no dia", () => {
-    expect(() => avaliarRegistroEstacao({ pesoGramas: 2000, registrosHoje: [{ pesoGramas: 2000, concluidaEm: minutosAntes(3) }], mediaHistoricaGramas: 2000, agora })).toThrow(/Aguarde/);
-    const quatro = [1, 2, 3, 4].map((hora) => ({ pesoGramas: 1000, concluidaEm: minutosAntes(hora * 60) }));
-    expect(() => avaliarRegistroEstacao({ pesoGramas: 1000, registrosHoje: quatro, mediaHistoricaGramas: 1000, agora })).toThrow(/máximo por dia/);
+  it("bloqueia peso zero ou negativo, acima do limite padrão e acima do limite diário", () => {
+    expect(() => avaliarDescarteEstacao({ itens: [item(0)], registrosHoje: [], agora })).toThrow(LimiteAntifraudeExcedidoError);
+    expect(() => avaliarDescarteEstacao({ itens: [item(-500)], registrosHoje: [], agora })).toThrow(LimiteAntifraudeExcedidoError);
+    expect(() => avaliarDescarteEstacao({ itens: [item(31_000)], registrosHoje: [], agora })).toThrow(LimiteAntifraudeExcedidoError);
+    expect(() => avaliarDescarteEstacao({ itens: [item(15_000)], registrosHoje: [{ pesoGramas: 28_000, concluidaEm: minutosAntes(120) }], agora })).toThrow(/limite diário/);
   });
 
-  it("manda para revisão peso alto, peso fora do histórico e a amostragem sorteada", () => {
-    definirSorteioAmostragem(() => 0.99);
-    expect(avaliarRegistroEstacao({ pesoGramas: 12_000, registrosHoje: [], mediaHistoricaGramas: 11_000, agora }).motivosRevisao).toEqual(["peso acima de 10 kg"]);
-    expect(avaliarRegistroEstacao({ pesoGramas: 7000, registrosHoje: [], mediaHistoricaGramas: 2000, agora }).motivosRevisao).toEqual(["peso muito acima do histórico do morador"]);
-    definirSorteioAmostragem(() => 0.01);
-    expect(avaliarRegistroEstacao({ pesoGramas: 2000, registrosHoje: [], mediaHistoricaGramas: 2000, agora }).motivosRevisao).toEqual(["sorteado para conferência por amostragem"]);
+  it("bloqueia descartes seguidos e o excesso de idas à estação no dia (cada ida conta uma vez, mesmo com vários tipos)", () => {
+    expect(() => avaliarDescarteEstacao({ itens: [item(2000)], registrosHoje: [{ pesoGramas: 2000, concluidaEm: minutosAntes(3) }], agora })).toThrow(/Aguarde/);
+    const tresIdasComDoisTipos = [1, 2, 3].flatMap((hora) => [{ pesoGramas: 500, concluidaEm: minutosAntes(hora * 60), lote: `L${hora}` }, { pesoGramas: 500, concluidaEm: minutosAntes(hora * 60), lote: `L${hora}` }]);
+    expect(() => avaliarDescarteEstacao({ itens: [item(1000)], registrosHoje: tresIdasComDoisTipos, agora })).not.toThrow();
+    const quatro = [1, 2, 3, 4].map((hora) => ({ pesoGramas: 1000, concluidaEm: minutosAntes(hora * 60), lote: `L${hora}` }));
+    expect(() => avaliarDescarteEstacao({ itens: [item(1000)], registrosHoje: quatro, agora })).toThrow(/máximo por dia/);
   });
 
-  it("no modo demonstração não sorteia registros para conferência, mas mantém as outras travas", () => {
-    definirSorteioAmostragem(() => 0.01);
-    expect(avaliarRegistroEstacao({ pesoGramas: 2500, registrosHoje: [], mediaHistoricaGramas: 3000, agora, amostragem: false }).motivosRevisao).toEqual([]);
-    expect(avaliarRegistroEstacao({ pesoGramas: 12_000, registrosHoje: [], mediaHistoricaGramas: 11_000, agora, amostragem: false }).motivosRevisao).toEqual(["peso acima de 10 kg"]);
-    expect(() => avaliarRegistroEstacao({ pesoGramas: 0, registrosHoje: [], mediaHistoricaGramas: 0, agora, amostragem: false })).toThrow(LimiteAntifraudeExcedidoError);
+  it("aponta alertas para a conferência: peso alto e peso fora do histórico", () => {
+    expect(avaliarDescarteEstacao({ itens: [item(12_000, { mediaHistoricaGramas: 11_000 })], registrosHoje: [], agora }).alertasPorItem).toEqual([["peso acima de 10 kg"]]);
+    expect(avaliarDescarteEstacao({ itens: [item(7000, { mediaHistoricaGramas: 2000 })], registrosHoje: [], agora }).alertasPorItem).toEqual([["peso muito acima do histórico do morador"]]);
   });
 
   it("gera códigos de 6 dígitos e guarda só o hash do código de pareamento", () => {

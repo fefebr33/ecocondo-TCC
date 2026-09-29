@@ -12,6 +12,8 @@ import {
   Camera,
   ChevronRight,
   ClipboardList,
+  KeyRound,
+  LifeBuoy,
   Gift,
   History,
   Leaf,
@@ -25,8 +27,13 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { ReactNode, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { FormEvent, ReactNode, useState } from "react";
+import { Link, Redirect, useLocation } from "wouter";
+import AvisosNovos from "@/components/AvisosNovos";
+import BotaoTema from "@/components/BotaoTema";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 type EcoRole = SharedEcoRole;
 
@@ -39,7 +46,7 @@ type NavItem = {
 
 const navigation: NavItem[] = [
   { href: "/dashboard", label: "Visão geral", icon: LayoutDashboard, roles: ["administrador", "morador"] },
-  { href: "/coletas", label: "Coletas", icon: Recycle, roles: ["administrador", "morador"] },
+  { href: "/descartes", label: "Descartes", icon: Recycle, roles: ["administrador", "morador"] },
   { href: "/moradores", label: "Moradores", icon: UsersRound, roles: ["administrador"] },
   { href: "/pessoas", label: "Pessoas e acessos", icon: UsersRound, roles: ["administrador"] },
   { href: "/relatorios", label: "Relatórios", icon: ClipboardList, roles: ["administrador"] },
@@ -49,8 +56,9 @@ const navigation: NavItem[] = [
   { href: "/guia", label: "Guia de descarte", icon: BookOpenCheck, roles: ["administrador", "morador"] },
   { href: "/notificacoes", label: "Notificações", icon: Bell, roles: ["administrador", "morador"] },
   { href: "/ambiental", label: "Gestão ambiental", icon: Camera, roles: ["administrador", "morador"] },
-  { href: "/comunidade", label: "Calendário e campanhas", icon: CalendarDays, roles: ["administrador", "morador"] },
+  { href: "/comunidade", label: "Campanhas e QR do guia", icon: CalendarDays, roles: ["administrador", "morador"] },
   { href: "/configuracoes", label: "Configurações", icon: Settings, roles: ["administrador"] },
+  { href: "/manual", label: "Manual", icon: LifeBuoy, roles: ["administrador", "morador"] },
 ];
 
 function resolveRole(role?: string): EcoRole {
@@ -102,7 +110,7 @@ function Navigation({ role, onNavigate }: { role: EcoRole; onNavigate?: () => vo
       </p>
       {visibleItems.map((item) => {
         const Icon = item.icon;
-        const isActive = location === item.href;
+        const isActive = location === item.href || (item.href !== "/dashboard" && location.startsWith(`${item.href}/`));
         return (
           <Link
             key={item.href}
@@ -131,7 +139,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [isDrawerOpen, setDrawerOpen] = useState(false);
   const profileQuery = trpc.perfil.meuPerfil.useQuery(undefined, { enabled: Boolean(user) });
-  const unreadNotifications = trpc.notificacoes.contagemNaoLidas.useQuery(undefined, { enabled: Boolean(user) });
+  const unreadNotifications = trpc.notificacoes.contagemNaoLidas.useQuery(undefined, { enabled: Boolean(user), refetchInterval: 30_000 });
+  const [senhaAberta, setSenhaAberta] = useState(false);
 
   if (loading) {
     return <div className="min-h-screen bg-[#f6f8f6]" aria-busy="true" />;
@@ -144,12 +153,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <div className="mx-auto mb-7 w-fit"><EcoBrand compact /></div>
           <Badge className="mb-4 border-0 bg-[#e8f5ed] px-3 py-1 text-[11px] font-semibold text-[#0a6947] hover:bg-[#e8f5ed]">ACESSO PROTEGIDO</Badge>
           <h1 className="text-2xl font-bold tracking-[-0.04em] text-foreground">Entre para gerir um condomínio mais circular.</h1>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">Acesse o EcoCondo para acompanhar coletas, moradores, indicadores e comunicações da sua comunidade.</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">Acesse o EcoCondo para acompanhar descartes, moradores, indicadores e comunicações da sua comunidade.</p>
           <Button onClick={() => startLogin()} className="mt-8 h-11 w-full rounded-xl bg-[#0f7350] font-semibold text-white hover:bg-[#0a6243]">Entrar na plataforma</Button>
         </section>
       </div>
     );
   }
+
+  // Primeiro acesso: o manual é obrigatório antes de usar o sistema.
+  if (!user.manualLido && location !== "/manual") return <Redirect to="/manual" replace />;
 
   const role = (profileQuery.data?.role as EcoRole | undefined) ?? resolveRole(user.papel);
   const initials = (user.nome || "Usuário")
@@ -171,7 +183,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <div className="mt-auto pt-6">
             <div className="rounded-2xl border border-[#dcebe2] bg-[linear-gradient(145deg,#f0f8f3,#fbfdfb)] p-3.5">
               <p className="text-xs font-semibold text-[#0c563d]">Dica de operação</p>
-              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{role === "administrador" ? "Atualize o status das coletas no mesmo dia para manter os indicadores consistentes." : "Gere o código em Coletas e registre sua reciclagem na estação de pesagem. Os recicláveis valem 1 ponto por kg completo."}</p>
+              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{role === "administrador" ? "Aprove os descartes no mesmo dia: os pontos dos moradores só entram depois da sua conferência." : "Gere o código em Descartes e registre na estação. Os pontos entram depois que a administração aprova."}</p>
             </div>
           </div>
         </div>
@@ -188,7 +200,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <p className="truncate text-sm font-semibold tracking-[-0.02em]">{profileQuery.data?.condominium.nome || "Carregando condomínio"}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <BotaoTema />
             <Link href="/notificacoes" aria-label={`Abrir notificações${unreadNotifications.data?.count ? `, ${unreadNotifications.data.count} não lidas` : ""}`} className="relative grid h-10 w-10 place-items-center rounded-xl border border-[#dfe9e3] bg-white text-muted-foreground transition-colors hover:bg-[#edf7f1] hover:text-[#0f7350] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
               <Bell className="h-[18px] w-[18px]" />
               {unreadNotifications.data?.count ? <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-[#b4461b] px-1 text-[10px] font-bold text-white ring-2 ring-[#f6f8f6]">{unreadNotifications.data.count > 99 ? "99+" : unreadNotifications.data.count}</span> : null}
@@ -202,6 +215,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 <p className="max-w-[155px] truncate text-sm font-semibold leading-4">{user.nome || "Usuário EcoCondo"}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{formatRole(role)}</p>
               </div>
+              <Button variant="ghost" size="icon" className="hidden h-8 w-8 rounded-lg text-muted-foreground hover:text-[#0f7350] sm:inline-flex" onClick={() => setSenhaAberta(true)} aria-label="Trocar minha senha" title="Minha senha">
+                <KeyRound className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" className="hidden h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive sm:inline-flex" onClick={logout} aria-label="Sair da conta">
                 <LogOut className="h-4 w-4" />
               </Button>
@@ -212,6 +228,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <main className="px-5 py-7 lg:ml-[272px] lg:px-9 lg:py-9"><div className="mx-auto max-w-[1600px]">{profileQuery.isLoading ? <div aria-busy="true" className="min-h-[50vh]" /> : canAccessRoute(role, location) ? children : <NoAccess />}</div></main>
 
+      <AvisosNovos papel={role} />
+      <TrocarSenha aberto={senhaAberta} temSenha={Boolean(user.temSenha)} onFechar={() => setSenhaAberta(false)} />
       {isDrawerOpen && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu principal">
           <button onClick={() => setDrawerOpen(false)} className="absolute inset-0 bg-[#062e20]/35 backdrop-blur-[2px]" aria-label="Fechar menu" />
@@ -221,10 +239,33 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <div className="-mx-4 min-h-0 flex-1 overflow-y-auto px-4 pb-1">
               <Navigation role={role} onNavigate={() => setDrawerOpen(false)} />
             </div>
-            <Button variant="ghost" className="mt-3 shrink-0 justify-start gap-3 rounded-xl px-3 text-muted-foreground hover:text-destructive" onClick={logout}><LogOut className="h-4 w-4" />Sair da conta</Button>
+            <Button variant="ghost" className="mt-3 shrink-0 justify-start gap-3 rounded-xl px-3 text-muted-foreground" onClick={() => { setDrawerOpen(false); setSenhaAberta(true); }}><KeyRound className="h-4 w-4" />Minha senha</Button>
+            <Button variant="ghost" className="shrink-0 justify-start gap-3 rounded-xl px-3 text-muted-foreground hover:text-destructive" onClick={logout}><LogOut className="h-4 w-4" />Sair da conta</Button>
           </aside>
         </div>
       )}
     </div>
+  );
+}
+
+function TrocarSenha({ aberto, temSenha, onFechar }: { aberto: boolean; temSenha: boolean; onFechar: () => void }) {
+  const [atual, setAtual] = useState("");
+  const [nova, setNova] = useState("");
+  const alterar = trpc.auth.alterarSenha.useMutation({ onSuccess: () => { toast.success("Senha salva."); setAtual(""); setNova(""); onFechar(); }, onError: (issue) => toast.error(issue.message) });
+  function enviar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    alterar.mutate({ atual: atual || undefined, nova });
+  }
+  return (
+    <Dialog open={aberto} onOpenChange={(valor) => { if (!valor) onFechar(); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader><DialogTitle>{temSenha ? "Trocar minha senha" : "Criar uma senha"}</DialogTitle><DialogDescription>Pelo menos 8 caracteres, com letras e números. Depois você pode entrar com seu e-mail e essa senha.</DialogDescription></DialogHeader>
+        <form onSubmit={enviar} className="grid gap-3">
+          {temSenha && <label className="grid gap-1.5 text-xs font-semibold">Senha atual<Input required type="password" autoComplete="current-password" value={atual} onChange={(event) => setAtual(event.target.value)} className="h-10 rounded-xl" /></label>}
+          <label className="grid gap-1.5 text-xs font-semibold">Nova senha<Input required minLength={8} type="password" autoComplete="new-password" value={nova} onChange={(event) => setNova(event.target.value)} className="h-10 rounded-xl" /></label>
+          <Button disabled={alterar.isPending} className="h-10 rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]">{alterar.isPending ? "Salvando..." : "Salvar senha"}</Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

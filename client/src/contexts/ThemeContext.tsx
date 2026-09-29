@@ -23,8 +23,13 @@ export function ThemeProvider({
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
     if (switchable) {
-      const stored = localStorage.getItem("theme");
-      return (stored as Theme) || defaultTheme;
+      // Guardado no aparelho: o tablet da estação e o celular de cada pessoa lembram a escolha.
+      try {
+        const stored = localStorage.getItem("theme");
+        if (stored === "light" || stored === "dark") return stored;
+      } catch {
+        // sem armazenamento local: segue o padrão
+      }
     }
     return defaultTheme;
   });
@@ -37,8 +42,13 @@ export function ThemeProvider({
       root.classList.remove("dark");
     }
 
+    root.style.colorScheme = theme;
     if (switchable) {
-      localStorage.setItem("theme", theme);
+      try {
+        localStorage.setItem("theme", theme);
+      } catch {
+        // sem armazenamento local: a escolha vale até recarregar
+      }
     }
   }, [theme, switchable]);
 

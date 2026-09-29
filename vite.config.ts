@@ -2,9 +2,24 @@ import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+import { atualizarTemaEscuro } from "./scripts/temaEscuro";
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin()];
+/** Mantém client/src/tema-escuro.css em dia com as cores usadas nas telas (modo escuro). */
+function temaEscuro(): Plugin {
+  const raiz = import.meta.dirname;
+  return {
+    name: "ecocondo-tema-escuro",
+    buildStart() {
+      atualizarTemaEscuro(raiz);
+    },
+    handleHotUpdate({ file }) {
+      if (/client[\\/]src[\\/].*\.(tsx?|jsx?)$/.test(file)) atualizarTemaEscuro(raiz);
+    },
+  };
+}
+
+const plugins = [temaEscuro(), react(), tailwindcss(), jsxLocPlugin()];
 
 export default defineConfig({
   plugins,

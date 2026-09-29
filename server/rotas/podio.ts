@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, entregasPremioPodio, moradores, notificacoes, periodosPodio, premiosPodio } from "../../drizzle/schema";
+import { coletas, condominios, entregasPremioPodio, moradores, notificacoes, periodosPodio, premiosPodio } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
@@ -49,8 +49,18 @@ async function premiosDoPeriodo(condominioId: number, periodo: Periodo) {
   return linhas.map((linha) => ({ posicao: linha.posicao, titulo: linha.titulo, descricao: linha.descricao }));
 }
 
-export async function classificacaoDoPeriodo(condominioId: number, inicio: Date, fim: Date) {
+/** Quando o administrador zerou os pontos de todos, o que veio antes da zeragem não conta mais para nenhum ranking. */
+export async function inicioDoCiclo(condominioId: number, inicio?: Date) {
   const db = await getDb();
+  const [condominio] = await db.select({ zeradoEm: condominios.pontosZeradosEm }).from(condominios).where(eq(condominios.id, condominioId)).limit(1);
+  const zeradoEm = condominio?.zeradoEm ?? null;
+  if (!zeradoEm) return inicio;
+  return !inicio || zeradoEm > inicio ? zeradoEm : inicio;
+}
+
+export async function classificacaoDoPeriodo(condominioId: number, inicioPeriodo: Date, fim: Date) {
+  const db = await getDb();
+  const inicio = (await inicioDoCiclo(condominioId, inicioPeriodo))!;
   const registros = await db.select().from(coletas).where(and(
     eq(coletas.condominioId, condominioId),
     eq(coletas.status, "concluida"),
