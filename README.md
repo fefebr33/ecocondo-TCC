@@ -30,6 +30,10 @@ shared/             Código compartilhado entre cliente e servidor (permissões,
 
 Cada arquivo em `server/rotas/` expõe um grupo de rotas (ex.: `podio.ts` expõe `podio.ranking`, `podio.configurarPremios` e `podio.marcarPremioEntregue`). A lógica de negócio mais complexa fica isolada em `server/dominio/`, testada separadamente do banco de dados.
 
+## Apresentação para a banca
+
+O roteiro de 10 minutos (contas, estação em modo demonstração e o que mostrar em cada etapa) está em [BANCA.md](BANCA.md).
+
 ## Rodando na nuvem
 
 Para programar pelo navegador de qualquer computador (GitHub Codespaces, já com MySQL e dados de demonstração) ou publicar o site num endereço público (Render + Aiven), veja [NUVEM.md](NUVEM.md).

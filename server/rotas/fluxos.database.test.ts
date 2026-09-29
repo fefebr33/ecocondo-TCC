@@ -91,7 +91,7 @@ describeComMysql("fluxos com banco de dados real", () => {
     expect(resultado.pendingApproval).toBe(true);
     // Enquanto aguarda aprovação, o peso não entra nos totais, e o outro administrador é avisado.
     expect((await admin.dashboard.resumo()).totalKg).toBe(totalAntes);
-    expect((await admin2.notificacoes.listar()).some((item) => item.coletaId === suspeita.id && item.titulo === "Peso aguardando aprovação")).toBe(true);
+    expect((await admin2.notificacoes.listar()).some((item) => item.coletaId === suspeita.id && item.tipo === "peso_suspeito")).toBe(true);
     await expect(admin.coletas.decidirAprovacaoPeso({ id: suspeita.id, aprovar: true })).rejects.toMatchObject({ code: "FORBIDDEN" });
     const aprovacao = await admin2.coletas.decidirAprovacaoPeso({ id: suspeita.id, aprovar: true });
     expect(aprovacao.pointsAwarded).toBe(50);
@@ -116,12 +116,15 @@ describeComMysql("fluxos com banco de dados real", () => {
     expect(geradas.every((item) => item.agendadaPara > agora)).toBe(true);
   });
 
-  it("cancelar uma coleta concluída devolve os pontos concedidos", async () => {
+  it("coleta concluída não é cancelada nem pesada de novo; a reprovação com motivo estorna os pontos", async () => {
     const coleta = await admin.coletas.criar({ residentId: moradorId, wasteType: "reciclavel", block: "A", scheduledAt: amanha() });
     const antes = (await morador.perfil.meuPerfil()).resident!.pontos;
     await admin.coletas.atualizarStatus({ id: coleta.id, status: "concluida", weightGrams: 3000, imageDataUrl: FOTO });
     expect((await morador.perfil.meuPerfil()).resident!.pontos).toBe(antes + 3);
-    await admin.coletas.atualizarStatus({ id: coleta.id, status: "cancelada" });
+    await expect(admin.coletas.atualizarStatus({ id: coleta.id, status: "cancelada" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(admin.coletas.atualizarStatus({ id: coleta.id, status: "concluida", weightGrams: 9000, imageDataUrl: FOTO })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    const reprovacao = await admin.coletas.reprovar({ id: coleta.id, motivo: "Material misturado com orgânico" });
+    expect(reprovacao.pointsReversed).toBe(3);
     expect((await morador.perfil.meuPerfil()).resident!.pontos).toBe(antes);
   });
 

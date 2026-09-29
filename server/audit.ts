@@ -11,6 +11,8 @@ export type RegistroAuditoria = {
   resumo: string;
   estadoAnterior?: Record<string, unknown> | null;
   estadoNovo?: Record<string, unknown> | null;
+  /** Motivo ou observação de quem fez a operação (ex.: motivo da reprovação). */
+  motivo?: string | null;
 };
 
 function serializarEstado(valor: Record<string, unknown> | null | undefined) {
@@ -28,6 +30,7 @@ export async function writeAuditLog(db: any, registro: RegistroAuditoria) {
     resumo: registro.resumo,
     estadoAnterior: serializarEstado(registro.estadoAnterior),
     estadoNovo: serializarEstado(registro.estadoNovo),
+    motivo: registro.motivo || null,
   });
 }
 

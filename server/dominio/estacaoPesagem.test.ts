@@ -41,6 +41,13 @@ describe("regras antifraude da estação de pesagem", () => {
     expect(avaliarRegistroEstacao({ pesoGramas: 2000, registrosHoje: [], mediaHistoricaGramas: 2000, agora }).motivosRevisao).toEqual(["sorteado para conferência por amostragem"]);
   });
 
+  it("no modo demonstração não sorteia registros para conferência, mas mantém as outras travas", () => {
+    definirSorteioAmostragem(() => 0.01);
+    expect(avaliarRegistroEstacao({ pesoGramas: 2500, registrosHoje: [], mediaHistoricaGramas: 3000, agora, amostragem: false }).motivosRevisao).toEqual([]);
+    expect(avaliarRegistroEstacao({ pesoGramas: 12_000, registrosHoje: [], mediaHistoricaGramas: 11_000, agora, amostragem: false }).motivosRevisao).toEqual(["peso acima de 10 kg"]);
+    expect(() => avaliarRegistroEstacao({ pesoGramas: 0, registrosHoje: [], mediaHistoricaGramas: 0, agora, amostragem: false })).toThrow(LimiteAntifraudeExcedidoError);
+  });
+
   it("gera códigos de 6 dígitos e guarda só o hash do código de pareamento", () => {
     expect(gerarCodigoEstacao()).toMatch(/^\d{6}$/);
     expect(hashTokenEstacao("abc")).toHaveLength(64);
@@ -49,7 +56,10 @@ describe("regras antifraude da estação de pesagem", () => {
 
   it("bloqueia o tablet depois de muitos códigos errados", () => {
     const estacaoId = 999;
-    for (let vez = 0; vez < LIMITE_TENTATIVAS_CODIGO; vez += 1) registrarTentativaErrada(estacaoId, 1000);
+    const bloqueios = Array.from({ length: LIMITE_TENTATIVAS_CODIGO }, () => registrarTentativaErrada(estacaoId, 1000));
+    // Só a tentativa que bloqueia avisa (para o administrador receber um único alerta de falha operacional).
+    expect(bloqueios.filter(Boolean)).toHaveLength(1);
+    expect(bloqueios.at(-1)).toBe(true);
     expect(() => verificarBloqueioTentativas(estacaoId, 2000)).toThrow(LimiteAntifraudeExcedidoError);
     expect(() => verificarBloqueioTentativas(estacaoId, 1000 + 16 * 60_000)).not.toThrow();
   });

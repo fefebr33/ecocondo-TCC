@@ -47,9 +47,21 @@ export const statusAcesso = ["pendente", "ativo"] as const;
 export const statusMorador = ["ativo", "inativo"] as const;
 export const tiposResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"] as const;
 export const statusColeta = ["agendada", "em_andamento", "concluida", "cancelada", "ocorrencia"] as const;
-export const tiposNotificacao = ["coleta_agendada", "coleta_concluida", "lembrete_coleta", "comunicado", "sistema", "certificado_disponivel", "relatorio_anual"] as const;
+/**
+ * Tipos de notificação. Morador: solicitação, agendamento, lembrete, código da estação, pesagem, conclusão, pontos, reprovação,
+ * estorno, revisão, resgates, novo prêmio e cadastro. Administrador: nova coleta, coleta aguardando pesagem, peso suspeito,
+ * pontos pendentes, conclusão, reprovação, resgates, estoque, cadastro e falha operacional.
+ */
+export const tiposNotificacao = [
+  "coleta_agendada", "coleta_concluida", "lembrete_coleta", "comunicado", "sistema", "certificado_disponivel", "relatorio_anual",
+  "solicitacao_criada", "codigo_estacao", "pesagem_registrada", "pontos_ganhos", "coleta_reprovada", "pontos_estornados",
+  "revisao_administrativa", "premio_resgatado", "resgate_atualizado", "resgate_recusado", "novo_premio", "cadastro_alterado", "premio_podio",
+  "nova_coleta", "aguardando_pesagem", "peso_suspeito", "pontos_pendentes", "novo_resgate", "estoque_baixo", "sem_estoque", "novo_cadastro", "falha_operacional",
+] as const;
 /** "desconto_podio" fica só para os registros antigos, de quando o pódio dava desconto na taxa condominial. */
-export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio", "premio_podio", "estacao"] as const;
+export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio", "premio_podio", "estacao", "resgate", "recompensa", "pessoa", "morador", "comunicado"] as const;
+/** Movimentações do extrato de pontos: entradas (coleta, devolução de resgate) e saídas (estorno de coleta reprovada, resgate). */
+export const tiposMovimentacaoPontos = ["credito_coleta", "estorno_coleta", "resgate", "devolucao_resgate", "ajuste"] as const;
 export const statusResgate = ["solicitado", "aprovado", "entregue", "cancelado"] as const;
 export const statusOcorrencia = ["aberta", "em_analise", "resolvida"] as const;
 export const statusCampanha = ["planejada", "ativa", "encerrada"] as const;
@@ -146,6 +158,10 @@ export const coletas = mysqlTable("coletas", {
   aprovacaoPesoStatus: mysqlEnum("aprovacao_peso_status", statusAprovacaoPeso),
   aprovacaoPesoPorId: int("aprovacao_peso_por_id"),
   aprovacaoPesoEm: dataHora("aprovacao_peso_em"),
+  /** Motivo informado pelo administrador ao reprovar (ou aprovar) o registro; aparece para o morador na notificação. */
+  motivoDecisao: text("motivo_decisao"),
+  /** Peso informado numa estação em modo demonstração (balança simulada), e não lido/fotografado de uma balança real. */
+  pesagemSimulada: boolean("pesagem_simulada").default(false).notNull(),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
 }, (table) => [
@@ -169,6 +185,8 @@ export const logsAuditoria = mysqlTable("logs_auditoria", {
   resumo: text("resumo").notNull(),
   estadoAnterior: text("estado_anterior"),
   estadoNovo: text("estado_novo"),
+  /** Motivo ou observação informada por quem fez a operação (ex.: motivo da reprovação). */
+  motivo: text("motivo"),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
 }, (table) => [
   index("logs_auditoria_condominio_criado_idx").on(table.condominioId, table.criadoEm),
@@ -335,6 +353,8 @@ export const estacoesPesagem = mysqlTable("estacoes_pesagem", {
   /** SHA-256 do código de pareamento; o código em si só aparece uma vez, para o administrador. */
   tokenHash: varchar("token_hash", { length: 64 }).notNull(),
   ativo: boolean("ativo").default(true).notNull(),
+  /** Modo demonstração (banca do TCC): sem balança real, o peso é digitado como se viesse dela e a foto do visor é opcional. */
+  modoDemonstracao: boolean("modo_demonstracao").default(false).notNull(),
   criadoPorId: int("criado_por_id").notNull(),
   ultimoUsoEm: dataHora("ultimo_uso_em"),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
@@ -373,6 +393,32 @@ export const entregasPremioPodio = mysqlTable("entregas_premio_podio", {
 }, (table) => [
   index("entregas_premio_condominio_idx").on(table.condominioId),
   uniqueIndex("entregas_premio_unique").on(table.moradorId, table.periodo, table.intervaloInicio),
+]);
+
+/**
+ * Extrato de pontos: cada entrada e saída do saldo do morador (moradores.pontos) fica registrada aqui, com o saldo depois dela.
+ * Os índices únicos impedem, no próprio banco, que a mesma coleta pontue (ou seja estornada) duas vezes e que o mesmo
+ * resgate seja debitado (ou devolvido) duas vezes.
+ */
+export const movimentacoesPontos = mysqlTable("movimentacoes_pontos", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  moradorId: int("morador_id").notNull(),
+  tipo: mysqlEnum("tipo", tiposMovimentacaoPontos).notNull(),
+  /** Positivo = entrada; negativo = saída. */
+  pontos: int("pontos").notNull(),
+  /** Nulo nas linhas criadas pela migração a partir do histórico anterior ao extrato. */
+  saldoApos: int("saldo_apos"),
+  coletaId: int("coleta_id"),
+  resgateId: int("resgate_id"),
+  descricao: varchar("descricao", { length: 255 }).notNull(),
+  autorId: int("autor_id"),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [
+  index("movimentacoes_pontos_morador_idx").on(table.moradorId, table.criadoEm),
+  index("movimentacoes_pontos_condominio_idx").on(table.condominioId, table.criadoEm),
+  uniqueIndex("movimentacoes_pontos_coleta_unique").on(table.tipo, table.coletaId),
+  uniqueIndex("movimentacoes_pontos_resgate_unique").on(table.tipo, table.resgateId),
 ]);
 
 /** Meta pessoal de reciclagem definida pelo próprio morador (mesma lógica de acompanhamento das metas por bloco). */
@@ -446,3 +492,4 @@ export type Condominio = typeof condominios.$inferSelect;
 export type Coleta = typeof coletas.$inferSelect;
 export type Pessoa = typeof pessoas.$inferSelect;
 export type EstacaoPesagem = typeof estacoesPesagem.$inferSelect;
+export type MovimentacaoPontos = typeof movimentacoesPontos.$inferSelect;
