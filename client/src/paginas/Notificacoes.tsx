@@ -167,7 +167,7 @@ export default function Notifications() {
   }
   const isAdmin = profile.data?.role === "administrador";
   const notificationAction = (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
       <Button
         variant="outline"
         disabled={!unread.data?.count || markAllRead.isPending}
