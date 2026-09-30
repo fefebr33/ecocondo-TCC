@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { esquecerTokenEstacao, guardarTokenEstacao, lerTokenEstacao } from "@/lib/estacao";
 import { avaliarFoto, reduzirFoto } from "@/lib/imagem";
-import type { TipoResiduo } from "@/lib/descarte";
+import { formatarPontos, type TipoResiduo } from "@/lib/descarte";
 import BotaoTema from "@/components/BotaoTema";
 import { manualEstacao, SecoesManual } from "@/components/Manual";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -227,10 +227,10 @@ function Registro({ tipos, maximoItens, demonstracao, estacao }: { tipos: TipoEs
         <h1 className="mt-5 text-2xl font-bold tracking-[-.04em]">Descarte registrado!</h1>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Agora coloque cada saco na lixeira da mesma cor. A administração confere as fotos e os pesos; os pontos entram depois da aprovação.</p>
         <dl className="mx-auto mt-5 grid max-w-md gap-2 text-left text-sm">
-          {resultado.itens.map((item) => <Linha key={item.id} rotulo={`${item.material} · nº ${item.id}`} valor={`${item.pesoKg} kg · ${item.pontosPrevistos} pt(s) previsto(s)`} cor={porTipo(item.wasteType).corSaco} />)}
+          {resultado.itens.map((item) => <Linha key={item.id} rotulo={`${item.material} · nº ${item.id}`} valor={`${item.pesoKg} kg · ${formatarPontos(item.pontosPrevistos)} pt(s) previsto(s)`} cor={porTipo(item.wasteType).corSaco} />)}
           <Linha rotulo="Total" valor={`${resultado.weightKg} kg${resultado.simulated ? " (balança simulada)" : ""}`} destaque />
           <Linha rotulo="Situação" valor="Pendente de aprovação" />
-          <Linha rotulo="Pontos previstos" valor={`${resultado.pendingPoints}`} />
+          <Linha rotulo="Pontos previstos" valor={formatarPontos(resultado.pendingPoints)} />
         </dl>
         <Button onClick={recomecar} className="mt-6 h-12 rounded-xl bg-[#0f7350] px-8 text-base text-white hover:bg-[#0a6243]">Novo descarte</Button>
       </section>
@@ -248,10 +248,10 @@ function Registro({ tipos, maximoItens, demonstracao, estacao }: { tipos: TipoEs
           <Linha rotulo="Morador" valor={`${previa.morador} · Bloco ${previa.bloco}`} />
           {previa.itens.map((item, indice) => <div key={item.wasteType} className="grid gap-2 rounded-xl bg-[#f6faf7] p-3 sm:grid-cols-[1fr_auto] sm:items-center">
             <div className="flex items-center gap-3">{itens[indice]?.foto ? <img src={itens[indice].foto} alt="" className="h-12 w-12 rounded-lg object-cover" /> : <span className="h-12 w-12 rounded-lg" style={{ background: porTipo(item.wasteType).corSaco }} />}<div><p className="font-semibold">{item.material}</p><p className="text-xs text-muted-foreground">Saco {porTipo(item.wasteType).nomeCorSaco.toLowerCase()}{item.alertas.length ? ` · Atenção: ${item.alertas.join("; ")}` : ""}</p></div></div>
-            <p className="text-right"><span className="text-xl font-bold text-[#0f7350]">{item.pesoKg} kg</span><span className="block text-xs text-muted-foreground">{item.pontosPrevistos} ponto(s) previsto(s)</span></p>
+            <p className="text-right"><span className="text-xl font-bold text-[#0f7350]">{item.pesoKg} kg</span><span className="block text-xs text-muted-foreground">{formatarPontos(item.pontosPrevistos)} ponto(s) previsto(s)</span></p>
           </div>)}
           <Linha rotulo="Total" valor={`${previa.pesoTotalKg} ${previa.unidade}${previa.pesagemSimulada ? " · balança simulada" : ""}`} destaque />
-          <Linha rotulo="Resultado" valor={previa.bloqueio ? `Bloqueado: ${previa.bloqueio}` : `Fica pendente de aprovação; ${previa.pontosPrevistos} ponto(s) previsto(s)`} alerta={Boolean(previa.bloqueio)} />
+          <Linha rotulo="Resultado" valor={previa.bloqueio ? `Bloqueado: ${previa.bloqueio}` : `Fica pendente de aprovação; ${formatarPontos(previa.pontosPrevistos)} ponto(s) previsto(s)`} alerta={Boolean(previa.bloqueio)} />
         </dl>
         {erro && <p role="alert" className="mt-4 rounded-xl bg-[#fbeceb] px-4 py-3 text-sm text-[#b3382c]">{erro}</p>}
         <div className="mt-6 grid gap-3 sm:grid-cols-2">

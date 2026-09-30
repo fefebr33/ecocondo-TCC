@@ -20,7 +20,8 @@ const planilhas = [
   { value: "auditoria" as const, label: "Auditoria", descricao: "quem fez o quê, quando, com valores e motivo" },
 ];
 type Planilha = (typeof planilhas)[number]["value"];
-const cartao = "rounded-2xl border border-[#e0ebe4] p-5";
+// min-w-0: dentro do grid, o cartão não cresce junto com a tabela larga (ela rola por dentro, sem a página deslizar no celular).
+const cartao = "min-w-0 rounded-2xl border border-[#e0ebe4] p-5";
 const dica = { borderRadius: 14, border: "1px solid #dce8e0", fontSize: 12, background: "var(--card)", color: "var(--card-foreground)" };
 const eixo = { fontSize: 11, fill: "#6b7e74" };
 const coresSituacao: Record<SituacaoDescarte, string> = { aprovado: "#0f7350", pendente: "#d99a2b", reprovado: "#c2493c", auditoria: "#7a5bc4", cancelado: "#9aa9a1" };
@@ -93,7 +94,7 @@ export default function Reports() {
           <article className={cartao}>
             <h2 className="font-semibold">Situação dos descartes</h2>
             <p className="mt-1 text-xs text-muted-foreground">Aprovados, pendentes, reprovados e em auditoria no período{bloco !== "todos" ? ` (bloco ${bloco})` : ""}.</p>
-            {situacoes.length ? <div className="mt-2 h-[190px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={situacoes} dataKey="total" nameKey="nome" innerRadius={48} outerRadius={78} paddingAngle={2}>{situacoes.map((item) => <Cell key={item.situacao} fill={coresSituacao[item.situacao]} />)}</Pie><Tooltip contentStyle={dica} /></PieChart></ResponsiveContainer></div> : <p className="mt-4 text-sm text-muted-foreground">{isLoading ? "Carregando..." : "Sem descartes no período."}</p>}
+            {situacoes.length ? <div className="mt-2 h-[190px]" role="img" aria-label={`Situação dos descartes: ${situacoes.map((item) => `${item.nome} ${item.total}`).join(", ")}`}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={situacoes} dataKey="total" nameKey="nome" innerRadius={48} outerRadius={78} paddingAngle={2}>{situacoes.map((item) => <Cell key={item.situacao} fill={coresSituacao[item.situacao]} aria-label={`${item.nome}: ${item.total}`} />)}</Pie><Tooltip contentStyle={dica} /></PieChart></ResponsiveContainer></div> : <p className="mt-4 text-sm text-muted-foreground">{isLoading ? "Carregando..." : "Sem descartes no período."}</p>}
             <ul className="mt-2 flex flex-wrap gap-1.5">{situacoes.map((item) => <li key={item.situacao}><Badge className={estiloSituacao[item.situacao]}>{item.nome}: {item.total}</Badge></li>)}</ul>
           </article>
         </div>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
-import { corDoTipo, estiloSituacao, formatarDataHora, formatarKg, rotuloResiduo, rotuloSituacao, rotuloSituacaoCurto, TIPOS_RESIDUO, type SituacaoDescarte, type TipoResiduo } from "@/lib/descarte";
+import { corDoTipo, estiloSituacao, formatarDataHora, formatarKg, formatarPontos, rotuloResiduo, rotuloSituacao, rotuloSituacaoCurto, TIPOS_RESIDUO, type SituacaoDescarte, type TipoResiduo } from "@/lib/descarte";
 import { AlertTriangle, CheckCheck, CheckCircle2, Eye, Gavel, KeyRound, Recycle, RotateCcw, Scale, Search, ShieldAlert, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -80,14 +80,14 @@ export default function Descartes() {
           const primeiro = lote[0];
           return <article key={primeiro.lote ?? primeiro.id} className="rounded-2xl border border-[#f3c98a] bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div><p className="text-sm font-semibold">{primeiro.residentName ?? "Sem morador"} · Bloco {primeiro.bloco}{primeiro.apartment ? ` · Apto ${primeiro.apartment}` : ""}</p><p className="text-xs text-muted-foreground">{formatarDataHora(primeiro.concluidaEm)} · {primeiro.origin} · {lote.length} tipo(s) · {lote.reduce((soma, item) => soma + item.pontosCalculados, 0)} ponto(s) previstos</p></div>
+              <div><p className="text-sm font-semibold">{primeiro.residentName ?? "Sem morador"} · Bloco {primeiro.bloco}{primeiro.apartment ? ` · Apto ${primeiro.apartment}` : ""}</p><p className="text-xs text-muted-foreground">{formatarDataHora(primeiro.concluidaEm)} · {primeiro.origin} · {lote.length} tipo(s) · {formatarPontos(lote.reduce((soma, item) => soma + item.pontosCalculados, 0))} ponto(s) previstos</p></div>
               <Button size="sm" disabled={aprovarLote.isPending} onClick={() => aprovarLote.mutate({ ids: lote.map((item) => item.id) })} className="h-8 rounded-lg bg-[#0f7350] text-xs text-white hover:bg-[#0a6243]"><CheckCheck className="mr-1.5 h-3.5 w-3.5" />{lote.length > 1 ? "Aprovar todos" : "Aprovar"}</Button>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {lote.map((item) => <div key={item.id} className="rounded-xl border border-[#ece3d2] bg-[#fffdf8] p-3">
                 <div className="flex items-center gap-2"><span className="h-3 w-3 rounded-full border border-black/10" style={{ background: corDoTipo(item.tipoResiduo, cores) }} /><p className="text-sm font-semibold">{rotuloResiduo[item.tipoResiduo]} · {formatarKg(item.pesoGramas)}</p><span className="ml-auto text-xs text-muted-foreground">nº {item.id}</span></div>
                 {item.urlFoto ? <a href={item.urlFoto} target="_blank" rel="noreferrer"><img src={item.urlFoto} alt={`Foto do visor: ${rotuloResiduo[item.tipoResiduo]}`} className="mt-2 h-32 w-full rounded-lg border border-[#e2ebe5] object-cover" /></a> : <p className="mt-2 grid h-20 place-items-center rounded-lg bg-[#f4f1ea] text-xs text-muted-foreground">{item.pesagemSimulada ? "Balança simulada (sem foto)" : "Sem foto"}</p>}
-                <p className="mt-2 text-xs text-muted-foreground">{item.pontosCalculados} ponto(s) previsto(s)</p>
+                <p className="mt-2 text-xs text-muted-foreground">{formatarPontos(item.pontosCalculados)} ponto(s) previsto(s)</p>
                 {item.observacoes && <p className="mt-1 flex gap-1 text-xs text-[#7a4d0a]"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{item.observacoes}</p>}
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <Button size="sm" variant="ghost" disabled={decidir.isPending} onClick={() => decidir.mutate({ id: item.id, aprovar: true })} className="h-7 rounded-lg px-2 text-xs font-semibold text-[#0f7350] hover:bg-[#edf7f1]"><CheckCircle2 className="mr-1 h-3.5 w-3.5" />Aprovar</Button>
@@ -126,7 +126,7 @@ export default function Descartes() {
       </div>
       {error ? <p className="py-12 text-center text-sm text-destructive">{error.message}</p> : isLoading ? <p className="py-12 text-center text-sm text-muted-foreground">Carregando descartes...</p> : !registros?.length ? <div className="grid min-h-64 place-items-center text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#e8f4ed] text-[#0f7350]"><Recycle className="h-5 w-5" /></span><p className="mt-4 text-sm font-semibold">Nenhum descarte encontrado.</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{ehMorador ? "Gere o código acima e registre seu primeiro descarte na estação." : "Ajuste os filtros para consultar o histórico."}</p></div></div> : <><ul className="mt-4 divide-y divide-[#edf2ef] md:hidden">{registros.map((registro) => <li key={registro.id}><button type="button" onClick={() => setDetalheId(registro.id)} className="flex w-full items-start justify-between gap-3 py-3 text-left">
           <span className="min-w-0"><span className="flex items-center gap-2 text-sm font-semibold"><span className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/10" style={{ background: corDoTipo(registro.tipoResiduo, cores) }} />{rotuloResiduo[registro.tipoResiduo]} · {formatarKg(registro.pesoGramas)}</span><span className="mt-0.5 block text-xs text-muted-foreground">{formatarDataHora(registro.concluidaEm ?? registro.agendadaPara)} · nº {registro.id}{ehAdmin && registro.residentName ? ` · ${registro.residentName}` : ""}</span>{registro.motivoDecisao && registro.situacao === "reprovado" && <span className="mt-1 block text-xs text-[#b3382c]">Motivo: {registro.motivoDecisao}</span>}</span>
-          <span className="flex shrink-0 flex-col items-end gap-1"><Badge className={estiloSituacao[registro.situacao]}>{rotuloSituacaoCurto[registro.situacao]}</Badge><span className="text-xs text-muted-foreground">{registro.situacao === "aprovado" ? `${registro.pontosConcedidos} pts` : registro.situacao === "pendente" || registro.situacao === "auditoria" ? `${registro.pontosPrevistos} previsto(s)` : "0 pts"}</span></span>
+          <span className="flex shrink-0 flex-col items-end gap-1"><Badge className={estiloSituacao[registro.situacao]}>{rotuloSituacaoCurto[registro.situacao]}</Badge><span className="text-xs text-muted-foreground">{registro.situacao === "aprovado" ? `${registro.pontosConcedidos} pts` : registro.situacao === "pendente" || registro.situacao === "auditoria" ? `${formatarPontos(registro.pontosPrevistos)} previsto(s)` : "0 pts"}</span></span>
         </button></li>)}</ul><div className="mt-5 hidden overflow-x-auto md:block"><table className="w-full min-w-[860px] text-left">
         <thead><tr className="border-b border-[#e6eee9] text-[11px] font-bold tracking-[.08em] text-muted-foreground uppercase"><th className="px-2 py-4">Descarte</th><th className="px-2 py-4">Data</th>{ehAdmin && <th className="px-2 py-4">Morador</th>}<th className="px-2 py-4">Peso</th><th className="px-2 py-4">Pontos</th><th className="px-2 py-4">Situação</th><th className="px-2 py-4 text-right">Ação</th></tr></thead>
         <tbody>{registros.map((registro) => <tr key={registro.id} className="border-b border-[#edf2ef] last:border-0">
@@ -134,7 +134,7 @@ export default function Descartes() {
           <td className="px-2 py-3.5 text-sm">{formatarDataHora(registro.concluidaEm ?? registro.agendadaPara)}</td>
           {ehAdmin && <td className="px-2 py-3.5 text-sm text-muted-foreground">{registro.residentName ? `${registro.residentName}${registro.apartment ? ` · ${registro.apartment}` : ""}` : "—"}</td>}
           <td className="px-2 py-3.5 text-sm font-semibold text-[#0f7350]">{formatarKg(registro.pesoGramas)}</td>
-          <td className="px-2 py-3.5 text-sm">{registro.situacao === "aprovado" ? `${registro.pontosConcedidos}` : registro.situacao === "pendente" || registro.situacao === "auditoria" ? <span className="text-muted-foreground">{registro.pontosPrevistos} previsto(s)</span> : "0"}</td>
+          <td className="px-2 py-3.5 text-sm">{registro.situacao === "aprovado" ? `${registro.pontosConcedidos}` : registro.situacao === "pendente" || registro.situacao === "auditoria" ? <span className="text-muted-foreground">{formatarPontos(registro.pontosPrevistos)} previsto(s)</span> : "0"}</td>
           <td className="px-2 py-3.5"><Badge className={estiloSituacao[registro.situacao]}>{rotuloSituacao[registro.situacao]}</Badge>{registro.motivoDecisao && registro.situacao === "reprovado" && <p className="mt-1 max-w-[220px] text-xs text-[#b3382c]">Motivo: {registro.motivoDecisao}</p>}</td>
           <td className="px-2 py-3.5 text-right"><Button size="sm" variant="ghost" onClick={() => setDetalheId(registro.id)} className="h-8 rounded-lg text-xs font-semibold text-[#0f7350] hover:bg-[#edf7f1]"><Eye className="mr-1.5 h-3.5 w-3.5" />Ver</Button></td>
         </tr>)}</tbody>
@@ -172,7 +172,7 @@ function DetalheDescarte({ id, ehAdmin, onClose, onReprovar, onAuditar, onConclu
             <div className="mt-3 grid gap-3 sm:grid-cols-[180px_1fr]">
               {item.urlFoto ? <a href={item.urlFoto} target="_blank" rel="noreferrer"><img src={item.urlFoto} alt="Foto do visor da balança" className="h-36 w-full rounded-xl border border-[#e2ebe5] object-cover" /></a> : <div className="grid h-36 place-items-center rounded-xl bg-[#f0f4f2] text-xs text-muted-foreground">{item.pesagemSimulada ? "Balança simulada" : "Sem foto"}</div>}
               <div className="grid content-start gap-1 text-sm">
-                <p><b>Pontos:</b> {item.situacao === "aprovado" ? `${item.pontosConcedidos} creditado(s)` : item.situacao === "pendente" || item.situacao === "auditoria" ? `${item.pontosPrevistos} previsto(s), entram depois da aprovação` : "nenhum"}</p>
+                <p><b>Pontos:</b> {item.situacao === "aprovado" ? `${item.pontosConcedidos} creditado(s)` : item.situacao === "pendente" || item.situacao === "auditoria" ? `${formatarPontos(item.pontosPrevistos)} previsto(s), entram depois da aprovação` : "nenhum"}</p>
                 <p><b>Origem:</b> {item.origin}{item.pesagemSimulada ? " (balança simulada)" : ""}</p>
                 {item.observacoes && <p className="text-[#7a4d0a]"><b>Observações:</b> {item.observacoes}</p>}
                 {item.motivoAuditoria && <p className="text-[#5b3aa6]"><b>Auditoria:</b> {item.motivoAuditoria}</p>}
@@ -200,7 +200,7 @@ function DialogoReprovar({ alvo, onClose, onDone }: { alvo: Alvo | null; onClose
   });
   return <Dialog open={alvo !== null} onOpenChange={(aberto) => { if (!aberto) { onClose(); setMotivo(""); } }}>
     <DialogContent className="sm:max-w-md">
-      <DialogHeader><DialogTitle>Reprovar descarte nº {alvo?.id}</DialogTitle><DialogDescription>{alvo?.resumo}. {alvo?.situacao === "aprovado" ? `Os ${alvo.pontos} ponto(s) já lançados serão estornados.` : "Os pontos previstos não serão creditados."} O morador recebe o motivo.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Reprovar descarte nº {alvo?.id}</DialogTitle><DialogDescription>{alvo?.resumo}. {alvo?.situacao === "aprovado" ? `Os ${formatarPontos(alvo.pontos)} ponto(s) já lançados serão estornados.` : "Os pontos previstos não serão creditados."} O morador recebe o motivo.</DialogDescription></DialogHeader>
       <form onSubmit={(event) => { event.preventDefault(); if (alvo) reprovar.mutate({ id: alvo.id, motivo }); }} className="grid gap-3">
         <label className="grid gap-1.5 text-xs font-semibold">Motivo (obrigatório)<textarea required minLength={5} maxLength={500} value={motivo} onChange={(event) => setMotivo(event.target.value)} placeholder="Ex.: a foto não mostra o visor; material misturado" className="min-h-24 rounded-xl border border-[#dce8e0] bg-white p-3 text-sm" /></label>
         <DialogFooter><Button type="submit" disabled={reprovar.isPending || motivo.trim().length < 5} className="h-10 rounded-xl bg-[#b3382c] text-white hover:bg-[#962d23]">{reprovar.isPending ? "Reprovando..." : "Reprovar descarte"}</Button></DialogFooter>

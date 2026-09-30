@@ -176,7 +176,7 @@ async function painelDoMorador(condominioId: number, moradorId: number) {
   const datas = registros.filter((registro) => registro.status === "concluida").map((registro) => registro.concluidaEm ?? registro.agendadaPara);
   const extrato = await extratoDoMorador(db, moradorId, 10);
   return {
-    morador: { id: morador.id, nome: morador.nome, bloco: morador.bloco, apartamento: morador.apartamento, saldo: morador.pontos, status: morador.status },
+    morador: { id: morador.id, nome: morador.nome, bloco: morador.bloco, apartamento: morador.apartamento, saldo: morador.pontos, fracaoGuardada: morador.restoPontosMilesimos / 1000, status: morador.status },
     totalKg: resumo.totalKg,
     recyclableKg: resumo.recyclableKg,
     descartesAprovados: aprovados.length,

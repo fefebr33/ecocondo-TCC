@@ -62,6 +62,8 @@ export const configuracoesDescarteRouter = router({
           totalZerado += morador.pontos;
         }
         await tx.update(condominios).set({ pontosZeradosEm: agora, atualizadoEm: agora }).where(eq(condominios.id, ctx.eco.condominio.id));
+        // As frações guardadas também recomeçam do zero no novo ciclo.
+        await tx.update(moradores).set({ restoPontosMilesimos: 0 }).where(eq(moradores.condominioId, ctx.eco.condominio.id));
       });
       await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pontos", entidadeId: ctx.eco.condominio.id, acao: "pontos_zerados", resumo: `Pontos de ${comSaldo.length} morador(es) zerados (${totalZerado} ponto(s) no total). Novo ciclo começou.`, motivo: input.reason, estadoAnterior: { saldos: comSaldo.map((morador) => ({ moradorId: morador.id, pontos: morador.pontos })) }, estadoNovo: { cicloIniciadoEm: agora } });
       await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: null, tipo: "pontos_zerados", titulo: "Novo ciclo de pontos", mensagem: `A administração zerou os pontos de todos para começar um novo ciclo. Motivo: ${input.reason}` });

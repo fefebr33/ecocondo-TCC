@@ -30,6 +30,7 @@ export function manualEstacao(cores?: Partial<Record<TipoResiduo, string>>): Sec
       <>O descarte fica <b>pendente de aprovação</b>. A administração confere a foto e o peso; os pontos entram quando ela aprova.</>,
       <>Se algo estiver errado, o descarte é <b>reprovado</b> e você recebe o motivo. Em caso grave (suspeita de fraude), ele vai para <b>auditoria</b>: você é avisado e pode explicar; se a irregularidade se confirmar, pode haver perda de pontos.</>,
       <>Cada tipo tem peso mínimo e máximo por descarte e uma regra de pontos. Rejeito não dá pontos, mas conta nos indicadores do condomínio.</>,
+      <>Nenhum saco vale zero por ser leve: o descarte vale a fração exata (ex.: 0,95 ponto) e as frações se somam até virar ponto inteiro no seu saldo.</>,
     ],
   },
   ];

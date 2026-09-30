@@ -18,7 +18,8 @@ const periodos = [
 ];
 type Periodo = (typeof periodos)[number]["value"];
 
-const medalha = ["#c99a2e", "#9aa4ad", "#a5672f"];
+// Ouro, prata e bronze escuros o bastante para o número branco ter contraste de pelo menos 4,5:1 (WCAG AA).
+const medalha = ["#8f6a14", "#5f6a73", "#8a5324"];
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 /** Anda um período para trás (-1) ou para a frente (+1) a partir da data de referência. */

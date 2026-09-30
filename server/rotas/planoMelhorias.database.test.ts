@@ -93,11 +93,15 @@ describeComMysql("plano de melhorias: testes obrigatórios", () => {
     const { cliente: morador, moradorId } = await novoMorador("varios-tipos");
     const { code } = await morador.estacao.gerarCodigo();
     const registro = await estacaoDemo.estacao.registrar({ code, itens: [{ wasteType: "reciclavel", weightGrams: 2000 }, { wasteType: "organico", weightGrams: 3000 }, { wasteType: "perigoso", weightGrams: 500 }] });
-    expect(registro).toMatchObject({ situacao: "pendente", pointsAwarded: 0, pendingPoints: 4, simulated: true });
-    expect(registro.itens.map((item) => item.pontosPrevistos)).toEqual([2, 1, 1]);
+    // Cada tipo vale a fração exata: 2 kg × 1 + 3 kg × 0,5 + 0,5 kg × 2 = 4,5 pontos.
+    expect(registro).toMatchObject({ situacao: "pendente", pointsAwarded: 0, pendingPoints: 4.5, simulated: true });
+    expect(registro.itens.map((item) => item.pontosPrevistos)).toEqual([2, 1.5, 1]);
     expect(await saldo(moradorId)).toBe(0);
     await admin.coletas.aprovarVarios({ ids: registro.ids });
+    // 4 pontos inteiros no saldo; o meio ponto fica guardado para somar com o próximo descarte.
     expect(await saldo(moradorId)).toBe(4);
+    const [guardado] = await (await getDb()).select({ resto: moradores.restoPontosMilesimos }).from(moradores).where(eq(moradores.id, moradorId));
+    expect(guardado.resto).toBe(500);
     await expect(estacaoDemo.estacao.registrar({ code: (await morador.estacao.gerarCodigo()).code, itens: [1, 2, 3, 4, 5, 6].map(() => ({ wasteType: "reciclavel" as const, weightGrams: 1000 })) })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
@@ -105,16 +109,16 @@ describeComMysql("plano de melhorias: testes obrigatórios", () => {
     const { cliente: morador, moradorId } = await novoMorador("codigo-estacao");
     const { code, qrDataUrl } = await morador.estacao.gerarCodigo();
     expect(qrDataUrl).toMatch(/^data:image\/png;base64,/);
-    const notificacao = (await morador.notificacoes.listar()).find((item) => item.tipo === "codigo_estacao");
-    expect(notificacao?.mensagem).not.toContain(code);
+    // Gerar o código não cria notificação (o morador está olhando para ele na tela) e o código nunca fica guardado numa.
+    expect((await morador.notificacoes.listar()).some((item) => item.tipo === "codigo_estacao" || item.mensagem.includes(code))).toBe(false);
 
     const previa = await estacaoDemo.estacao.previa({ code, itens: [{ wasteType: "reciclavel", weightGrams: 2500 }] });
-    expect(previa).toMatchObject({ estacao: "Estação da banca", pesoTotalKg: "2,50", unidade: "kg", pesagemSimulada: true, pontosPrevistos: 2, bloqueio: null });
+    expect(previa).toMatchObject({ estacao: "Estação da banca", pesoTotalKg: "2,50", unidade: "kg", pesagemSimulada: true, pontosPrevistos: 2.5, bloqueio: null });
     const outro = code === "000000" ? "000001" : "000000";
     await expect(estacaoDemo.estacao.previa({ code: outro, itens: [{ wasteType: "reciclavel", weightGrams: 2500 }] })).rejects.toMatchObject({ code: "NOT_FOUND" });
 
     const registro = await estacaoDemo.estacao.registrar({ code, itens: [{ wasteType: "reciclavel", weightGrams: 2500 }] });
-    expect(registro).toMatchObject({ status: "concluida", situacao: "pendente", pointsAwarded: 0, pendingApproval: true, pendingPoints: 2, simulated: true });
+    expect(registro).toMatchObject({ status: "concluida", situacao: "pendente", pointsAwarded: 0, pendingApproval: true, pendingPoints: 2.5, simulated: true });
     await expect(estacaoDemo.estacao.registrar({ code, itens: [{ wasteType: "reciclavel", weightGrams: 2500 }] })).rejects.toMatchObject({ code: "NOT_FOUND" });
 
     const { code: expirado } = await morador.estacao.gerarCodigo();
@@ -150,7 +154,7 @@ describeComMysql("plano de melhorias: testes obrigatórios", () => {
     const { code } = await morador.estacao.gerarCodigo();
     const pendente = await estacaoDemo.estacao.registrar({ code, itens: [{ wasteType: "reciclavel", weightGrams: 12_000 }] });
     expect(pendente).toMatchObject({ pointsAwarded: 0, pendingApproval: true, pendingPoints: 12 });
-    expect((await morador.notificacoes.listar()).some((item) => item.tipo === "pontos_pendentes" && item.coletaId === pendente.id)).toBe(true);
+    expect((await morador.notificacoes.listar()).filter((item) => item.coletaId === pendente.id).map((item) => item.tipo)).toEqual(["pesagem_registrada"]);
     // Acima de 10 kg sem histórico que explique: a administração recebe o aviso com o alerta (fora do padrão do morador seria "peso suspeito").
     const aviso = (await admin.notificacoes.listar()).find((item) => item.tipo === "descarte_aguardando_aprovacao" && item.coletaId === pendente.id);
     expect(aviso?.mensagem).toContain("acima de 10 kg");
@@ -170,7 +174,8 @@ describeComMysql("plano de melhorias: testes obrigatórios", () => {
     const extrato = await morador.engajamento.extrato();
     expect(extrato.movimentacoes.map((item) => [item.tipo, item.pontos, item.saldoApos])).toEqual([["estorno_coleta", -12, 0], ["credito_coleta", 12, 12]]);
     const tipos = (await morador.notificacoes.listar()).map((item) => item.tipo);
-    expect(tipos).toEqual(expect.arrayContaining(["revisao_administrativa", "pontos_ganhos", "coleta_reprovada", "pontos_estornados"]));
+    // Uma notificação por acontecimento: registrado, aprovado (+12) e reprovado (-12).
+    expect(tipos.sort()).toEqual(["coleta_reprovada", "pesagem_registrada", "pontos_ganhos"]);
     const db = await getDb();
     const [log] = await db.select().from(logsAuditoria).where(and(eq(logsAuditoria.entidadeId, pendente.id), eq(logsAuditoria.acao, "coleta_reprovada")));
     expect(log).toMatchObject({ motivo: "Saco com vidro quebrado e rejeito misturado" });
@@ -184,7 +189,8 @@ describeComMysql("plano de melhorias: testes obrigatórios", () => {
     const { code } = await morador.estacao.gerarCodigo();
     await estacaoDemo.estacao.registrar({ code, itens: [{ wasteType: "reciclavel", weightGrams: 2000 }] });
     const lista = await morador.notificacoes.listar();
-    expect(lista.map((item) => item.tipo)).toEqual(expect.arrayContaining(["comunicado", "codigo_estacao", "pesagem_registrada", "pontos_pendentes"]));
+    // Um descarte registrado gera uma notificação só para o morador (antes eram três).
+    expect(lista.map((item) => item.tipo).sort()).toEqual(["comunicado", "pesagem_registrada"]);
     const antes = (await morador.notificacoes.contagemNaoLidas()).count;
     expect(antes).toBeGreaterThan(0);
 

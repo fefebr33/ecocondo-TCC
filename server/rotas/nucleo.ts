@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { condominios, papeisEco, pessoas, moradores, perfisAcesso, usuarios } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -8,6 +8,7 @@ import { buildPendingResidentPerson } from "../dominio/regrasPessoas";
 import { protectedProcedure, router } from "../_core/trpc";
 import { writeAuditLog } from "../audit";
 import { notificarAdministradores, notificarUsuario } from "../notificacoes";
+import { encerrarSessoes } from "../senhas";
 
 export const withProfile = protectedProcedure.use(async ({ ctx, next }) => {
   const contextoPerfil = await obterOuCriarPerfil(ctx.user);
@@ -90,7 +91,7 @@ export const ecoRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode alterar o seu próprio perfil. Peça para outro administrador fazer isso." });
       }
       if (alvo[0].papel === "administrador" && input.role !== "administrador") {
-        const administradores = await db.select({ id: pessoas.id }).from(pessoas).where(and(eq(pessoas.condominioId, ctx.eco.condominio.id), eq(pessoas.papel, "administrador")));
+        const administradores = await db.select({ id: pessoas.id }).from(pessoas).where(and(eq(pessoas.condominioId, ctx.eco.condominio.id), eq(pessoas.papel, "administrador"), ne(pessoas.statusAcesso, "desativado")));
         if (administradores.length <= 1) throw new TRPCError({ code: "BAD_REQUEST", message: "O condomínio precisa ter pelo menos um administrador." });
       }
       await db.update(pessoas).set({ papel: input.role, atualizadoEm: new Date() }).where(eq(pessoas.id, input.id));
@@ -99,6 +100,31 @@ export const ecoRouter = router({
         await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pessoa", entidadeId: alvo[0].id, acao: "perfil_alterado", resumo: `Perfil de ${alvo[0].nome} alterado de ${alvo[0].papel} para ${input.role}.`, estadoAnterior: { papel: alvo[0].papel }, estadoNovo: { papel: input.role } });
         await notificarUsuario(db, alvo[0].usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "cadastro_alterado", titulo: "Seu perfil de acesso mudou", mensagem: `Seu perfil no EcoCondo agora é ${input.role === "administrador" ? "administrador(a)" : "morador(a)"}. Saia e entre de novo se o menu não atualizar.` });
       }
+      return { success: true };
+    }),
+    /**
+     * Desativa (ou reativa) o acesso de alguém: morador que se mudou, ex-síndico. Desativar encerra as sessões abertas na hora,
+     * bloqueia o login e o link de senha e, no morador, impede novos descartes. O histórico (descartes, pontos, auditoria) fica.
+     */
+    definirAcesso: administratorOnly.input(z.object({ id: z.number().int().positive(), active: z.boolean(), reason: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      const [alvo] = await db.select().from(pessoas).where(and(eq(pessoas.id, input.id), eq(pessoas.condominioId, ctx.eco.condominio.id))).limit(1);
+      if (!alvo) throw new TRPCError({ code: "NOT_FOUND", message: "Pessoa não encontrada no condomínio." });
+      const desativada = alvo.statusAcesso === "desativado";
+      if (input.active === !desativada) return { success: true };
+      if (!input.active) {
+        if (alvo.usuarioId === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode desativar o seu próprio acesso. Peça para outro administrador fazer isso." });
+        if (alvo.papel === "administrador") {
+          const administradores = await db.select({ id: pessoas.id }).from(pessoas).where(and(eq(pessoas.condominioId, ctx.eco.condominio.id), eq(pessoas.papel, "administrador"), ne(pessoas.statusAcesso, "desativado")));
+          if (administradores.length <= 1) throw new TRPCError({ code: "BAD_REQUEST", message: "O condomínio precisa ter pelo menos um administrador com acesso." });
+        }
+      }
+      const novoStatus = input.active ? (alvo.usuarioId ? "ativo" : "pendente") : "desativado";
+      await db.update(pessoas).set({ statusAcesso: novoStatus, atualizadoEm: new Date() }).where(eq(pessoas.id, alvo.id));
+      if (alvo.moradorId) await db.update(moradores).set({ status: input.active ? "ativo" : "inativo", codigoEstacao: null, codigoEstacaoExpiraEm: null, atualizadoEm: new Date() }).where(eq(moradores.id, alvo.moradorId));
+      if (!input.active && alvo.usuarioId) await encerrarSessoes(db, alvo.usuarioId);
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pessoa", entidadeId: alvo.id, acao: input.active ? "acesso_reativado" : "acesso_desativado", resumo: `Acesso de ${alvo.nome} ${input.active ? "reativado" : "desativado"}.`, estadoAnterior: { statusAcesso: alvo.statusAcesso }, estadoNovo: { statusAcesso: novoStatus }, motivo: input.reason || null });
+      if (input.active) await notificarUsuario(db, alvo.usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "cadastro_alterado", titulo: "Seu acesso foi reativado", mensagem: "A administração reativou o seu acesso ao EcoCondo." });
       return { success: true };
     }),
   }),

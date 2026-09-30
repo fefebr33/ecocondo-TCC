@@ -43,7 +43,8 @@ export const rotuloTipoNotificacao: Record<TipoNotificacao, string> = {
 
 /** Tipos que cada perfil pode receber hoje (os de registros antigos, do tempo do agendamento, ficam de fora da configuração). */
 export const tiposPorPerfil: Record<EcoRole, TipoNotificacao[]> = {
-  morador: ["codigo_estacao", "pesagem_registrada", "pontos_pendentes", "revisao_administrativa", "pontos_ganhos", "coleta_reprovada", "pontos_estornados", "auditoria_aberta", "auditoria_concluida", "premio_resgatado", "resgate_atualizado", "resgate_recusado", "novo_premio", "premio_podio", "pontos_zerados", "pontos_ajustados", "cadastro_alterado", "comunicado", "certificado_disponivel"],
+  // "codigo_estacao", "pontos_pendentes" e "pontos_estornados" não são mais enviados: cada descarte gera um aviso ao registrar e um na decisão.
+  morador: ["pesagem_registrada", "revisao_administrativa", "pontos_ganhos", "coleta_reprovada", "auditoria_aberta", "auditoria_concluida", "premio_resgatado", "resgate_atualizado", "resgate_recusado", "novo_premio", "premio_podio", "pontos_zerados", "pontos_ajustados", "cadastro_alterado", "comunicado", "certificado_disponivel"],
   administrador: ["descarte_aguardando_aprovacao", "peso_suspeito", "coleta_concluida", "coleta_reprovada", "auditoria_aberta", "auditoria_concluida", "novo_resgate", "estoque_baixo", "sem_estoque", "novo_cadastro", "pontos_zerados", "falha_operacional", "relatorio_anual", "comunicado"],
 };
 

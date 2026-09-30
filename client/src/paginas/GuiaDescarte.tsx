@@ -1,5 +1,5 @@
 import PageIntro from "@/components/PageIntro";
-import { rotuloResiduo } from "@/lib/descarte";
+import { corDeTextoSobre, rotuloResiduo } from "@/lib/descarte";
 import { trpc } from "@/lib/trpc";
 import { formatarNumero } from "@/lib/utils";
 import { AlertTriangle, CheckCircle2, ShoppingBag } from "lucide-react";
@@ -17,9 +17,9 @@ export default function DisposalGuide() {
       {isLoading ? <p className="text-sm text-muted-foreground">Carregando guia...</p> : guias?.map((guia) => {
         const regra = regras.data?.find((item) => item.tipoResiduo === guia.tipoResiduo);
         return <article key={guia.tipoResiduo} id={`guia-${guia.tipoResiduo}`} className="scroll-mt-24 overflow-hidden rounded-[24px] border border-[#dce8e0] bg-white shadow-[0_16px_34px_-28px_rgba(4,66,42,.32)]">
-          <div className="flex items-center gap-3 px-5 py-4 text-white" style={{ background: guia.corSaco }}>
+          <div className="flex items-center gap-3 px-5 py-4" style={{ background: guia.corSaco, color: corDeTextoSobre(guia.corSaco) }}>
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-black/15"><ShoppingBag className="h-5 w-5" /></span>
-            <div className="min-w-0 [text-shadow:0_1px_2px_rgba(0,0,0,.35)]"><h2 className="text-lg font-bold tracking-[-.03em]">{guia.titulo}</h2><p className="text-xs font-semibold opacity-95">Saco {guia.nomeCorSaco.toLowerCase()}</p></div>
+            <div className="min-w-0"><h2 className="text-lg font-bold tracking-[-.03em]">{guia.titulo}</h2><p className="text-xs font-semibold">Saco {guia.nomeCorSaco.toLowerCase()}</p></div>
           </div>
           <div className="p-5">
             <p className="text-sm leading-6 text-muted-foreground">{guia.instrucoes}</p>

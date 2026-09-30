@@ -33,13 +33,13 @@ function FormularioSenha() {
   const [senha, setSenha] = useState("");
   const [modo, setModo] = useState<"entrar" | "link">("entrar");
   const [erro, setErro] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<{ texto: string; link: string | null } | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const entrar = trpc.auth.entrarComSenha.useMutation({
     onSuccess: (resultado) => { window.location.href = resultado.manualLido ? "/dashboard" : "/manual"; },
     onError: (issue) => setErro(issue.message),
   });
   const pedirLink = trpc.auth.solicitarLink.useMutation({
-    onSuccess: (resultado) => setAviso({ texto: resultado.linkDemonstracao ? "Link gerado. Sem servidor de e-mail no protótipo, ele aparece aqui (modo demonstração):" : "Se o e-mail estiver cadastrado, a administração do condomínio pode enviar o link para criar ou trocar a senha. Fale com o síndico.", link: resultado.linkDemonstracao }),
+    onSuccess: () => setAviso("Se o e-mail estiver cadastrado, o síndico pode enviar o link para criar ou trocar a senha (em Pessoas e acessos). Fale com a administração."),
     onError: (issue) => setErro(issue.message),
   });
   function enviar(event: FormEvent<HTMLFormElement>) {
@@ -55,7 +55,7 @@ function FormularioSenha() {
       <label className="grid gap-1.5 text-xs font-semibold">E-mail<Input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="h-11 rounded-xl" /></label>
       {modo === "entrar" && <label className="grid gap-1.5 text-xs font-semibold">Senha<Input required type="password" autoComplete="current-password" value={senha} onChange={(event) => setSenha(event.target.value)} className="h-11 rounded-xl" /></label>}
       {erro && <p role="alert" className="rounded-xl bg-[#fbeceb] px-4 py-3 text-sm text-[#b3382c]">{erro}</p>}
-      {aviso && <p role="status" className="rounded-xl bg-[#eef7f1] px-4 py-3 text-sm text-[#0a5a3c]">{aviso.texto}{aviso.link && <> <a href={aviso.link} className="font-semibold underline">Criar a senha agora</a></>}</p>}
+      {aviso && <p role="status" className="rounded-xl bg-[#eef7f1] px-4 py-3 text-sm text-[#0a5a3c]">{aviso}</p>}
       <Button disabled={entrar.isPending || pedirLink.isPending} className="h-11 rounded-xl bg-[#0f7350] font-semibold text-white hover:bg-[#0a6243]">{modo === "entrar" ? (entrar.isPending ? "Entrando..." : "Entrar") : pedirLink.isPending ? "Gerando..." : "Receber link para criar a senha"}</Button>
       <button type="button" onClick={() => { setModo(modo === "entrar" ? "link" : "entrar"); setErro(null); setAviso(null); }} className="text-left text-sm font-semibold text-[#0f7350] hover:underline">{modo === "entrar" ? "Primeiro acesso ou esqueci minha senha" : "Voltar para o login"}</button>
     </form>

@@ -11,7 +11,8 @@ import { Link } from "wouter";
 import { estiloSituacao, rotuloSituacao, rotuloSituacaoCurto } from "@/lib/descarte";
 import { situacaoDescarte } from "@shared/descarte";
 const labels: Record<string, string> = { reciclavel: "Reciclável", organico: "Orgânico", rejeito: "Rejeito", eletronico: "Eletrônico", perigoso: "Perigoso" };
-const medalha = ["#c99a2e", "#9aa4ad", "#a5672f"];
+// Ouro, prata e bronze escuros o bastante para o número branco ter contraste de pelo menos 4,5:1 (WCAG AA).
+const medalha = ["#8f6a14", "#5f6a73", "#8a5324"];
 const cartao = "rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6";
 
 function Variacao({ valor }: { valor: number | null }) {

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   datetime,
   double,
   index,
@@ -31,6 +32,8 @@ export const usuarios = mysqlTable("usuarios", {
   senhaHash: varchar("senha_hash", { length: 255 }),
   /** Quando a pessoa leu o manual e marcou "Li e entendi"; enquanto for nulo, o sistema abre o manual no primeiro acesso. */
   manualLidoEm: dataHora("manual_lido_em"),
+  /** Aumenta a cada troca de senha ou acesso desativado: todas as sessões abertas com a versão anterior deixam de valer. */
+  versaoSessao: int("versao_sessao").default(0).notNull(),
 });
 
 /** Link de uso único para criar a senha no primeiro acesso ou recuperar uma senha esquecida (no banco fica só o hash). */
@@ -65,7 +68,8 @@ export const condominios = mysqlTable("condominios", {
 
 /** Só dois perfis: o próprio morador registra a reciclagem na estação de pesagem (tablet + balança), sem coletor. */
 export const papeisEco = ["administrador", "morador"] as const;
-export const statusAcesso = ["pendente", "ativo"] as const;
+/** "desativado": a administração tirou o acesso (morador que se mudou, ex-síndico); a pessoa não entra mais no sistema. */
+export const statusAcesso = ["pendente", "ativo", "desativado"] as const;
 export const statusMorador = ["ativo", "inativo"] as const;
 export const tiposResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"] as const;
 export const statusColeta = ["agendada", "em_andamento", "concluida", "cancelada", "ocorrencia"] as const;
@@ -107,6 +111,8 @@ export const moradores = mysqlTable("moradores", {
   apartamento: varchar("apartamento", { length: 255 }).notNull(),
   status: mysqlEnum("status", statusMorador).default("ativo").notNull(),
   pontos: int("pontos").default(0).notNull(),
+  /** Fração de ponto (em milésimos, 0 a 999) que sobrou dos descartes aprovados; quando as frações somam 1 ponto, ele entra no saldo. */
+  restoPontosMilesimos: int("resto_pontos_milesimos").default(0).notNull(),
   /** Código curto único usado para gerar o QR code do apartamento (identificação rápida pelo administrador). */
   codigoAcesso: varchar("codigo_acesso", { length: 32 }),
   /** Código temporário (6 dígitos, uso único) gerado no app do morador para se identificar na estação de pesagem. */
@@ -173,6 +179,8 @@ export const coletas = mysqlTable("coletas", {
   concluidaEm: dataHora("concluida_em"),
   pesoGramas: int("peso_gramas"),
   pontosConcedidos: int("pontos_concedidos").default(0).notNull(),
+  /** Pontos prometidos no tablet (em milésimos, pela regra do tipo no momento do registro); a aprovação credita este valor. */
+  pontosPrevistosMilesimos: int("pontos_previstos_milesimos"),
   status: mysqlEnum("status", statusColeta).default("agendada").notNull(),
   observacoes: text("observacoes"),
   /** Comprovação fotográfica anexada ao concluir a coleta (proteção antifraude). */
@@ -555,3 +563,25 @@ export type Pessoa = typeof pessoas.$inferSelect;
 export type EstacaoPesagem = typeof estacoesPesagem.$inferSelect;
 export type MovimentacaoPontos = typeof movimentacoesPontos.$inferSelect;
 export type RegraResiduo = typeof regrasResiduo.$inferSelect;
+
+const blobMedio = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "mediumblob" });
+
+/** Arquivos enviados (fotos do visor, certificados, relatórios) guardados no próprio MySQL, para não se perderem quando o servidor reinicia. */
+export const arquivos = mysqlTable("arquivos", {
+  id: int("id").autoincrement().primaryKey(),
+  chave: varchar("chave", { length: 255 }).notNull(),
+  tipoConteudo: varchar("tipo_conteudo", { length: 100 }).notNull(),
+  tamanho: int("tamanho").notNull(),
+  dados: blobMedio("dados").notNull(),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [uniqueIndex("arquivos_chave_unique").on(table.chave)]);
+
+/** Sessões encerradas pelo "Sair" (identificador da sessão no cookie): o cookie daquele aparelho deixa de valer, os outros continuam. */
+export const sessoesEncerradas = mysqlTable("sessoes_encerradas", {
+  id: int("id").autoincrement().primaryKey(),
+  sessaoId: varchar("sessao_id", { length: 64 }).notNull(),
+  usuarioId: int("usuario_id").notNull(),
+  /** Depois disso o cookie já expirou sozinho e a linha pode ser apagada. */
+  expiraEm: dataHora("expira_em").notNull(),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [uniqueIndex("sessoes_encerradas_sessao_unique").on(table.sessaoId)]);

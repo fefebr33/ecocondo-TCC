@@ -30,7 +30,7 @@ export function RegrasDescarte() {
     {regras.isLoading || guias.isLoading ? <p className="mt-5 text-sm text-muted-foreground">Carregando regras...</p> : <div className="mt-5 grid gap-3">
       {(regras.data ?? []).map((regra) => <LinhaRegra key={regra.tipoResiduo} regra={regra} guia={guias.data?.find((guia) => guia.tipoResiduo === regra.tipoResiduo)} onSalvo={() => { utils.regrasDescarte.listar.invalidate(); utils.guias.listar.invalidate(); utils.estacao.invalidate(); }} />)}
     </div>}
-    <p className="mt-4 text-xs leading-5 text-muted-foreground">Os pontos são calculados assim: kg aprovados × pontos por kg, arredondado para baixo. Coloque 0 para um tipo que não dá pontos (ele continua contando nos indicadores).</p>
+    <p className="mt-4 text-xs leading-5 text-muted-foreground">Os pontos são calculados assim: kg aprovados × pontos por kg, com fração (1,9 kg de orgânico a 0,5 ponto/kg vale 0,95). As frações de cada morador se somam e viram ponto inteiro no saldo. Mudar a regra não altera os descartes já registrados: vale o que o tablet mostrou ao morador. Coloque 0 para um tipo que não dá pontos (ele continua contando nos indicadores).</p>
   </section>;
 }
 

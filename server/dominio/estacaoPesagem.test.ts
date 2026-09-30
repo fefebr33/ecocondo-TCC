@@ -6,6 +6,8 @@ import {
   hashTokenEstacao,
   registrarTentativaErrada,
   verificarBloqueioTentativas,
+  esperaRestanteMs,
+  limparTentativas,
   LIMITE_TENTATIVAS_CODIGO,
 } from "./estacaoPesagem";
 
@@ -52,13 +54,31 @@ describe("regras antifraude da estação de pesagem", () => {
     expect(hashTokenEstacao(" abc ")).toBe(hashTokenEstacao("abc"));
   });
 
-  it("bloqueia o tablet depois de muitos códigos errados", () => {
-    const estacaoId = 999;
-    const bloqueios = Array.from({ length: LIMITE_TENTATIVAS_CODIGO }, () => registrarTentativaErrada(estacaoId, 1000));
-    // Só a tentativa que bloqueia avisa (para o administrador receber um único alerta de falha operacional).
-    expect(bloqueios.filter(Boolean)).toHaveLength(1);
-    expect(bloqueios.at(-1)).toBe(true);
+  it("depois de alguns códigos errados, o tablet pede uma espera crescente, de no máximo 2 minutos", () => {
+    const estacaoId = 9001;
+    for (let erro = 1; erro < LIMITE_TENTATIVAS_CODIGO; erro += 1) registrarTentativaErrada(estacaoId, 1000);
+    expect(() => verificarBloqueioTentativas(estacaoId, 1000)).not.toThrow();
+    registrarTentativaErrada(estacaoId, 1000);
+    expect(esperaRestanteMs(estacaoId, 1000)).toBe(15_000);
     expect(() => verificarBloqueioTentativas(estacaoId, 2000)).toThrow(LimiteAntifraudeExcedidoError);
-    expect(() => verificarBloqueioTentativas(estacaoId, 1000 + 16 * 60_000)).not.toThrow();
+    expect(() => verificarBloqueioTentativas(estacaoId, 16_001)).not.toThrow();
+    registrarTentativaErrada(estacaoId, 20_000);
+    expect(esperaRestanteMs(estacaoId, 20_000)).toBe(30_000);
+    const avisos = Array.from({ length: 10 }, (_, indice) => registrarTentativaErrada(estacaoId, 30_000 + indice));
+    // Só o erro que atinge o limite avisa (o administrador recebe um único alerta de falha operacional).
+    expect(avisos.filter(Boolean)).toHaveLength(1);
+    expect(esperaRestanteMs(estacaoId, 30_009)).toBe(120_000);
+    // Um código certo zera a contagem.
+    limparTentativas(estacaoId);
+    expect(() => verificarBloqueioTentativas(estacaoId, 30_010)).not.toThrow();
+  });
+});
+
+describe("dia da estação no horário de Brasília", () => {
+  it("o dia vira à meia-noite de Brasília, mesmo com o servidor em UTC", async () => {
+    const { inicioDoDiaEmBrasilia } = await import("../rotas/estacoes");
+    expect(inicioDoDiaEmBrasilia(new Date("2026-09-30T23:30:00Z")).toISOString()).toBe("2026-09-30T03:00:00.000Z");
+    expect(inicioDoDiaEmBrasilia(new Date("2026-10-01T02:59:00Z")).toISOString()).toBe("2026-09-30T03:00:00.000Z");
+    expect(inicioDoDiaEmBrasilia(new Date("2026-10-01T03:00:00Z")).toISOString()).toBe("2026-10-01T03:00:00.000Z");
   });
 });

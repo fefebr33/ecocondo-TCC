@@ -36,6 +36,48 @@ export function pontosDoDescarte(pesoGramas: number | null | undefined, pontosPo
   return Math.floor((pesoGramas / 1000) * pontosPorKg + 1e-9);
 }
 
+/**
+ * Valor exato de um descarte em milésimos de ponto (kg × pontos por kg × 1000; 1 kg de reciclável = 1000).
+ * O descarte vale a fração exata; as frações de cada morador se somam e viram ponto inteiro no saldo (ver creditarComResto).
+ */
+export function milesimosDoDescarte(pesoGramas: number | null | undefined, pontosPorKg: number) {
+  if (!pesoGramas || pesoGramas <= 0 || pontosPorKg <= 0) return 0;
+  return Math.round(pesoGramas * pontosPorKg);
+}
+
+/** Pontos com até 2 casas, no formato brasileiro ("0,95", "2", "1,5"). */
+export function formatarPontos(pontos: number) {
+  return pontos.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
+/**
+ * Credita um descarte aprovado somando a fração que sobrou dos anteriores: 0,99 + 0,95 = 1,94 → entra 1 ponto no saldo e sobram 0,94.
+ * Assim nenhum descarte "vale zero" só porque o saco pesou menos de 1 kg.
+ */
+export function creditarComResto(restoMilesimos: number, exatoMilesimos: number) {
+  const acumulado = Math.max(0, restoMilesimos) + Math.max(0, exatoMilesimos);
+  return { pontos: Math.floor(acumulado / 1000), resto: acumulado % 1000 };
+}
+
+/**
+ * Desfaz um descarte já creditado (reprovação depois de aprovado): tira do saldo os pontos inteiros que ele gerou e da fração
+ * guardada o que sobrou dele, de modo que saldo + fração diminuam exatamente o valor do descarte.
+ */
+export function estornarComResto(restoMilesimos: number, exatoMilesimos: number, pontosCreditados: number) {
+  let resto = restoMilesimos - (exatoMilesimos - pontosCreditados * 1000);
+  let pontos = pontosCreditados;
+  if (resto < 0) {
+    const extra = Math.ceil(-resto / 1000);
+    pontos += extra;
+    resto += extra * 1000;
+  } else if (resto >= 1000) {
+    const devolvidos = Math.min(pontos, Math.floor(resto / 1000));
+    pontos -= devolvidos;
+    resto -= devolvidos * 1000;
+  }
+  return { pontos, resto: Math.min(resto, 999) };
+}
+
 /** Situação que as telas mostram para um descarte. */
 export type SituacaoDescarte = "pendente" | "aprovado" | "reprovado" | "auditoria" | "cancelado";
 

@@ -120,11 +120,11 @@ Não existe perfil coletor nem agendamento: o próprio morador pesa e registra o
 
 Todo descarte fica **pendente de aprovação**. Em **Descartes**, a administração confere a foto e o peso de cada tipo e **aprova** (os pontos entram pela regra do tipo), **reprova** com motivo ou abre **auditoria** para casos graves (furto, fraude); a auditoria termina como regular (aprova) ou irregular (reprova e pode aplicar punição em pontos). O morador é avisado em cada passo.
 
-Travas antifraude: só tablet pareado registra; código do morador de uso único, válido por 5 minutos, com bloqueio do tablet após muitos códigos errados; foto obrigatória fora do modo demonstração; peso mínimo e máximo por tipo (definidos em **Configurações**); até 40 kg e 4 descartes por dia, com 10 minutos entre descartes; alertas para pesos acima de 10 kg ou muito acima do histórico do morador. Os limites gerais ficam em `server/dominio/estacaoPesagem.ts` e as regras padrão de cada tipo em `shared/descarte.ts`.
+Travas antifraude: só tablet pareado registra; código do morador de uso único, válido por 5 minutos, com espera crescente no tablet depois de 5 códigos errados seguidos (15 s até 2 min, sem travar o tablet para os outros moradores); o limite diário conta os dias pelo horário de Brasília e ignora descartes reprovados; foto obrigatória fora do modo demonstração; peso mínimo e máximo por tipo (definidos em **Configurações**); até 40 kg e 4 descartes por dia, com 10 minutos entre descartes; alertas para pesos acima de 10 kg ou muito acima do histórico do morador. Os limites gerais ficam em `server/dominio/estacaoPesagem.ts` e as regras padrão de cada tipo em `shared/descarte.ts`.
 
 ### Pontos
 
-Cada tipo tem sua regra de pontos (pontos por kg aprovado, arredondado para baixo; rejeito não dá pontos). A administração pode ajustar o saldo de um morador (**Moradores > Pontos**) e **zerar os pontos de todos** para começar um novo ciclo (**Configurações**); tudo aparece no extrato e na auditoria, e o pódio conta a partir do início do ciclo.
+Cada tipo tem sua regra de pontos (pontos por kg aprovado; rejeito não dá pontos). O descarte vale a fração exata (0,99 kg de reciclável = 0,99 ponto) e as frações de cada morador se somam até virar ponto inteiro no saldo (`moradores.resto_pontos_milesimos`). O valor mostrado no tablet fica gravado no registro e é o que a aprovação credita, mesmo que a regra mude antes. A administração pode ajustar o saldo de um morador (**Moradores > Pontos**) e **zerar os pontos de todos** para começar um novo ciclo (**Configurações**); tudo aparece no extrato e na auditoria, e o pódio conta a partir do início do ciclo.
 
 ### Pódio e privacidade
 
@@ -149,20 +149,22 @@ Mude as tabelas em `drizzle/schema.ts`, rode `pnpm db:generate` para gerar a nov
 
 ## Login
 
-Login com e-mail e senha (hash scrypt; 5 senhas erradas bloqueiam o e-mail por 15 minutos). O administrador gera em **Pessoas e acessos** o link de **primeiro acesso** (a pessoa cria a senha) ou de **nova senha**; o link vale uma vez, por 72 horas (primeiro acesso) ou 2 horas (recuperação). Sem servidor de e-mail no protótipo, "Esqueci minha senha" mostra o link na tela quando o modo demonstração está ligado e sempre o registra no log do servidor.
+Login com e-mail e senha (hash scrypt; 5 senhas erradas bloqueiam o e-mail por 15 minutos). O administrador gera em **Pessoas e acessos** o link de **primeiro acesso** (a pessoa cria a senha) ou de **nova senha**; o link vale uma vez, por 72 horas (primeiro acesso) ou 2 horas (recuperação). Sem servidor de e-mail no protótipo, "Esqueci minha senha" só registra o link no log do servidor: ele nunca aparece na tela (senão qualquer visitante trocaria a senha de qualquer pessoa). Quem entrega o link é o síndico.
 
-Com o modo demonstração ligado (padrão), a tela de login também tem os botões **Entrar como** (rota `/api/auth/entrar?role=<perfil>`), sem senha, para a banca e testes.
+A sessão dura 30 dias. **Sair** encerra a sessão daquele aparelho no servidor (o cookie copiado deixa de valer); **trocar a senha** encerra as sessões dos outros aparelhos. Em **Pessoas e acessos**, o síndico pode **desativar o acesso** de quem se mudou ou deixou a administração: a pessoa sai do sistema na hora, não entra mais e não registra descartes; o histórico fica.
+
+Com o modo demonstração ligado, a tela de login também tem os botões **Entrar como** (rota `/api/auth/entrar?role=<perfil>`), sem senha, para a banca e testes.
 
 ### Variáveis de ambiente (opcionais, no arquivo `.env`)
 
 | Variável | Para que serve |
 | --- | --- |
 | `JWT_SECRET` | Chave que assina as sessões. Em produção (`pnpm start`), sem ela o servidor gera uma chave aleatória a cada início e as sessões expiram ao reiniciar. |
-| `LOGIN_DEMONSTRACAO=desativado` | Desliga os botões "Entrar como" (sem senha) e o link de senha na tela. Use num servidor público, porque com eles qualquer visitante entra como administrador. O login com e-mail e senha continua. |
+| `LOGIN_DEMONSTRACAO=desativado` | Desliga os botões "Entrar como" (sem senha). Use num servidor público, porque com eles qualquer visitante entra como administrador. O login com e-mail e senha continua. |
 | `DATABASE_URL` | Endereço do MySQL, no formato `mysql://usuario:senha@servidor:porta/banco` (padrão `mysql://root@127.0.0.1:3306/ecocondo`). |
 | `DATABASE_SSL=true` | Usa conexão segura com o MySQL (necessário na maioria dos serviços na nuvem). |
 | `DATABASE_SSL_CA` | Caminho do certificado CA do provedor, quando ele fornece um (ex.: `./ca.pem`). |
 
 ## Arquivos enviados
 
-Fotos anexadas a ocorrências (Gestão ambiental) são salvas em `data/uploads/` e servidas em `/uploads/<chave>`.
+Fotos do visor da balança, fotos de ocorrências, certificados e relatórios ficam no próprio MySQL (tabela `arquivos`) e são servidos em `/uploads/<chave>` só para quem está logado no mesmo condomínio. Assim nada se perde quando o servidor reinicia (no plano gratuito do Render, o disco é apagado a cada reinício). Arquivos antigos em `data/uploads/` continuam sendo servidos.

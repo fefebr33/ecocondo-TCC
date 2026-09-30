@@ -20,7 +20,7 @@ export default function PainelPessoal({ residentId }: { residentId?: number }) {
   const indicadores = [
     { rotulo: "Total descartado", valor: `${formatarNumero(data.totalKg)} kg`, ajuda: `${formatarNumero(data.recyclableKg)} kg de recicláveis (aprovados)`, icone: Scale },
     { rotulo: "Descartes aprovados", valor: `${data.descartesAprovados}`, ajuda: data.ultimoDescarte ? `Último em ${formatarDataHora(data.ultimoDescarte)}` : "Nenhum ainda", icone: Recycle },
-    { rotulo: "Saldo de pontos", valor: `${data.morador.saldo}`, ajuda: `${data.pontosGanhos} ganhos em descartes aprovados`, icone: Coins },
+    { rotulo: "Saldo de pontos", valor: `${data.morador.saldo}`, ajuda: `${data.pontosGanhos} ganhos em descartes aprovados${data.morador.fracaoGuardada > 0 ? `; mais ${formatarNumero(data.morador.fracaoGuardada)} guardado para o próximo ponto` : ""}`, icone: Coins },
     { rotulo: "Aguardando decisão", valor: `${pendentes}`, ajuda: `${data.porSituacao.pendente} pendente(s) · ${data.porSituacao.auditoria} em auditoria · ${data.porSituacao.reprovado} reprovado(s)`, icone: TimerReset },
   ];
   const porTipo = data.porTipo.filter((item) => item.kilograms > 0).map((item) => ({ nome: rotuloResiduo[item.wasteType], kg: item.kilograms, cor: corDoTipo(item.wasteType, cores) }));
@@ -42,7 +42,7 @@ export default function PainelPessoal({ residentId }: { residentId?: number }) {
       <article className={cartao}>
         <p className="text-base font-semibold tracking-[-0.025em]">Que tipos</p>
         <p className="mt-1 text-sm text-muted-foreground">Divisão do peso aprovado por tipo.</p>
-        {porTipo.length ? <div className="mt-2 h-[200px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={porTipo} dataKey="kg" nameKey="nome" innerRadius={50} outerRadius={80} paddingAngle={2}>{porTipo.map((item) => <Cell key={item.nome} fill={item.cor} />)}</Pie><Tooltip contentStyle={dica} formatter={(valor, nome) => [`${formatarNumero(Number(valor))} kg`, nome]} /></PieChart></ResponsiveContainer></div> : <p className="mt-4 text-sm text-muted-foreground">Sem descartes aprovados ainda.</p>}
+        {porTipo.length ? <div className="mt-2 h-[200px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={porTipo} dataKey="kg" nameKey="nome" innerRadius={50} outerRadius={80} paddingAngle={2}>{porTipo.map((item) => <Cell key={item.nome} fill={item.cor} aria-label={`${item.nome}: ${formatarNumero(item.kg)} kg`} />)}</Pie><Tooltip contentStyle={dica} formatter={(valor, nome) => [`${formatarNumero(Number(valor))} kg`, nome]} /></PieChart></ResponsiveContainer></div> : <p className="mt-4 text-sm text-muted-foreground">Sem descartes aprovados ainda.</p>}
         <ul className="mt-2 grid gap-1.5 text-sm">{data.porTipo.map((item) => <li key={item.wasteType} className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: corDoTipo(item.wasteType, cores) }} />{rotuloResiduo[item.wasteType]}</span><span className="text-muted-foreground">{formatarNumero(item.kilograms)} kg · {item.descartes} descarte(s) · {item.pontos} pts</span></li>)}</ul>
       </article>
     </section>

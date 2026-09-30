@@ -13,7 +13,7 @@ import { writeAuditLog } from "../audit";
 import { MovimentacaoDuplicadaError, movimentarPontos } from "../pontos";
 import { notificarAdministradores, notificarUsuario } from "../notificacoes";
 import { regrasDoCondominio } from "../regrasResiduo";
-import { pontosDoDescarte, situacaoDescarte } from "@shared/descarte";
+import { creditarComResto, estornarComResto, formatarPontos, milesimosDoDescarte, situacaoDescarte } from "@shared/descarte";
 
 const moradorInput = z.object({
   name: z.string().trim().min(3).max(180),
@@ -148,7 +148,7 @@ export const operationsRouter = router({
           apartment: morador?.apartamento ?? null,
           origin: origens(registro),
           situacao,
-          pontosPrevistos: situacao === "pendente" || situacao === "auditoria" ? pontosDoDescarte(registro.pesoGramas, regras[registro.tipoResiduo].pontosPorKg) : registro.pontosConcedidos,
+          pontosPrevistos: situacao === "pendente" || situacao === "auditoria" ? milesimosPrevistos(registro, regras) / 1000 : registro.pontosConcedidos,
         };
       }).filter((registro) => (!input?.situacao || registro.situacao === input.situacao)
         && (!busca || normalizar(`${registro.residentName ?? ""} ${registro.apartment ?? ""} ${registro.bloco} ${registro.id}`).includes(busca)));
@@ -168,7 +168,7 @@ export const operationsRouter = router({
         morador: morador ?? null,
         itens: mesmoLote.map((registro) => {
           const situacao = situacaoDescarte(registro);
-          return { ...registro, situacao, origin: origens(registro), pontosPrevistos: situacao === "pendente" || situacao === "auditoria" ? pontosDoDescarte(registro.pesoGramas, regras[registro.tipoResiduo].pontosPorKg) : registro.pontosConcedidos };
+          return { ...registro, situacao, origin: origens(registro), pontosPrevistos: situacao === "pendente" || situacao === "auditoria" ? milesimosPrevistos(registro, regras) / 1000 : registro.pontosConcedidos };
         }),
       };
     }),
@@ -182,7 +182,7 @@ export const operationsRouter = router({
       const origens = await origensDosRegistros(ctx.eco.condominio.id, registros);
       return registros.map((registro) => ({
         ...registro,
-        pontosCalculados: pontosDoDescarte(registro.pesoGramas, regras[registro.tipoResiduo].pontosPorKg),
+        pontosCalculados: milesimosPrevistos(registro, regras) / 1000,
         situacao: situacaoDescarte(registro),
         residentName: moradoresRelacionados.find((morador) => morador.id === registro.moradorId)?.nome ?? null,
         apartment: moradoresRelacionados.find((morador) => morador.id === registro.moradorId)?.apartamento ?? null,
@@ -330,15 +330,39 @@ function converterDuplicidade(error: unknown): never {
   throw error;
 }
 
-/** Aprova um descarte pendente (ou em auditoria, ao concluí-la sem irregularidade) e credita os pontos pela regra do tipo. */
+type RegrasPorTipo = Awaited<ReturnType<typeof regrasDoCondominio>>;
+
+/** Valor do descarte em milésimos de ponto: o que o tablet prometeu (gravado no registro) ou, nos registros antigos, pela regra atual. */
+function milesimosPrevistos(registro: Pick<Coleta, "pontosPrevistosMilesimos" | "pesoGramas" | "tipoResiduo">, regras: RegrasPorTipo) {
+  return registro.pontosPrevistosMilesimos ?? milesimosDoDescarte(registro.pesoGramas, regras[registro.tipoResiduo].pontosPorKg);
+}
+
+/** O descarte já entrou no saldo (e na fração guardada do morador)? Vale para os aprovados e para os que foram à auditoria depois de aprovados. */
+function jaContabilizado(coleta: Coleta) {
+  return coleta.pontosConcedidos > 0 || coleta.aprovacaoPesoEm !== null && coleta.aprovacaoPesoStatus !== "pendente";
+}
+
+/**
+ * Aprova um descarte pendente (ou em auditoria, ao concluí-la sem irregularidade) e credita o valor prometido no tablet.
+ * A fração de ponto não se perde: soma com a que sobrou dos descartes anteriores do morador e vira ponto inteiro quando passa de 1.
+ */
 async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, observacao: string | null, daAuditoria = false) {
   const db = await getDb();
   const regras = await regrasDoCondominio(coleta.condominioId);
   // Numa auditoria sobre um descarte já aprovado, os pontos já estavam no saldo: não credita de novo.
-  const jaCreditados = coleta.pontosConcedidos > 0;
-  const pontos = jaCreditados ? coleta.pontosConcedidos : pontosDoDescarte(coleta.pesoGramas, regras[coleta.tipoResiduo].pontosPorKg);
+  const jaCreditados = jaContabilizado(coleta);
+  const exato = milesimosPrevistos(coleta, regras);
+  let pontos = jaCreditados ? coleta.pontosConcedidos : 0;
   const agora = new Date();
   await db.transaction(async (tx) => {
+    let novoResto: number | null = null;
+    if (!jaCreditados && coleta.moradorId) {
+      // Trava a linha do morador: duas aprovações ao mesmo tempo não podem usar a mesma fração guardada.
+      const [morador] = await tx.select({ resto: moradores.restoPontosMilesimos }).from(moradores).where(eq(moradores.id, coleta.moradorId)).for("update");
+      const credito = creditarComResto(morador?.resto ?? 0, exato);
+      pontos = credito.pontos;
+      novoResto = credito.resto;
+    }
     const [alteracao] = await tx.update(coletas).set({
       pendenteAprovacaoPeso: false,
       aprovacaoPesoStatus: "aprovado",
@@ -346,14 +370,18 @@ async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, observa
       aprovacaoPesoEm: agora,
       motivoDecisao: observacao,
       pontosConcedidos: pontos,
+      pontosPrevistosMilesimos: exato,
       atualizadoEm: agora,
     }).where(and(eq(coletas.id, coleta.id), eq(coletas.pendenteAprovacaoPeso, true), eq(coletas.aprovacaoPesoStatus, daAuditoria ? "auditoria" : "pendente")));
     if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Outro administrador já decidiu este descarte." });
+    if (coleta.moradorId && novoResto !== null) await tx.update(moradores).set({ restoPontosMilesimos: novoResto }).where(eq(moradores.id, coleta.moradorId));
     if (coleta.moradorId && pontos > 0 && !jaCreditados) {
-      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "credito_coleta", pontos, coletaId: coleta.id, autorId: ctx.user.id, descricao: `Descarte nº ${coleta.id} aprovado (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]})` });
+      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "credito_coleta", pontos, coletaId: coleta.id, autorId: ctx.user.id, descricao: `Descarte nº ${coleta.id} aprovado (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}, vale ${formatarPontos(exato / 1000)} ponto(s))` });
     }
   }).catch(converterDuplicidade);
 
+  const valor = formatarPontos(exato / 1000);
+  const efeitoPontos = jaCreditados ? "pontos já creditados antes" : !exato ? "sem pontos (regra do tipo)" : pontos ? `vale ${valor} ponto(s); ${pontos} ponto(s) inteiro(s) entraram no saldo` : `vale ${valor} ponto(s), guardado(s) como fração até completar 1 ponto`;
   await writeAuditLog(db, {
     condominioId: coleta.condominioId,
     autorId: ctx.user.id,
@@ -361,17 +389,20 @@ async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, observa
     entidadeId: coleta.id,
     acao: daAuditoria ? "auditoria_concluida_regular" : "descarte_aprovado",
     resumo: daAuditoria
-      ? `Auditoria do descarte nº ${coleta.id} concluída sem irregularidade; descarte aprovado${jaCreditados ? " (pontos mantidos)" : `; ${pontos} ponto(s) creditado(s)`}.`
-      : `Descarte nº ${coleta.id} conferido (foto e peso) e aprovado; ${pontos} ponto(s) creditado(s).`,
+      ? `Auditoria do descarte nº ${coleta.id} concluída sem irregularidade; descarte aprovado${jaCreditados ? " (pontos mantidos)" : `; ${efeitoPontos}`}.`
+      : `Descarte nº ${coleta.id} conferido (foto e peso) e aprovado; ${efeitoPontos}.`,
     estadoAnterior: { situacao: daAuditoria ? "auditoria" : "pendente", pontosConcedidos: coleta.pontosConcedidos },
-    estadoNovo: { situacao: "aprovado", pontosConcedidos: pontos, efeitoPontos: jaCreditados ? "pontos já creditados antes" : pontos ? `${pontos} ponto(s) creditado(s)` : "sem pontos (regra do tipo ou peso abaixo de 1 ponto)" },
+    estadoNovo: { situacao: "aprovado", pontosConcedidos: pontos, valorMilesimos: exato, efeitoPontos },
     motivo: observacao,
   });
 
   const usuarioMorador = await usuarioDoMorador(coleta.moradorId);
   const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
-  if (!daAuditoria) await notificarUsuario(db, usuarioMorador, { ...base, tipo: "revisao_administrativa", titulo: "Descarte aprovado", mensagem: `A administração conferiu a foto e o peso e aprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}).${observacao ? ` Observação: ${observacao}` : ""}` });
-  if (pontos > 0 && !jaCreditados) await notificarUsuario(db, usuarioMorador, { ...base, tipo: "pontos_ganhos", titulo: `+${pontos} ponto(s)`, mensagem: `${pontos} ponto(s) do descarte nº ${coleta.id} foram creditados. Veja o extrato em Engajamento.` });
+  // Uma notificação só (antes eram duas: "aprovado" e "+N pontos").
+  if (!daAuditoria) {
+    const sobrePontos = !exato ? "" : pontos ? ` Ele vale ${valor} ponto(s): +${pontos} no seu saldo.` : ` Ele vale ${valor} ponto(s), que ficam guardados e se somam aos próximos descartes até completar 1 ponto.`;
+    await notificarUsuario(db, usuarioMorador, { ...base, tipo: pontos > 0 ? "pontos_ganhos" : "revisao_administrativa", titulo: pontos > 0 ? `Descarte aprovado: +${pontos} ponto(s)` : "Descarte aprovado", mensagem: `A administração conferiu a foto e o peso e aprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}).${sobrePontos}${observacao ? ` Observação: ${observacao}` : ""}` });
+  }
   return { success: true, pointsAwarded: jaCreditados ? 0 : pontos };
 }
 
@@ -380,11 +411,20 @@ async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo
   if (coleta.aprovacaoPesoStatus === "rejeitado") throw new TRPCError({ code: "BAD_REQUEST", message: "Este descarte já foi reprovado." });
   const db = await getDb();
   const agora = new Date();
-  const eraPendente = coleta.pendenteAprovacaoPeso && coleta.pontosConcedidos === 0;
+  const contabilizado = jaContabilizado(coleta);
   const regras = await regrasDoCondominio(coleta.condominioId);
-  const pontosPendentes = eraPendente ? pontosDoDescarte(coleta.pesoGramas, regras[coleta.tipoResiduo].pontosPorKg) : 0;
-  const pontosEstornados = coleta.pontosConcedidos;
+  const exato = contabilizado ? (coleta.pontosPrevistosMilesimos ?? coleta.pontosConcedidos * 1000) : milesimosPrevistos(coleta, regras);
+  const pontosPendentes = contabilizado ? 0 : exato / 1000;
+  let pontosEstornados = 0;
   await db.transaction(async (tx) => {
+    let novoResto: number | null = null;
+    if (contabilizado && coleta.moradorId) {
+      // Desfaz exatamente o valor do descarte: os pontos inteiros que ele gerou e o que dele ficou na fração guardada.
+      const [morador] = await tx.select({ resto: moradores.restoPontosMilesimos }).from(moradores).where(eq(moradores.id, coleta.moradorId)).for("update");
+      const estorno = estornarComResto(morador?.resto ?? 0, exato, coleta.pontosConcedidos);
+      pontosEstornados = estorno.pontos;
+      novoResto = estorno.resto;
+    }
     const [alteracao] = await tx.update(coletas).set({
       pendenteAprovacaoPeso: false,
       aprovacaoPesoStatus: "rejeitado",
@@ -395,6 +435,7 @@ async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo
       atualizadoEm: agora,
     }).where(and(eq(coletas.id, coleta.id), eq(coletas.status, "concluida"), or(isNull(coletas.aprovacaoPesoStatus), ne(coletas.aprovacaoPesoStatus, "rejeitado"))));
     if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Este descarte já foi reprovado por outro administrador." });
+    if (coleta.moradorId && novoResto !== null) await tx.update(moradores).set({ restoPontosMilesimos: novoResto }).where(eq(moradores.id, coleta.moradorId));
     if (coleta.moradorId && pontosEstornados > 0) {
       await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "estorno_coleta", pontos: -pontosEstornados, coletaId: coleta.id, autorId: ctx.user.id, descricao: `Estorno: descarte nº ${coleta.id} reprovado (${motivo})` });
     }
@@ -403,7 +444,7 @@ async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo
     throw error;
   });
 
-  const efeito = pontosEstornados > 0 ? `${pontosEstornados} ponto(s) estornado(s)` : pontosPendentes > 0 ? `${pontosPendentes} ponto(s) pendente(s) cancelado(s)` : "nenhum ponto envolvido";
+  const efeito = pontosEstornados > 0 ? `${pontosEstornados} ponto(s) estornado(s)` : contabilizado && exato > 0 ? `${formatarPontos(exato / 1000)} ponto(s) de fração retirado(s)` : pontosPendentes > 0 ? `${formatarPontos(pontosPendentes)} ponto(s) pendente(s) cancelado(s)` : "nenhum ponto envolvido";
   await writeAuditLog(db, {
     condominioId: coleta.condominioId,
     autorId: ctx.user.id,
@@ -411,17 +452,16 @@ async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo
     entidadeId: coleta.id,
     acao: "coleta_reprovada",
     resumo: `Descarte nº ${coleta.id} reprovado pela administração; ${efeito}.`,
-    estadoAnterior: { status: coleta.status, pesoGramas: coleta.pesoGramas, aprovacaoPesoStatus: coleta.aprovacaoPesoStatus, pendenteAprovacaoPeso: eraPendente, pontosConcedidos: coleta.pontosConcedidos },
+    estadoAnterior: { status: coleta.status, pesoGramas: coleta.pesoGramas, aprovacaoPesoStatus: coleta.aprovacaoPesoStatus, pendenteAprovacaoPeso: !contabilizado, pontosConcedidos: coleta.pontosConcedidos },
     estadoNovo: { status: coleta.status, aprovacaoPesoStatus: "rejeitado", pontosConcedidos: 0, pontosEstornados, pontosPendentesCancelados: pontosPendentes, efeitoPontos: efeito, reprovadaEm: agora },
     motivo,
   });
 
   const usuarioMorador = await usuarioDoMorador(coleta.moradorId);
   const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
-  await notificarUsuario(db, usuarioMorador, { ...base, tipo: "coleta_reprovada", titulo: "Descarte reprovado", mensagem: `A administração reprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}). Motivo: ${motivo}` });
-  if (pontosEstornados > 0 || pontosPendentes > 0) {
-    await notificarUsuario(db, usuarioMorador, { ...base, tipo: "pontos_estornados", titulo: pontosEstornados > 0 ? `-${pontosEstornados} ponto(s) estornado(s)` : "Pontos pendentes cancelados", mensagem: pontosEstornados > 0 ? `Os ${pontosEstornados} ponto(s) do descarte nº ${coleta.id} foram retirados do seu saldo porque ele foi reprovado.` : `Os ${pontosPendentes} ponto(s) previsto(s) do descarte nº ${coleta.id} não serão creditados porque ele foi reprovado.` });
-  }
+  // Uma notificação só, com o motivo e o efeito nos pontos (antes eram duas).
+  const efeitoParaMorador = pontosEstornados > 0 ? ` ${pontosEstornados} ponto(s) foram retirados do seu saldo.` : contabilizado && exato > 0 ? ` O valor dele (${formatarPontos(exato / 1000)} ponto) saiu da fração guardada.` : pontosPendentes > 0 ? ` Os ${formatarPontos(pontosPendentes)} ponto(s) previsto(s) não serão creditados.` : "";
+  await notificarUsuario(db, usuarioMorador, { ...base, tipo: "coleta_reprovada", titulo: pontosEstornados > 0 ? `Descarte reprovado: -${pontosEstornados} ponto(s)` : "Descarte reprovado", mensagem: `A administração reprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}). Motivo: ${motivo.replace(/[.!\s]+$/, "")}.${efeitoParaMorador}` });
   await notificarAdministradores(db, { ...base, tipo: "coleta_reprovada", titulo: "Descarte reprovado", mensagem: `O descarte nº ${coleta.id} (bloco ${coleta.bloco}) foi reprovado: ${motivo}. Efeito: ${efeito}.` }, ctx.user.id);
   return { success: true, pointsAwarded: 0, pointsReversed: pontosEstornados, pendingPointsCancelled: pontosPendentes };
 }

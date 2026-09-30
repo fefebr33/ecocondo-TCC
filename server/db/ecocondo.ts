@@ -47,7 +47,7 @@ export async function obterOuCriarPerfil(usuario: Usuario): Promise<ContextoPerf
     const pessoaPorUsuario = await db.select().from(pessoas).where(eq(pessoas.usuarioId, usuario.id)).limit(1);
     const pessoaCadastrada = pessoaPorUsuario[0] ? pessoaPorUsuario : await db.select().from(pessoas).where(and(eq(pessoas.condominioId, condominio[0].id), eq(pessoas.email, chaveEmail))).limit(1);
     if (pessoaCadastrada[0]) {
-      await db.update(pessoas).set({ usuarioId: usuario.id, moradorId: existente[0].moradorId, statusAcesso: "ativo", papel: existente[0].papel, nome: usuario.nome || pessoaCadastrada[0].nome, atualizadoEm: new Date() }).where(eq(pessoas.id, pessoaCadastrada[0].id));
+      await db.update(pessoas).set({ usuarioId: usuario.id, moradorId: existente[0].moradorId, statusAcesso: pessoaCadastrada[0].statusAcesso === "desativado" ? "desativado" : "ativo", papel: existente[0].papel, nome: usuario.nome || pessoaCadastrada[0].nome, atualizadoEm: new Date() }).where(eq(pessoas.id, pessoaCadastrada[0].id));
     } else {
       await db.insert(pessoas).values({
         condominioId: condominio[0].id,
@@ -95,7 +95,7 @@ export async function obterOuCriarPerfil(usuario: Usuario): Promise<ContextoPerf
   }
 
   if (pessoaPendente[0]) {
-    await db.update(pessoas).set({ usuarioId: usuario.id, moradorId, statusAcesso: "ativo", papel, nome: usuario.nome || pessoaPendente[0].nome, atualizadoEm: new Date() }).where(eq(pessoas.id, pessoaPendente[0].id));
+    await db.update(pessoas).set({ usuarioId: usuario.id, moradorId, statusAcesso: pessoaPendente[0].statusAcesso === "desativado" ? "desativado" : "ativo", papel, nome: usuario.nome || pessoaPendente[0].nome, atualizadoEm: new Date() }).where(eq(pessoas.id, pessoaPendente[0].id));
   } else {
     await db.insert(pessoas).values({
       condominioId: condominio.id,
