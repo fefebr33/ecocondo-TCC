@@ -1,7 +1,8 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import { and, eq, gt, isNull } from "drizzle-orm";
-import { pessoas, tiposTokenSenha, tokensSenha, usuarios } from "../drizzle/schema";
+import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { pessoas, sessoesEncerradas, tiposTokenSenha, tokensSenha, usuarios } from "../drizzle/schema";
+import { getDb } from "./db";
 
 const scrypt = promisify(scryptCallback) as (senha: string, sal: Buffer, tamanho: number) => Promise<Buffer>;
 
@@ -76,8 +77,10 @@ export async function definirSenhaPorToken(db: any, token: string, senha: string
   const senhaHash = await gerarHashSenha(senha);
   const [existente] = await db.select().from(usuarios).where(eq(usuarios.email, registro.email)).limit(1);
   if (existente) {
-    await db.update(usuarios).set({ senhaHash, atualizadoEm: agora }).where(eq(usuarios.id, existente.id));
-    return { ...existente, senhaHash };
+    // Senha nova encerra as sessões abertas com a senha antiga (ex.: celular perdido).
+    await db.update(usuarios).set({ senhaHash, versaoSessao: sql`${usuarios.versaoSessao} + 1`, atualizadoEm: agora }).where(eq(usuarios.id, existente.id));
+    const [atualizado] = await db.select().from(usuarios).where(eq(usuarios.id, existente.id)).limit(1);
+    return atualizado;
   }
   const [pessoa] = await db.select().from(pessoas).where(eq(pessoas.email, registro.email)).limit(1);
   await db.insert(usuarios).values({ idExterno: `senha:${registro.email}`, nome: pessoa?.nome ?? null, email: registro.email, metodoLogin: "senha", papel: pessoa?.papel === "administrador" ? "administrador" : "usuario", senhaHash, ultimoAcesso: agora });
@@ -105,4 +108,35 @@ export function registrarTentativa(email: string, acertou: boolean, agora = Date
     registro.bloqueadoAte = agora + BLOQUEIO_MS;
   }
   tentativas.set(chave, registro);
+}
+
+/** Encerra todas as sessões abertas do usuário (trocar a senha, acesso desativado): os tokens emitidos antes deixam de valer. */
+export async function encerrarSessoes(db: any, usuarioId: number) {
+  await db.update(usuarios).set({ versaoSessao: sql`${usuarios.versaoSessao} + 1` }).where(eq(usuarios.id, usuarioId));
+  const [linha] = await db.select({ versaoSessao: usuarios.versaoSessao }).from(usuarios).where(eq(usuarios.id, usuarioId)).limit(1);
+  return (linha?.versaoSessao ?? 0) as number;
+}
+
+/** A administração desativou o acesso desta pessoa em Pessoas e acessos (por usuário ou, antes do primeiro login, por e-mail)? */
+export async function acessoDesativado(usuarioId: number | null, email?: string | null, dbInformado?: any) {
+  const db = dbInformado ?? (await getDb());
+  const condicao = usuarioId ? eq(pessoas.usuarioId, usuarioId) : email ? eq(pessoas.email, normalizarEmail(email)) : null;
+  if (!condicao) return false;
+  const [pessoa] = await db.select({ statusAcesso: pessoas.statusAcesso }).from(pessoas).where(and(condicao, eq(pessoas.statusAcesso, "desativado"))).limit(1);
+  return Boolean(pessoa);
+}
+
+/** "Sair": encerra só a sessão deste aparelho (o cookie copiado ou esquecido deixa de valer); as dos outros aparelhos continuam. */
+export async function encerrarSessao(db: any, dados: { sessaoId: string; usuarioId: number; expiraEm: Date | null }) {
+  if (!dados.sessaoId) return;
+  const agora = new Date();
+  await db.delete(sessoesEncerradas).where(lt(sessoesEncerradas.expiraEm, agora));
+  await db.insert(sessoesEncerradas).values({ sessaoId: dados.sessaoId, usuarioId: dados.usuarioId, expiraEm: dados.expiraEm ?? new Date(agora.getTime() + 31 * 24 * 60 * 60 * 1000) }).onDuplicateKeyUpdate({ set: { usuarioId: dados.usuarioId } });
+}
+
+export async function sessaoEncerrada(sessaoId: string) {
+  if (!sessaoId) return false;
+  const db = await getDb();
+  const [linha] = await db.select({ id: sessoesEncerradas.id }).from(sessoesEncerradas).where(eq(sessoesEncerradas.sessaoId, sessaoId)).limit(1);
+  return Boolean(linha);
 }

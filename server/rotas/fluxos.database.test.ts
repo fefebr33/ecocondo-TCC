@@ -235,11 +235,12 @@ describeComMysql("fluxos com banco de dados real", () => {
 
   it("preferências de notificação: o administrador desliga um aviso por perfil, menos os obrigatórios", async () => {
     await expect(admin.preferenciasNotificacao.salvar({ role: "morador", type: "coleta_reprovada", active: false })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    await admin.preferenciasNotificacao.salvar({ role: "morador", type: "codigo_estacao", active: false });
-    const antes = (await morador.notificacoes.listar()).filter((item) => item.tipo === "codigo_estacao").length;
-    await morador.estacao.gerarCodigo();
-    expect((await morador.notificacoes.listar()).filter((item) => item.tipo === "codigo_estacao").length).toBe(antes);
-    expect((await admin.preferenciasNotificacao.listar()).find((item) => item.papel === "morador" && item.tipo === "codigo_estacao")?.ativo).toBe(false);
+    await admin.preferenciasNotificacao.salvar({ role: "morador", type: "pesagem_registrada", active: false });
+    const antes = (await morador.notificacoes.listar()).filter((item) => item.tipo === "pesagem_registrada").length;
+    await descartar(morador, [{ wasteType: "reciclavel", weightGrams: 1000 }]);
+    expect((await morador.notificacoes.listar()).filter((item) => item.tipo === "pesagem_registrada").length).toBe(antes);
+    expect((await admin.preferenciasNotificacao.listar()).find((item) => item.papel === "morador" && item.tipo === "pesagem_registrada")?.ativo).toBe(false);
+    await admin.preferenciasNotificacao.salvar({ role: "morador", type: "pesagem_registrada", active: true });
     const { ultimaId } = await morador.notificacoes.novas({ afterId: 0 });
     expect((await morador.notificacoes.novas({ afterId: ultimaId })).itens).toHaveLength(0);
 
@@ -276,7 +277,9 @@ describeComMysql("fluxos com banco de dados real", () => {
     await moradora.auth.marcarManualLido();
     const [atualizada] = await (await getDb()).select().from(usuarios).where(eq(usuarios.id, nova.id));
     expect(atualizada.manualLidoEm).toBeInstanceOf(Date);
-    expect((await publico.auth.solicitarLink({ email: "ninguem@teste.local" })).linkDemonstracao).toBeNull();
+    // O link de senha nunca volta na tela, nem para um e-mail cadastrado: quem entrega é o síndico.
+    expect(await publico.auth.solicitarLink({ email: "ninguem@teste.local" })).toEqual({ enviado: true });
+    expect(await publico.auth.solicitarLink({ email: "nova@teste.local" })).toEqual({ enviado: true });
   });
 
   it("painel pessoal: o morador vê o dele e o administrador abre o de qualquer morador", async () => {

@@ -66,7 +66,7 @@ Se perder o link da estação: Administração › *Configurações* › *Estaç
 |---|---|
 | "Aguarde 10 minutos entre um descarte e outro" ou limite do dia | O morador já registrou há pouco (ensaio). Rode `pnpm db:seed --limpar` e pareie de novo. |
 | "Código inválido ou vencido" | O código passou de 5 minutos ou já foi usado. Gere outro no morador. |
-| Estação bloqueada por códigos errados | Após 8 códigos errados, a estação fica 15 minutos bloqueada. Espere ou reinicie o `pnpm dev` (o bloqueio fica na memória do servidor). |
-| "Muitas tentativas erradas" no login | 5 senhas erradas bloqueiam o e-mail por 15 minutos. Reinicie o `pnpm dev` ou use "Esqueci minha senha" (em demonstração o link aparece na tela). |
+| Estação pede para esperar | Depois de 5 códigos errados seguidos, o tablet pede uma espera antes da próxima tentativa (15 s, 30 s, 60 s, no máximo 2 min). Espere ou reinicie o `pnpm dev` (a contagem fica na memória do servidor). |
+| "Muitas tentativas erradas" no login | 5 senhas erradas bloqueiam o e-mail por 15 minutos. Reinicie o `pnpm dev` ou gere o link de nova senha em **Pessoas e acessos** (entrando pelo outro perfil). |
 | O morador cai no manual toda vez | Ele não marcou "Li e entendi". Marque a caixa e confirme. |
 | Estação pede a foto | O modo demonstração está desligado. Administração › Configurações › Estações de pesagem › **Ligar demonstração**. |

@@ -37,6 +37,15 @@ jobs:
       - name: Testes automatizados
         run: pnpm test
       - name: Migrações e dados de demonstração no MySQL
-        run: pnpm db:seed
+        run: pnpm db:seed --limpar
       - name: Build de produção
         run: pnpm build
+      - name: Navegador para os testes de tela
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Testes de tela (administrador e morador, notebook e celular, acessibilidade)
+        env:
+          JWT_SECRET: segredo-do-ci
+        run: |
+          pnpm start > servidor.log 2>&1 &
+          for tentativa in $(seq 1 30); do curl -sf http://localhost:3000/api/health > /dev/null && break; sleep 1; done
+          pnpm test:telas || (cat servidor.log; exit 1)

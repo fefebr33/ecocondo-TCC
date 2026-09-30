@@ -29,6 +29,13 @@
       "when": 1790679877664,
       "tag": "0003_descartes_senha_regras_auditoria",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1790797443112,
+      "tag": "0004_correcoes_criticas",
+      "breakpoints": true
     }
   ]
 }
