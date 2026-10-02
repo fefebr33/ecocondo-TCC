@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, estacoesPesagem, statusColeta, pessoas, moradores, statusMorador, usuarios, tiposResiduo } from "../../drizzle/schema";
+import { adesivos, analisesIa, coletas, estacoesPesagem, logsAuditoria, ocorrencias, penalidades, statusColeta, pessoas, moradores, statusMorador, usuarios, tiposResiduo } from "../../drizzle/schema";
 import type { Coleta } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { residuoNaFrase } from "@shared/rotulos";
@@ -13,6 +13,7 @@ import { writeAuditLog } from "../audit";
 import { MovimentacaoDuplicadaError, movimentarPontos } from "../pontos";
 import { notificarAdministradores, notificarUsuario } from "../notificacoes";
 import { regrasDoCondominio } from "../regrasResiduo";
+import { aplicarPenalidade } from "../penalidades";
 import { creditarComResto, estornarComResto, formatarPontos, milesimosDoDescarte, situacaoDescarte } from "@shared/descarte";
 
 const moradorInput = z.object({
@@ -162,13 +163,39 @@ export const operationsRouter = router({
       const [morador] = coleta.moradorId ? await db.select({ nome: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento }).from(moradores).where(eq(moradores.id, coleta.moradorId)).limit(1) : [];
       const origens = await origensDosRegistros(ctx.eco.condominio.id, mesmoLote);
       const regras = await regrasDoCondominio(ctx.eco.condominio.id);
+      const ids = mesmoLote.map((registro) => registro.id);
+      const administrador = ctx.eco.perfil.papel === "administrador";
+      // Tudo o que está ligado ao descarte: adesivo, estação, análise da IA, histórico de alterações, ocorrências e medidas.
+      const adesivosLote = await db.select({ id: adesivos.id, codigo: adesivos.codigo }).from(adesivos).where(inArray(adesivos.coletaId, ids));
+      const analises = await db.select().from(analisesIa).where(inArray(analisesIa.coletaId, ids)).orderBy(desc(analisesIa.id));
+      const [estacao] = coleta.estacaoId ? await db.select({ nome: estacoesPesagem.nome, local: estacoesPesagem.local }).from(estacoesPesagem).where(eq(estacoesPesagem.id, coleta.estacaoId)).limit(1) : [];
+      const historico = await db.select({ id: logsAuditoria.id, entidadeId: logsAuditoria.entidadeId, acao: logsAuditoria.acao, resumo: logsAuditoria.resumo, motivo: logsAuditoria.motivo, criadoEm: logsAuditoria.criadoEm, autor: usuarios.nome, autorId: logsAuditoria.autorId })
+        .from(logsAuditoria).leftJoin(usuarios, eq(usuarios.id, logsAuditoria.autorId))
+        .where(and(eq(logsAuditoria.condominioId, ctx.eco.condominio.id), eq(logsAuditoria.tipoEntidade, "coleta"), inArray(logsAuditoria.entidadeId, ids)))
+        .orderBy(asc(logsAuditoria.criadoEm), asc(logsAuditoria.id));
+      const relacionadas = administrador ? await db.select({ id: ocorrencias.id, coletaId: ocorrencias.coletaId, status: ocorrencias.status, categoria: ocorrencias.categoria, conclusao: ocorrencias.conclusao, descricao: ocorrencias.descricao, criadoEm: ocorrencias.criadoEm }).from(ocorrencias).where(and(eq(ocorrencias.condominioId, ctx.eco.condominio.id), inArray(ocorrencias.coletaId, ids))) : [];
+      const medidas = await db.select({ id: penalidades.id, coletaId: penalidades.coletaId, nome: penalidades.nome, tipo: penalidades.tipo, status: penalidades.status, inicioEm: penalidades.inicioEm, fimEm: penalidades.fimEm, motivo: penalidades.motivo }).from(penalidades).where(inArray(penalidades.coletaId, ids));
+      const aprovadores = await db.select({ id: usuarios.id, nome: usuarios.nome }).from(usuarios).where(inArray(usuarios.id, mesmoLote.map((registro) => registro.aprovacaoPesoPorId ?? 0)));
       return {
         id: coleta.id,
         lote: coleta.lote,
         morador: morador ?? null,
+        estacao: estacao ?? null,
         itens: mesmoLote.map((registro) => {
           const situacao = situacaoDescarte(registro);
-          return { ...registro, situacao, origin: origens(registro), pontosPrevistos: situacao === "pendente" || situacao === "auditoria" ? milesimosPrevistos(registro, regras) / 1000 : registro.pontosConcedidos };
+          const analise = analises.find((item) => item.coletaId === registro.id);
+          return {
+            ...registro,
+            situacao,
+            origin: origens(registro),
+            pontosPrevistos: situacao === "pendente" || situacao === "auditoria" ? milesimosPrevistos(registro, regras) / 1000 : registro.pontosConcedidos,
+            adesivo: adesivosLote.find((item) => item.id === registro.adesivoId)?.codigo ?? null,
+            decididoPor: registro.aprovacaoPesoPorId ? aprovadores.find((item) => item.id === registro.aprovacaoPesoPorId)?.nome ?? null : null,
+            analiseIa: analise ? { ...analise, motivos: JSON.parse(analise.motivos) as string[] } : null,
+            historico: historico.filter((item) => item.entidadeId === registro.id).map((item) => ({ ...item, autor: administrador || item.autorId === ctx.user.id ? item.autor ?? "Sistema" : item.autor?.startsWith("EcoCondo IA") ? item.autor : "Administração", autorId: undefined })),
+            ocorrencias: relacionadas.filter((item) => item.coletaId === registro.id),
+            medidas: medidas.filter((item) => item.coletaId === registro.id),
+          };
         }),
       };
     }),
@@ -232,60 +259,66 @@ export const operationsRouter = router({
     abrirAuditoria: administratorOnly.input(z.object({
       id: z.number().int().positive(),
       motivo: z.string().trim().min(10, "Descreva o motivo da auditoria (pelo menos 10 letras).").max(800),
+    })).mutation(async ({ ctx, input }) => abrirAuditoriaColeta(ctx, await coletaDoCondominio(ctx.eco.condominio.id, input.id), input.motivo)),
+    /**
+     * Reverte uma aprovação (feita pela IA ou por um administrador) quando um problema aparece depois: os pontos do descarte saem
+     * do saldo e ele volta para nova avaliação ("nova_avaliacao") ou vai direto para auditoria ("auditoria", pontos mantidos
+     * até a conclusão, como em qualquer auditoria).
+     */
+    reverterAprovacao: administratorOnly.input(z.object({
+      id: z.number().int().positive(),
+      motivo: z.string().trim().min(10, "Explique o motivo da reversão (pelo menos 10 letras).").max(800),
+      destino: z.enum(["nova_avaliacao", "auditoria"]),
+      ocorrenciaId: z.number().int().positive().optional(),
     })).mutation(async ({ ctx, input }) => {
-      const db = await getDb();
       const coleta = await coletaDoCondominio(ctx.eco.condominio.id, input.id);
-      if (coleta.status !== "concluida") throw new TRPCError({ code: "BAD_REQUEST", message: "Só descartes concluídos podem ir para auditoria." });
-      if (coleta.aprovacaoPesoStatus === "auditoria") throw new TRPCError({ code: "BAD_REQUEST", message: "Este descarte já está em auditoria." });
-      if (coleta.aprovacaoPesoStatus === "rejeitado") throw new TRPCError({ code: "BAD_REQUEST", message: "Este descarte já foi reprovado." });
-      const agora = new Date();
-      const [alteracao] = await db.update(coletas).set({ pendenteAprovacaoPeso: true, aprovacaoPesoStatus: "auditoria", motivoAuditoria: input.motivo, auditoriaAbertaEm: agora, atualizadoEm: agora })
-        .where(and(eq(coletas.id, coleta.id), eq(coletas.status, "concluida"), or(isNull(coletas.aprovacaoPesoStatus), inArray(coletas.aprovacaoPesoStatus, ["pendente", "aprovado"]))));
-      if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "O descarte acabou de ser alterado por outro administrador. Atualize a página." });
-      await writeAuditLog(db, {
-        condominioId: coleta.condominioId, autorId: ctx.user.id, tipoEntidade: "coleta", entidadeId: coleta.id, acao: "auditoria_aberta",
-        resumo: `Auditoria aberta no descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}).`,
-        estadoAnterior: { situacao: situacaoDescarte(coleta), pontosConcedidos: coleta.pontosConcedidos },
-        estadoNovo: { situacao: "auditoria", pontosConcedidos: coleta.pontosConcedidos },
-        motivo: input.motivo,
-      });
-      const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
-      await notificarUsuario(db, await usuarioDoMorador(coleta.moradorId), { ...base, tipo: "auditoria_aberta", titulo: "Seu descarte está em auditoria", mensagem: `A administração abriu uma auditoria no descarte nº ${coleta.id} por algo que pareceu suspeito: ${input.motivo} Pode ser só um mal-entendido; se quiser, procure a administração para explicar. Se a irregularidade for confirmada, o descarte é reprovado e pode haver punição (perda de pontos).` });
-      await notificarAdministradores(db, { ...base, tipo: "auditoria_aberta", titulo: "Auditoria aberta", mensagem: `O descarte nº ${coleta.id} (bloco ${coleta.bloco}) foi para auditoria: ${input.motivo}` }, ctx.user.id);
-      return { success: true };
+      if (situacaoDescarte(coleta) !== "aprovado") throw new TRPCError({ code: "BAD_REQUEST", message: "Só descartes aprovados podem ter a aprovação revertida." });
+      const motivo = input.ocorrenciaId ? `${input.motivo} (ocorrência nº ${input.ocorrenciaId})` : input.motivo;
+      if (input.destino === "auditoria") return abrirAuditoriaColeta(ctx, coleta, motivo);
+      return reverterParaNovaAvaliacao(ctx, coleta, motivo);
     }),
     /**
      * Conclui a auditoria. "regular": foi um mal-entendido, o descarte é aprovado e os pontos entram (se ainda não entraram).
-     * "irregular": o descarte é reprovado (pontos estornados) e pode haver punição com perda de pontos.
+     * "irregular": o descarte é reprovado (pontos estornados) e o administrador escolhe as medidas pré-definidas a aplicar
+     * (retirada de pontos, suspensões, advertência); cada medida fica no histórico do morador com período e responsável.
      */
     concluirAuditoria: administratorOnly.input(z.object({
       id: z.number().int().positive(),
       resultado: z.enum(["regular", "irregular"]),
       parecer: z.string().trim().min(10, "Escreva o parecer da auditoria (pelo menos 10 letras).").max(800),
+      /** Retirada de pontos avulsa (além das medidas pré-definidas). */
       penalidadePontos: z.number().int().min(0).max(1000).default(0),
+      /** Medidas pré-definidas escolhidas na hora (Configurações > Medidas administrativas). */
+      medidas: z.array(z.number().int().positive()).max(5).default([]),
     })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       const coleta = await coletaDoCondominio(ctx.eco.condominio.id, input.id);
       if (coleta.aprovacaoPesoStatus !== "auditoria") throw new TRPCError({ code: "BAD_REQUEST", message: "Este descarte não está em auditoria." });
-      if (input.resultado === "regular" && input.penalidadePontos > 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Punição só vale quando a irregularidade é confirmada." });
+      if (input.resultado === "regular" && (input.penalidadePontos > 0 || input.medidas.length)) throw new TRPCError({ code: "BAD_REQUEST", message: "Punição só vale quando a irregularidade é confirmada." });
       const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
       const usuarioMorador = await usuarioDoMorador(coleta.moradorId);
       if (input.resultado === "regular") {
         const resultado = await aprovarColeta(ctx, coleta, `Auditoria concluída sem irregularidade: ${input.parecer}`, true);
         await notificarUsuario(db, usuarioMorador, { ...base, tipo: "auditoria_concluida", titulo: "Auditoria concluída: tudo certo", mensagem: `A auditoria do descarte nº ${coleta.id} terminou sem irregularidade. ${input.parecer}` });
-        return { ...resultado, penalty: 0 };
+        return { ...resultado, penalty: 0, medidasAplicadas: [] as string[] };
       }
       const resultado = await reprovarColeta(ctx, coleta, `Irregularidade confirmada na auditoria: ${input.parecer}`);
       let penalidade = 0;
-      if (input.penalidadePontos > 0 && coleta.moradorId) {
-        await db.transaction(async (tx) => {
-          await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId!, tipo: "penalidade", pontos: -input.penalidadePontos, coletaId: coleta.id, autorId: ctx.user.id, descricao: `Punição: irregularidade no descarte nº ${coleta.id}` });
-        }).catch(converterDuplicidade);
-        penalidade = input.penalidadePontos;
-        await writeAuditLog(db, { condominioId: coleta.condominioId, autorId: ctx.user.id, tipoEntidade: "pontos", entidadeId: coleta.moradorId, acao: "punicao_aplicada", resumo: `Punição de ${penalidade} ponto(s) pela irregularidade no descarte nº ${coleta.id}.`, estadoNovo: { penalidadePontos: penalidade, coletaId: coleta.id }, motivo: input.parecer });
+      const aplicadas: string[] = [];
+      if (coleta.moradorId) {
+        const motivo = `Irregularidade confirmada na auditoria do descarte nº ${coleta.id}: ${input.parecer}`;
+        if (input.penalidadePontos > 0) {
+          await aplicarPenalidade(db, { condominioId: coleta.condominioId, autorId: ctx.user.id, moradorId: coleta.moradorId, coletaId: coleta.id, motivo, personalizada: { tipo: "perda_pontos", nome: `Retirada de ${input.penalidadePontos} ponto(s)`, pontos: input.penalidadePontos } });
+          penalidade += input.penalidadePontos;
+          aplicadas.push(`-${input.penalidadePontos} ponto(s)`);
+        }
+        for (const modeloId of Array.from(new Set(input.medidas))) {
+          const aplicada = await aplicarPenalidade(db, { condominioId: coleta.condominioId, autorId: ctx.user.id, moradorId: coleta.moradorId, coletaId: coleta.id, motivo, modeloId });
+          aplicadas.push(aplicada.nome);
+        }
       }
-      await notificarUsuario(db, usuarioMorador, { ...base, tipo: "auditoria_concluida", titulo: "Auditoria concluída: irregularidade confirmada", mensagem: `A auditoria do descarte nº ${coleta.id} confirmou a irregularidade e o descarte foi reprovado. ${input.parecer}${penalidade ? ` Punição: -${penalidade} ponto(s).` : ""}` });
-      return { ...resultado, penalty: penalidade };
+      await notificarUsuario(db, usuarioMorador, { ...base, tipo: "auditoria_concluida", titulo: "Auditoria concluída: irregularidade confirmada", mensagem: `A auditoria do descarte nº ${coleta.id} confirmou a irregularidade e o descarte foi reprovado. ${input.parecer}${aplicadas.length ? ` Medidas aplicadas: ${aplicadas.join("; ")}.` : ""}` });
+      return { ...resultado, penalty: penalidade, medidasAplicadas: aplicadas };
     }),
     /**
      * Reprova um descarte concluído (pendente, aprovado ou em auditoria), com motivo obrigatório. Pontos previstos são cancelados;
@@ -304,16 +337,16 @@ export const operationsRouter = router({
   }),
 });
 
-type ContextoAdministrador = { user: { id: number }; eco: { condominio: { id: number } } };
+export type ContextoAdministrador = { user: { id: number }; eco: { condominio: { id: number } } };
 
-async function coletaDoCondominio(condominioId: number, id: number) {
+export async function coletaDoCondominio(condominioId: number, id: number) {
   const db = await getDb();
   const encontrada = await db.select().from(coletas).where(and(eq(coletas.id, id), eq(coletas.condominioId, condominioId))).limit(1);
   if (!encontrada[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Descarte não encontrado." });
   return encontrada[0];
 }
 
-async function usuarioDoMorador(moradorId: number | null) {
+export async function usuarioDoMorador(moradorId: number | null) {
   if (!moradorId) return null;
   const db = await getDb();
   const encontrado = await db.select({ usuarioId: moradores.usuarioId }).from(moradores).where(eq(moradores.id, moradorId)).limit(1);
@@ -346,7 +379,7 @@ function jaContabilizado(coleta: Coleta) {
  * Aprova um descarte pendente (ou em auditoria, ao concluí-la sem irregularidade) e credita o valor prometido no tablet.
  * A fração de ponto não se perde: soma com a que sobrou dos descartes anteriores do morador e vira ponto inteiro quando passa de 1.
  */
-async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, observacao: string | null, daAuditoria = false) {
+export async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, observacao: string | null, daAuditoria = false, opcoes: { automatico?: boolean; notificar?: boolean } = {}) {
   const db = await getDb();
   const regras = await regrasDoCondominio(coleta.condominioId);
   // Numa auditoria sobre um descarte já aprovado, os pontos já estavam no saldo: não credita de novo.
@@ -376,7 +409,7 @@ async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, observa
     if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Outro administrador já decidiu este descarte." });
     if (coleta.moradorId && novoResto !== null) await tx.update(moradores).set({ restoPontosMilesimos: novoResto }).where(eq(moradores.id, coleta.moradorId));
     if (coleta.moradorId && pontos > 0 && !jaCreditados) {
-      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "credito_coleta", pontos, coletaId: coleta.id, autorId: ctx.user.id, descricao: `Descarte nº ${coleta.id} aprovado (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}, vale ${formatarPontos(exato / 1000)} ponto(s))` });
+      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "credito_coleta", pontos, coletaId: coleta.id, revisaoColeta: coleta.revisao, autorId: ctx.user.id, descricao: `Descarte nº ${coleta.id} ${opcoes.automatico ? "aprovado pela IA" : "aprovado"} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}, vale ${formatarPontos(exato / 1000)} ponto(s))` });
     }
   }).catch(converterDuplicidade);
 
@@ -387,10 +420,12 @@ async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, observa
     autorId: ctx.user.id,
     tipoEntidade: "coleta",
     entidadeId: coleta.id,
-    acao: daAuditoria ? "auditoria_concluida_regular" : "descarte_aprovado",
+    acao: daAuditoria ? "auditoria_concluida_regular" : opcoes.automatico ? "descarte_aprovado_ia" : "descarte_aprovado",
     resumo: daAuditoria
       ? `Auditoria do descarte nº ${coleta.id} concluída sem irregularidade; descarte aprovado${jaCreditados ? " (pontos mantidos)" : `; ${efeitoPontos}`}.`
-      : `Descarte nº ${coleta.id} conferido (foto e peso) e aprovado; ${efeitoPontos}.`,
+      : opcoes.automatico
+        ? `Descarte nº ${coleta.id} aprovado automaticamente pela análise da IA (tipo, peso e cor do saco conferem); ${efeitoPontos}.`
+        : `Descarte nº ${coleta.id} conferido (foto e peso) e aprovado; ${efeitoPontos}.`,
     estadoAnterior: { situacao: daAuditoria ? "auditoria" : "pendente", pontosConcedidos: coleta.pontosConcedidos },
     estadoNovo: { situacao: "aprovado", pontosConcedidos: pontos, valorMilesimos: exato, efeitoPontos },
     motivo: observacao,
@@ -399,14 +434,14 @@ async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, observa
   const usuarioMorador = await usuarioDoMorador(coleta.moradorId);
   const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
   // Uma notificação só (antes eram duas: "aprovado" e "+N pontos").
-  if (!daAuditoria) {
+  if (!daAuditoria && opcoes.notificar !== false) {
     const sobrePontos = !exato ? "" : pontos ? ` Ele vale ${valor} ponto(s): +${pontos} no seu saldo.` : ` Ele vale ${valor} ponto(s), que ficam guardados e se somam aos próximos descartes até completar 1 ponto.`;
     await notificarUsuario(db, usuarioMorador, { ...base, tipo: pontos > 0 ? "pontos_ganhos" : "revisao_administrativa", titulo: pontos > 0 ? `Descarte aprovado: +${pontos} ponto(s)` : "Descarte aprovado", mensagem: `A administração conferiu a foto e o peso e aprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}).${sobrePontos}${observacao ? ` Observação: ${observacao}` : ""}` });
   }
   return { success: true, pointsAwarded: jaCreditados ? 0 : pontos };
 }
 
-async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo: string) {
+export async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo: string) {
   if (coleta.status !== "concluida") throw new TRPCError({ code: "BAD_REQUEST", message: "Só descartes concluídos podem ser reprovados." });
   if (coleta.aprovacaoPesoStatus === "rejeitado") throw new TRPCError({ code: "BAD_REQUEST", message: "Este descarte já foi reprovado." });
   const db = await getDb();
@@ -437,7 +472,7 @@ async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo
     if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Este descarte já foi reprovado por outro administrador." });
     if (coleta.moradorId && novoResto !== null) await tx.update(moradores).set({ restoPontosMilesimos: novoResto }).where(eq(moradores.id, coleta.moradorId));
     if (coleta.moradorId && pontosEstornados > 0) {
-      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "estorno_coleta", pontos: -pontosEstornados, coletaId: coleta.id, autorId: ctx.user.id, descricao: `Estorno: descarte nº ${coleta.id} reprovado (${motivo})` });
+      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "estorno_coleta", pontos: -pontosEstornados, coletaId: coleta.id, revisaoColeta: coleta.revisao, autorId: ctx.user.id, descricao: `Estorno: descarte nº ${coleta.id} reprovado (${motivo})` });
     }
   }).catch((error: unknown) => {
     if (error instanceof MovimentacaoDuplicadaError) throw new TRPCError({ code: "CONFLICT", message: "Os pontos deste descarte já foram estornados." });
@@ -464,4 +499,68 @@ async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo
   await notificarUsuario(db, usuarioMorador, { ...base, tipo: "coleta_reprovada", titulo: pontosEstornados > 0 ? `Descarte reprovado: -${pontosEstornados} ponto(s)` : "Descarte reprovado", mensagem: `A administração reprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}). Motivo: ${motivo.replace(/[.!\s]+$/, "")}.${efeitoParaMorador}` });
   await notificarAdministradores(db, { ...base, tipo: "coleta_reprovada", titulo: "Descarte reprovado", mensagem: `O descarte nº ${coleta.id} (bloco ${coleta.bloco}) foi reprovado: ${motivo}. Efeito: ${efeito}.` }, ctx.user.id);
   return { success: true, pointsAwarded: 0, pointsReversed: pontosEstornados, pendingPointsCancelled: pontosPendentes };
+}
+
+/**
+ * Abre uma auditoria num descarte (caso grave: suspeita de furto, peso forjado, tentativa de burlar a estação).
+ * O peso sai dos indicadores enquanto durar, e o morador é avisado de que o descarte está sob auditoria.
+ */
+export async function abrirAuditoriaColeta(ctx: ContextoAdministrador, coleta: Coleta, motivo: string) {
+  const db = await getDb();
+  if (coleta.status !== "concluida") throw new TRPCError({ code: "BAD_REQUEST", message: "Só descartes concluídos podem ir para auditoria." });
+  if (coleta.aprovacaoPesoStatus === "auditoria") throw new TRPCError({ code: "BAD_REQUEST", message: "Este descarte já está em auditoria." });
+  if (coleta.aprovacaoPesoStatus === "rejeitado") throw new TRPCError({ code: "BAD_REQUEST", message: "Este descarte já foi reprovado." });
+  const agora = new Date();
+  const [alteracao] = await db.update(coletas).set({ pendenteAprovacaoPeso: true, aprovacaoPesoStatus: "auditoria", motivoAuditoria: motivo, auditoriaAbertaEm: agora, atualizadoEm: agora })
+    .where(and(eq(coletas.id, coleta.id), eq(coletas.status, "concluida"), or(isNull(coletas.aprovacaoPesoStatus), inArray(coletas.aprovacaoPesoStatus, ["pendente", "aprovado"]))));
+  if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "O descarte acabou de ser alterado por outro administrador. Atualize a página." });
+  await writeAuditLog(db, {
+    condominioId: coleta.condominioId, autorId: ctx.user.id, tipoEntidade: "coleta", entidadeId: coleta.id, acao: "auditoria_aberta",
+    resumo: `Auditoria aberta no descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]})${situacaoDescarte(coleta) === "aprovado" ? "; a aprovação anterior fica suspensa até o parecer" : ""}.`,
+    estadoAnterior: { situacao: situacaoDescarte(coleta), pontosConcedidos: coleta.pontosConcedidos },
+    estadoNovo: { situacao: "auditoria", pontosConcedidos: coleta.pontosConcedidos },
+    motivo,
+  });
+  const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
+  await notificarUsuario(db, await usuarioDoMorador(coleta.moradorId), { ...base, tipo: "auditoria_aberta", titulo: "Seu descarte está em auditoria", mensagem: `A administração abriu uma auditoria no descarte nº ${coleta.id} por algo que pareceu suspeito: ${motivo} Pode ser só um mal-entendido; se quiser, procure a administração para explicar. Se a irregularidade for confirmada, o descarte é reprovado e pode haver medidas administrativas (perda de pontos ou suspensão).` });
+  await notificarAdministradores(db, { ...base, tipo: "auditoria_aberta", titulo: "Auditoria aberta", mensagem: `O descarte nº ${coleta.id} (bloco ${coleta.bloco}) foi para auditoria: ${motivo}` }, ctx.user.id);
+  return { success: true, destino: "auditoria" as const, pointsReversed: 0 };
+}
+
+/** Tira os pontos de um descarte aprovado e o devolve para a fila de aprovação (nova avaliação por um responsável). */
+export async function reverterParaNovaAvaliacao(ctx: ContextoAdministrador, coleta: Coleta, motivo: string) {
+  const db = await getDb();
+  const agora = new Date();
+  const contabilizado = jaContabilizado(coleta);
+  const exato = coleta.pontosPrevistosMilesimos ?? coleta.pontosConcedidos * 1000;
+  let pontosEstornados = 0;
+  await db.transaction(async (tx) => {
+    let novoResto: number | null = null;
+    if (contabilizado && coleta.moradorId) {
+      const [morador] = await tx.select({ resto: moradores.restoPontosMilesimos }).from(moradores).where(eq(moradores.id, coleta.moradorId)).for("update");
+      const estorno = estornarComResto(morador?.resto ?? 0, exato, coleta.pontosConcedidos);
+      pontosEstornados = estorno.pontos;
+      novoResto = estorno.resto;
+    }
+    const [alteracao] = await tx.update(coletas).set({
+      pendenteAprovacaoPeso: true, aprovacaoPesoStatus: "pendente", aprovacaoPesoPorId: null, aprovacaoPesoEm: null, motivoDecisao: `Aprovação revertida: ${motivo}`,
+      pontosConcedidos: 0, pontosPrevistosMilesimos: exato || coleta.pontosPrevistosMilesimos, revisao: coleta.revisao + 1, atualizadoEm: agora,
+    }).where(and(eq(coletas.id, coleta.id), eq(coletas.revisao, coleta.revisao), eq(coletas.pendenteAprovacaoPeso, false), or(isNull(coletas.aprovacaoPesoStatus), eq(coletas.aprovacaoPesoStatus, "aprovado"))));
+    if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "O descarte acabou de ser alterado por outro administrador. Atualize a página." });
+    if (coleta.moradorId && novoResto !== null) await tx.update(moradores).set({ restoPontosMilesimos: novoResto }).where(eq(moradores.id, coleta.moradorId));
+    if (coleta.moradorId && pontosEstornados > 0) {
+      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "estorno_coleta", pontos: -pontosEstornados, coletaId: coleta.id, revisaoColeta: coleta.revisao, autorId: ctx.user.id, descricao: `Aprovação do descarte nº ${coleta.id} revertida para nova avaliação` });
+    }
+  }).catch(converterDuplicidade);
+  await writeAuditLog(db, {
+    condominioId: coleta.condominioId, autorId: ctx.user.id, tipoEntidade: "coleta", entidadeId: coleta.id, acao: "aprovacao_revertida",
+    resumo: `Aprovação do descarte nº ${coleta.id} revertida; voltou para nova avaliação${pontosEstornados ? ` e ${pontosEstornados} ponto(s) saíram do saldo` : ""}.`,
+    estadoAnterior: { situacao: "aprovado", pontosConcedidos: coleta.pontosConcedidos, aprovadoPorId: coleta.aprovacaoPesoPorId },
+    estadoNovo: { situacao: "pendente", pontosConcedidos: 0, pontosEstornados, revisao: coleta.revisao + 1 },
+    motivo,
+  });
+  const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
+  await notificarUsuario(db, await usuarioDoMorador(coleta.moradorId), { ...base, tipo: "descarte_revertido", titulo: "Descarte voltou para conferência", mensagem: `A aprovação do descarte nº ${coleta.id} foi revertida e ele será avaliado de novo. Motivo: ${motivo.replace(/[.!\s]+$/, "")}.${pontosEstornados ? ` ${pontosEstornados} ponto(s) saíram do seu saldo até a nova decisão.` : ""}` });
+  await notificarAdministradores(db, { ...base, tipo: "descarte_revertido", titulo: "Aprovação revertida", mensagem: `O descarte nº ${coleta.id} (bloco ${coleta.bloco}) voltou para nova avaliação: ${motivo}` }, ctx.user.id);
+  return { success: true, destino: "nova_avaliacao" as const, pointsReversed: pontosEstornados };
 }

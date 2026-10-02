@@ -6,7 +6,9 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerLoginRoute } from "./login";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../rotas";
-import { prepararBanco, urlDoBanco } from "../db";
+import { getDb, prepararBanco, urlDoBanco } from "../db";
+import { encerrarPenalidadesVencidas } from "../penalidades";
+import { processarCampanhas } from "../campanhas";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runAnnualReport, sendAnnualReportCheck } from "../scheduled/annualReport";
@@ -21,6 +23,7 @@ function falhaDaRotina(rotina: string) {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -95,6 +98,17 @@ async function startServer() {
   setInterval(() => {
     runAnnualReport().catch(falhaDaRotina("Relatório anual"));
   }, DAY_MS);
+
+  // De hora em hora: encerra suspensões vencidas e cuida das campanhas (começo, fim da pausa, "faltam poucos dias", encerramento).
+  const rotinaHoraria = async () => {
+    const db = await getDb();
+    await encerrarPenalidadesVencidas(db);
+    await processarCampanhas(db);
+  };
+  rotinaHoraria().catch(falhaDaRotina("Campanhas e medidas"));
+  setInterval(() => {
+    rotinaHoraria().catch(falhaDaRotina("Campanhas e medidas"));
+  }, HOUR_MS);
 }
 
 startServer().catch((error) => {

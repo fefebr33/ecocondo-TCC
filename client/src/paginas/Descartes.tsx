@@ -37,6 +37,8 @@ import {
   Search,
   ShieldAlert,
   XCircle,
+  Bot,
+  Undo2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -123,6 +125,7 @@ export default function Descartes() {
   const [reprovar, setReprovar] = useState<Alvo | null>(null);
   const [auditar, setAuditar] = useState<Alvo | null>(null);
   const [concluir, setConcluir] = useState<Alvo | null>(null);
+  const [reverter, setReverter] = useState<Alvo | null>(null);
   const atualizarTudo = () => {
     utils.coletas.listar.invalidate();
     utils.coletas.listarPendentesAprovacao.invalidate();
@@ -729,6 +732,7 @@ export default function Descartes() {
         onReprovar={setReprovar}
         onAuditar={setAuditar}
         onConcluir={setConcluir}
+        onReverter={setReverter}
         onAprovar={id => decidir.mutate({ id, aprovar: true })}
       />
       <DialogoReprovar
@@ -744,6 +748,11 @@ export default function Descartes() {
       <DialogoConcluirAuditoria
         alvo={concluir}
         onClose={() => setConcluir(null)}
+        onDone={atualizarTudo}
+      />
+      <DialogoReverter
+        alvo={reverter}
+        onClose={() => setReverter(null)}
         onDone={atualizarTudo}
       />
     </div>
@@ -769,6 +778,7 @@ function DetalheDescarte({
   onReprovar,
   onAuditar,
   onConcluir,
+  onReverter,
   onAprovar,
 }: {
   id: number | null;
@@ -777,6 +787,7 @@ function DetalheDescarte({
   onReprovar: (alvo: Alvo) => void;
   onAuditar: (alvo: Alvo) => void;
   onConcluir: (alvo: Alvo) => void;
+  onReverter: (alvo: Alvo) => void;
   onAprovar: (id: number) => void;
 }) {
   const detalhe = trpc.coletas.detalhe.useQuery(
@@ -797,7 +808,7 @@ function DetalheDescarte({
           <DialogTitle>Descarte nº {id}</DialogTitle>
           <DialogDescription>
             {dados
-              ? `${dados.morador ? `${dados.morador.nome} · Bloco ${dados.morador.bloco} · Apto ${dados.morador.apartamento} · ` : ""}${dados.itens.length > 1 ? `${dados.itens.length} tipos registrados juntos` : "1 tipo"}`
+              ? `${dados.morador ? `${dados.morador.nome} · Bloco ${dados.morador.bloco} · Apto ${dados.morador.apartamento} · ` : ""}${dados.itens.length > 1 ? `${dados.itens.length} tipos registrados juntos` : "1 tipo"}${dados.estacao ? ` · Estação ${dados.estacao.nome} (${dados.estacao.local})` : ""}`
               : detalhe.error
                 ? detalhe.error.message
                 : "Carregando..."}
@@ -884,10 +895,91 @@ function DetalheDescarte({
                           }
                         >
                           <b>Decisão:</b> {item.motivoDecisao}
+                          {item.decididoPor ? ` (${item.decididoPor})` : ""}
+                        </p>
+                      )}
+                      {item.adesivo && (
+                        <p>
+                          <b>Adesivo QR:</b>{" "}
+                          <span className="font-mono">{item.adesivo}</span>
                         </p>
                       )}
                     </div>
                   </div>
+                  {item.analiseIa && (
+                    <div
+                      className={`mt-3 rounded-xl p-3 text-sm ${item.analiseIa.resultado === "aprovado_automatico" ? "bg-[#edf7f1]" : "bg-[#fff8ec]"}`}
+                    >
+                      <p className="flex flex-wrap items-center gap-2 font-semibold">
+                        <Bot className="h-4 w-4 text-[#0f7350]" />
+                        Análise da IA:{" "}
+                        {item.analiseIa.resultado === "aprovado_automatico"
+                          ? "aprovado automaticamente"
+                          : item.analiseIa.resultado === "erro"
+                            ? "não foi possível analisar"
+                            : "enviado para conferência"}
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {item.analiseIa.modo === "claude"
+                            ? `Claude (${item.analiseIa.modelo})`
+                            : "modo demonstração"}{" "}
+                          · confiança {item.analiseIa.confianca ?? 0}%
+                        </span>
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Viu: {item.analiseIa.tipoIdentificado ? rotuloResiduo[item.analiseIa.tipoIdentificado] : "tipo não identificado"}
+                        {" · "}saco {item.analiseIa.corSacoIdentificada ?? "?"} (esperado{" "}
+                        {item.analiseIa.corSacoEsperada ?? "?"})
+                        {" · "}visor{" "}
+                        {item.analiseIa.pesoLidoGramas === null
+                          ? "ilegível"
+                          : formatarKg(item.analiseIa.pesoLidoGramas)}
+                        {item.analiseIa.descricao ? ` · ${item.analiseIa.descricao}` : ""}
+                      </p>
+                      {item.analiseIa.motivos.length > 0 && (
+                        <ul className="mt-1 list-disc pl-5 text-xs text-[#7a4d0a]">
+                          {item.analiseIa.motivos.map(motivo => (
+                            <li key={motivo}>{motivo}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                  {(item.medidas.length > 0 || item.ocorrencias.length > 0) && (
+                    <div className="mt-3 grid gap-1 text-xs">
+                      {item.medidas.map(medida => (
+                        <p key={`m${medida.id}`} className="text-[#b3382c]">
+                          <b>Medida:</b> {medida.nome} ({medida.status})
+                        </p>
+                      ))}
+                      {item.ocorrencias.map(ocorrencia => (
+                        <p key={`o${ocorrencia.id}`} className="text-[#7a4d0a]">
+                          <b>Ocorrência nº {ocorrencia.id}:</b>{" "}
+                          {ocorrencia.status === "resolvida"
+                            ? `concluída (${ocorrencia.conclusao ?? "sem conclusão"})`
+                            : ocorrencia.status.replace("_", " ")}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {item.historico.length > 0 && (
+                    <details className="mt-3 rounded-xl border border-[#e5eee8] px-3 py-2 text-xs">
+                      <summary className="cursor-pointer font-semibold text-[#0f7350]">
+                        Histórico de alterações ({item.historico.length})
+                      </summary>
+                      <ol className="mt-2 grid gap-1.5">
+                        {item.historico.map(evento => (
+                          <li key={evento.id}>
+                            <span className="text-muted-foreground">
+                              {formatarDataHora(evento.criadoEm)} · {evento.autor}
+                            </span>
+                            <br />
+                            {evento.resumo}
+                            {evento.motivo ? ` Motivo: ${evento.motivo}` : ""}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  )}
                   {ehAdmin && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {item.situacao === "pendente" && (
@@ -922,6 +1014,17 @@ function DetalheDescarte({
                         >
                           <ShieldAlert className="mr-1.5 h-3.5 w-3.5" />
                           Abrir auditoria
+                        </Button>
+                      )}
+                      {item.situacao === "aprovado" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onReverter(alvo)}
+                          className="h-8 rounded-lg border-[#f0dcb8] text-xs text-[#7a4d0a]"
+                        >
+                          <Undo2 className="mr-1.5 h-3.5 w-3.5" />
+                          Reverter aprovação
                         </Button>
                       )}
                       {item.situacao === "auditoria" && (
@@ -1111,10 +1214,16 @@ function DialogoConcluirAuditoria({
   );
   const [parecer, setParecer] = useState("");
   const [penalidade, setPenalidade] = useState("0");
+  const [medidas, setMedidas] = useState<number[]>([]);
+  const modelos = trpc.penalidades.modelos.useQuery(
+    { somenteAtivos: true },
+    { enabled: alvo !== null }
+  );
   const limpar = () => {
     setResultado("regular");
     setParecer("");
     setPenalidade("0");
+    setMedidas([]);
   };
   const concluir = trpc.coletas.concluirAuditoria.useMutation({
     onSuccess: resposta => {
@@ -1124,7 +1233,7 @@ function DialogoConcluirAuditoria({
       toast.success(
         resultado === "regular"
           ? "Auditoria concluída: descarte aprovado."
-          : `Auditoria concluída: descarte reprovado${resposta.penalty ? ` e ${resposta.penalty} ponto(s) de punição` : ""}.`
+          : `Auditoria concluída: descarte reprovado${resposta.medidasAplicadas.length ? `; medidas: ${resposta.medidasAplicadas.join(", ")}` : ""}.`
       );
     },
     onError: issue => toast.error(issue.message),
@@ -1157,6 +1266,7 @@ function DialogoConcluirAuditoria({
                 parecer,
                 penalidadePontos:
                   resultado === "irregular" ? Number(penalidade) || 0 : 0,
+                medidas: resultado === "irregular" ? medidas : [],
               });
           }}
           className="grid gap-3"
@@ -1190,8 +1300,46 @@ function DialogoConcluirAuditoria({
             />
           </label>
           {resultado === "irregular" && (
+            <fieldset className="grid gap-1.5 text-xs">
+              <legend className="mb-1 font-semibold">
+                Medidas a aplicar (pré-definidas em Configurações)
+              </legend>
+              {(modelos.data ?? []).map(modelo => (
+                <label
+                  key={modelo.id}
+                  className="flex items-start gap-2 rounded-lg border border-[#e6eee9] p-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={medidas.includes(modelo.id)}
+                    onChange={event =>
+                      setMedidas(lista =>
+                        event.target.checked
+                          ? [...lista, modelo.id]
+                          : lista.filter(item => item !== modelo.id)
+                      )
+                    }
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <b>{modelo.nome}</b>
+                    {modelo.descricao ? (
+                      <span className="block text-muted-foreground">
+                        {modelo.descricao}
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+              <span className="text-muted-foreground">
+                Cada medida fica no histórico do morador com o período e o seu
+                nome, e o morador é avisado.
+              </span>
+            </fieldset>
+          )}
+          {resultado === "irregular" && (
             <label className="grid gap-1.5 text-xs font-semibold">
-              Punição em pontos (opcional)
+              Retirada avulsa de pontos (opcional)
               <Input
                 type="number"
                 min={0}
@@ -1212,6 +1360,103 @@ function DialogoConcluirAuditoria({
               className="h-10 rounded-xl bg-[#5b3aa6] text-white hover:bg-[#4a2f89]"
             >
               {concluir.isPending ? "Concluindo..." : "Concluir auditoria"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Reverte uma aprovação (da IA ou de um administrador): nova avaliação (pontos saem) ou auditoria. */
+function DialogoReverter({
+  alvo,
+  onClose,
+  onDone,
+}: {
+  alvo: Alvo | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+  const [destino, setDestino] = useState<"nova_avaliacao" | "auditoria">(
+    "nova_avaliacao"
+  );
+  const reverter = trpc.coletas.reverterAprovacao.useMutation({
+    onSuccess: resultado => {
+      onDone();
+      onClose();
+      setMotivo("");
+      toast.success(
+        resultado.destino === "auditoria"
+          ? "Descarte enviado para auditoria."
+          : `Aprovação revertida${resultado.pointsReversed ? `; ${resultado.pointsReversed} ponto(s) saíram do saldo` : ""}. O descarte voltou para a fila de aprovação.`
+      );
+    },
+    onError: issue => toast.error(issue.message),
+  });
+  return (
+    <Dialog
+      open={alvo !== null}
+      onOpenChange={aberto => {
+        if (!aberto) {
+          onClose();
+          setMotivo("");
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Reverter aprovação do nº {alvo?.id}</DialogTitle>
+          <DialogDescription>
+            {alvo?.resumo}. Use quando um problema aparecer depois da aprovação
+            (por exemplo, uma denúncia). O morador é avisado.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={event => {
+            event.preventDefault();
+            if (alvo) reverter.mutate({ id: alvo.id, motivo, destino });
+          }}
+          className="grid gap-3"
+        >
+          <div className="grid grid-cols-2 gap-2">
+            {(["nova_avaliacao", "auditoria"] as const).map(opcao => (
+              <button
+                key={opcao}
+                type="button"
+                onClick={() => setDestino(opcao)}
+                className={`rounded-xl border p-3 text-left text-sm ${destino === opcao ? "border-[#7a4d0a] bg-[#fff8ec]" : "border-[#dce8e0] bg-white"}`}
+              >
+                <b>
+                  {opcao === "nova_avaliacao" ? "Nova avaliação" : "Auditoria"}
+                </b>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  {opcao === "nova_avaliacao"
+                    ? "Os pontos saem do saldo e o descarte volta para a fila."
+                    : "Caso grave: apuração formal, com medidas se confirmado."}
+                </span>
+              </button>
+            ))}
+          </div>
+          <label className="grid gap-1.5 text-xs font-semibold">
+            Motivo (vai para o morador)
+            <textarea
+              required
+              minLength={10}
+              maxLength={800}
+              value={motivo}
+              onChange={event => setMotivo(event.target.value)}
+              className="min-h-24 rounded-xl border border-[#dce8e0] bg-white p-3 text-sm"
+            />
+          </label>
+          <DialogFooter>
+            <Button
+              type="submit"
+              disabled={reverter.isPending || motivo.trim().length < 10}
+              className="h-10 rounded-xl bg-[#7a4d0a] text-white hover:bg-[#633e08]"
+            >
+              {reverter.isPending ? "Revertendo..." : "Reverter aprovação"}
             </Button>
           </DialogFooter>
         </form>

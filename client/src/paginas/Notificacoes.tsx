@@ -15,11 +15,13 @@ import {
   Scale,
   ShieldAlert,
   UserRound,
+  Eye,
 } from "lucide-react";
 import { destinoDaNotificacao } from "@shared/notificacoes";
 import type { EcoRole } from "@shared/permissions";
 import { FormEvent, useState } from "react";
 import { useLocation } from "wouter";
+import { categoriasAviso, rotuloCategoriaAviso, rotuloPublicoAviso } from "@shared/notificacoes";
 import { toast } from "sonner";
 
 type Categoria = { rotulo: string; icone: typeof Bell; cor: string };
@@ -102,6 +104,25 @@ const categoriaDoTipo: Record<string, keyof typeof categorias> = {
   cadastro_alterado: "cadastro",
   novo_cadastro: "cadastro",
   comunicado: "comunicado",
+  aviso_geral: "comunicado",
+  descarte_aprovado_ia: "pontos",
+  descarte_revertido: "alerta",
+  irregularidade_detectada: "alerta",
+  penalidade_aplicada: "auditoria",
+  penalidade_encerrada: "auditoria",
+  nova_campanha: "comunicado",
+  campanha_participacao: "comunicado",
+  campanha_atualizada: "comunicado",
+  campanha_pausada: "comunicado",
+  campanha_encerrando: "comunicado",
+  campanha_encerrada: "comunicado",
+  nova_ocorrencia: "alerta",
+  ocorrencia_atualizada: "sistema",
+  novo_feedback: "sistema",
+  feedback_respondido: "sistema",
+  adesivos_solicitados: "cadastro",
+  adesivos_entregues: "cadastro",
+  adesivos_acabando: "alerta",
   certificado_disponivel: "sistema",
   relatorio_anual: "sistema",
   sistema: "sistema",
@@ -151,19 +172,24 @@ export default function Notifications() {
   const createCommunication = trpc.notificacoes.criarComunicado.useMutation({
     onSuccess: () => {
       refreshNotifications();
-      toast.success("Comunicado publicado.");
+      toast.success("Aviso enviado.");
       setTitle("");
       setMessage("");
+      setImportante(false);
       setIsFormOpen(false);
+      void utils.notificacoes.enviados.invalidate();
     },
     onError: issue => toast.error(issue.message),
   });
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [publico, setPublico] = useState<"todos" | "moradores" | "administradores">("todos");
+  const [categoriaAviso, setCategoriaAviso] = useState<(typeof categoriasAviso)[number]>("geral");
+  const [importante, setImportante] = useState(false);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    createCommunication.mutate({ title, message });
+    createCommunication.mutate({ title, message, publico, categoria: categoriaAviso, importante });
   }
   const isAdmin = profile.data?.role === "administrador";
   const notificationAction = (
@@ -182,7 +208,7 @@ export default function Notifications() {
           className="h-10 rounded-xl bg-[#0f7350] font-semibold text-white hover:bg-[#0a6243]"
         >
           <MessageSquarePlus className="mr-2 h-4 w-4" />
-          Novo comunicado
+          Novo aviso geral
         </Button>
       )}
     </div>
@@ -219,12 +245,50 @@ export default function Notifications() {
                 className="min-h-24 rounded-xl border border-[#dce8e0] bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-[#0f7350]/30"
               />
             </label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="grid gap-1.5 text-xs font-semibold">
+                Para quem
+                <select
+                  value={publico}
+                  onChange={event => setPublico(event.target.value as typeof publico)}
+                  className="h-10 rounded-xl border border-[#dce8e0] bg-white px-3 text-sm font-normal"
+                >
+                  {Object.entries(rotuloPublicoAviso).map(([valor, rotulo]) => (
+                    <option key={valor} value={valor}>
+                      {rotulo}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold">
+                Assunto
+                <select
+                  value={categoriaAviso}
+                  onChange={event => setCategoriaAviso(event.target.value as typeof categoriaAviso)}
+                  className="h-10 rounded-xl border border-[#dce8e0] bg-white px-3 text-sm font-normal"
+                >
+                  {categoriasAviso.map(valor => (
+                    <option key={valor} value={valor}>
+                      {rotuloCategoriaAviso[valor]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 self-end rounded-xl border border-[#dce8e0] bg-white px-3 py-2.5 text-xs font-semibold">
+                <input
+                  type="checkbox"
+                  checked={importante}
+                  onChange={event => setImportante(event.target.checked)}
+                />
+                Importante: fixar no painel até ser lido
+              </label>
+            </div>
             <div className="flex gap-2">
               <Button
                 disabled={createCommunication.isPending}
                 className="h-10 rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]"
               >
-                Publicar comunicado
+                Enviar aviso
               </Button>
               <Button
                 type="button"
@@ -348,6 +412,69 @@ export default function Notifications() {
           </ul>
         )}
       </section>
+      {isAdmin && <AvisosEnviados />}
     </div>
+  );
+}
+
+/** Avisos gerais enviados: quem enviou, para quem, quando e quantos já visualizaram (com a lista de quem viu). */
+function AvisosEnviados() {
+  const enviados = trpc.notificacoes.enviados.useQuery();
+  const [aberto, setAberto] = useState<number | null>(null);
+  const quem = trpc.notificacoes.visualizacoes.useQuery(
+    { id: aberto ?? 0 },
+    { enabled: aberto !== null }
+  );
+  if (!enviados.data?.length) return null;
+  return (
+    <section className="mt-6 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
+      <h2 className="flex items-center gap-2 font-semibold">
+        <Eye className="h-4 w-4 text-[#0f7350]" />
+        Avisos enviados e visualizações
+      </h2>
+      <ul className="mt-3 divide-y divide-[#edf2ef]">
+        {enviados.data.map(aviso => (
+          <li key={aviso.id} className="py-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                <b>{aviso.titulo}</b>
+                {aviso.importante ? " · importante" : ""}
+                <span className="block text-xs text-muted-foreground">
+                  {aviso.autor} ·{" "}
+                  {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(aviso.criadoEm)}{" "}
+                  · {rotuloPublicoAviso[aviso.publico as keyof typeof rotuloPublicoAviso]}
+                  {aviso.categoria ? ` · ${rotuloCategoriaAviso[aviso.categoria as keyof typeof rotuloCategoriaAviso] ?? aviso.categoria}` : ""}
+                </span>
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setAberto(aberto === aviso.id ? null : aviso.id)}
+                className="rounded-lg"
+              >
+                {aviso.visualizacoes} de {aviso.destinatarios} viram
+              </Button>
+            </div>
+            {aberto === aviso.id && (
+              <ul className="mt-2 grid gap-1 rounded-xl bg-[#f6faf7] p-3 text-xs sm:grid-cols-2">
+                {quem.data?.map(pessoa => (
+                  <li key={`${pessoa.nome}-${pessoa.bloco}-${pessoa.apartamento}`} className="flex justify-between gap-2">
+                    <span>
+                      {pessoa.nome}
+                      {pessoa.bloco ? ` (bloco ${pessoa.bloco})` : ""}
+                    </span>
+                    <span className={pessoa.lidaEm ? "text-[#0a7048]" : "text-muted-foreground"}>
+                      {pessoa.lidaEm
+                        ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(pessoa.lidaEm)
+                        : "não viu"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

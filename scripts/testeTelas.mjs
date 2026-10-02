@@ -7,7 +7,7 @@ import AxeBuilder from "@axe-core/playwright";
 
 const BASE = process.env.URL_TESTE ?? "http://localhost:3000";
 const SENHA = "ecocondo123";
-const ROTAS = ["/dashboard", "/descartes", "/moradores", "/pessoas", "/relatorios", "/auditoria", "/engajamento", "/podio", "/guia", "/notificacoes", "/ambiental", "/comunidade", "/configuracoes", "/manual"];
+const ROTAS = ["/dashboard", "/descartes", "/adesivos", "/leitura", "/moradores/painel?id=1", "/moradores", "/pessoas", "/relatorios", "/auditoria", "/engajamento", "/podio", "/guia", "/notificacoes", "/ambiental", "/comunidade", "/configuracoes", "/manual"];
 const PERFIS = [["administrador", "admin@ecocondo.local"], ["morador", "morador@ecocondo.local"]];
 const TELAS = [["notebook", { width: 1366, height: 800 }], ["celular", { width: 390, height: 844 }]];
 

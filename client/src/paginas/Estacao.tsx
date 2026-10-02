@@ -17,6 +17,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
+import LeitorQr, { cameraDisponivel } from "@/components/LeitorQr";
+import { normalizarCodigoAdesivo } from "@shared/adesivos";
 import {
   AlertTriangle,
   BookOpen,
@@ -34,12 +36,28 @@ import {
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 
 type WasteType = TipoResiduo;
-type Morador = { firstName: string; block: string; apartment: string };
+type Morador = {
+  firstName: string;
+  block: string;
+  apartment: string;
+  adesivosDisponiveis: number;
+  adesivoObrigatorio: boolean;
+  adesivosDemonstracao: string[];
+};
+type ResultadoIa = {
+  resultado: "aprovado_automatico" | "pendente" | "erro";
+  motivos: string[];
+  confianca: number;
+  descricao: string;
+};
 type Resultado = {
   id: number;
   pendingPoints: number;
+  pointsAwarded: number;
+  pendingApproval: boolean;
   simulated: boolean;
   weightKg: string;
+  modoIa: string;
   itens: Array<{
     id: number;
     wasteType: WasteType;
@@ -47,7 +65,24 @@ type Resultado = {
     pesoKg: string;
     pontosPrevistos: number;
     alertas: string[];
+    adesivo: string | null;
+    situacao: "aprovado" | "pendente";
+    ia: ResultadoIa;
   }>;
+};
+/** O que a IA simulada deve "ver" na foto (só na estação em modo demonstração). */
+type SimulacaoIa =
+  | "tudo_certo"
+  | "cor_errada"
+  | "tipo_diferente"
+  | "peso_diferente"
+  | "foto_ilegivel";
+const rotuloSimulacaoIa: Record<SimulacaoIa, string> = {
+  tudo_certo: "Tudo certo (a IA aprova)",
+  cor_errada: "Saco de cor errada",
+  tipo_diferente: "Resíduo de outro tipo",
+  peso_diferente: "Peso diferente do visor",
+  foto_ilegivel: "Foto ilegível",
 };
 type Previa = {
   estacao: string;
@@ -64,6 +99,7 @@ type Previa = {
     pesoKg: string;
     pontosPrevistos: number;
     alertas: string[];
+    adesivo: string | null;
   }>;
 };
 
@@ -278,6 +314,9 @@ type Item = {
   pesoKg: string;
   foto: string;
   avisoFoto: string | null;
+  /** Código do adesivo QR colado no saco. */
+  adesivo: string;
+  simulacaoIa: SimulacaoIa;
 };
 
 function kgParaGramas(valor: string) {
@@ -311,6 +350,7 @@ function Registro({
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [lendoQr, setLendoQr] = useState(false);
   const [conferindoFoto, setConferindoFoto] = useState(false);
+  const [lendoAdesivo, setLendoAdesivo] = useState(false);
   const porTipo = (tipo: WasteType) => tipos.find(item => item.tipo === tipo)!;
 
   function recomecar() {
@@ -324,6 +364,7 @@ function Registro({
     setPrevia(null);
     setResultado(null);
     setLendoQr(false);
+    setLendoAdesivo(false);
   }
 
   useEffect(() => {
@@ -390,12 +431,17 @@ function Registro({
       .filter(tipo => escolhidos.includes(tipo));
     setItens(
       ordenados.map(
-        tipo =>
+        (tipo, indice) =>
           itens.find(item => item.wasteType === tipo) ?? {
             wasteType: tipo,
             pesoKg: "",
             foto: "",
             avisoFoto: null,
+            // Na demonstração, o tablet já sugere um adesivo do kit do morador (a banca não precisa de adesivo impresso).
+            adesivo: demonstracao
+              ? (morador?.adesivosDemonstracao[indice] ?? "")
+              : "",
+            simulacaoIa: "tudo_certo",
           }
       )
     );
@@ -450,7 +496,30 @@ function Registro({
       return;
     }
     if (!demonstracao && !item.foto) {
-      setErro("Tire a foto do visor da balança com o saco em cima.");
+      setErro("Tire a foto do saco na balança, com o visor aparecendo.");
+      return;
+    }
+    const adesivo = normalizarCodigoAdesivo(item.adesivo);
+    if (item.adesivo.trim() && !adesivo) {
+      setErro(
+        "O código do adesivo não é válido. Ele tem o formato EC-XXXX-XXXX."
+      );
+      return;
+    }
+    if (morador?.adesivoObrigatorio && !adesivo) {
+      setErro(
+        "Leia o QR do adesivo colado no saco ou digite o código impresso embaixo dele."
+      );
+      return;
+    }
+    if (
+      adesivo &&
+      itens.some(
+        (outro, indice) =>
+          indice !== atual && normalizarCodigoAdesivo(outro.adesivo) === adesivo
+      )
+    ) {
+      setErro("Cada saco usa um adesivo diferente.");
       return;
     }
     setErro(null);
@@ -463,6 +532,7 @@ function Registro({
       itens: itens.map(registro => ({
         wasteType: registro.wasteType,
         weightGrams: kgParaGramas(registro.pesoKg),
+        stickerCode: registro.adesivo || null,
       })),
     });
   }
@@ -474,41 +544,79 @@ function Registro({
         wasteType: item.wasteType,
         weightGrams: kgParaGramas(item.pesoKg),
         imageDataUrl: item.foto || null,
+        stickerCode: item.adesivo || null,
+        simulacaoIa: demonstracao ? item.simulacaoIa : null,
       })),
     });
   }
 
   if (etapa === "feito" && resultado) {
+    const tudoAprovado = !resultado.pendingApproval;
     return (
       <section className="rounded-[28px] border border-[#cfe1d7] bg-white p-6 text-center sm:p-8">
-        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[#fff3df] text-[#7a4d0a]">
-          <Clock className="h-8 w-8" />
+        <span
+          className={`mx-auto grid h-16 w-16 place-items-center rounded-full ${tudoAprovado ? "bg-[#e7f5ec] text-[#0a7048]" : "bg-[#fff3df] text-[#7a4d0a]"}`}
+        >
+          {tudoAprovado ? (
+            <CheckCircle2 className="h-8 w-8" />
+          ) : (
+            <Clock className="h-8 w-8" />
+          )}
         </span>
         <h1 className="mt-5 text-2xl font-bold tracking-[-.04em]">
-          Descarte registrado!
+          {tudoAprovado ? "Descarte aprovado!" : "Descarte registrado!"}
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-          Agora coloque cada saco na lixeira da mesma cor. A administração
-          confere as fotos e os pesos; os pontos entram depois da aprovação.
+          Agora coloque cada saco na lixeira da mesma cor.{" "}
+          {tudoAprovado
+            ? "A análise automática conferiu as fotos e os pontos já entraram."
+            : "O que a análise automática não conseguiu confirmar fica para a administração conferir; os pontos desses sacos entram depois da aprovação."}
         </p>
         <dl className="mx-auto mt-5 grid max-w-md gap-2 text-left text-sm">
           {resultado.itens.map(item => (
-            <Linha
-              key={item.id}
-              rotulo={`${item.material} · nº ${item.id}`}
-              valor={`${item.pesoKg} kg · ${formatarPontos(item.pontosPrevistos)} pt(s) previsto(s)`}
-              cor={porTipo(item.wasteType).corSaco}
-            />
+            <div key={item.id} className="grid gap-1">
+              <Linha
+                rotulo={`${item.material} · nº ${item.id}`}
+                valor={`${item.pesoKg} kg · ${item.situacao === "aprovado" ? "aprovado pela IA" : "em conferência"}`}
+                cor={porTipo(item.wasteType).corSaco}
+                alerta={item.situacao !== "aprovado"}
+              />
+              {item.adesivo && (
+                <p className="px-3 text-xs text-muted-foreground">
+                  Adesivo {item.adesivo} usado
+                </p>
+              )}
+              {item.situacao !== "aprovado" && item.ia.motivos.length > 0 && (
+                <p className="px-3 text-xs text-[#7a4d0a]">
+                  {item.ia.motivos.join(" ")}
+                </p>
+              )}
+            </div>
           ))}
           <Linha
             rotulo="Total"
             valor={`${resultado.weightKg} kg${resultado.simulated ? " (balança simulada)" : ""}`}
             destaque
           />
-          <Linha rotulo="Situação" valor="Pendente de aprovação" />
+          {resultado.pointsAwarded > 0 && (
+            <Linha
+              rotulo="Pontos creditados agora"
+              valor={`+${resultado.pointsAwarded}`}
+            />
+          )}
+          {resultado.pendingPoints > 0 && (
+            <Linha
+              rotulo="Pontos previstos (após conferência)"
+              valor={formatarPontos(resultado.pendingPoints)}
+            />
+          )}
           <Linha
-            rotulo="Pontos previstos"
-            valor={formatarPontos(resultado.pendingPoints)}
+            rotulo="Análise"
+            valor={
+              resultado.modoIa === "claude"
+                ? "IA (Claude) com visão"
+                : "IA em modo demonstração (simulada)"
+            }
           />
         </dl>
         <Button
@@ -559,6 +667,7 @@ function Registro({
                   <p className="font-semibold">{item.material}</p>
                   <p className="text-xs text-muted-foreground">
                     Saco {porTipo(item.wasteType).nomeCorSaco.toLowerCase()}
+                    {item.adesivo ? ` · adesivo ${item.adesivo}` : ""}
                     {item.alertas.length
                       ? ` · Atenção: ${item.alertas.join("; ")}`
                       : ""}
@@ -585,7 +694,7 @@ function Registro({
             valor={
               previa.bloqueio
                 ? `Bloqueado: ${previa.bloqueio}`
-                : `Fica pendente de aprovação; ${formatarPontos(previa.pontosPrevistos)} ponto(s) previsto(s)`
+                : `A IA confere cada foto: o que estiver certo é aprovado na hora (${formatarPontos(previa.pontosPrevistos)} ponto(s) previsto(s)); o resto vai para a administração`
             }
             alerta={Boolean(previa.bloqueio)}
           />
@@ -742,8 +851,8 @@ function Registro({
               {kgTexto(regra.pesoMinimoKg)} a {kgTexto(regra.pesoMaximoKg)} kg).
             </li>
             <li>
-              <b>3.</b> Fotografe o visor com o saco em cima: números inteiros e
-              legíveis, sem reflexo.
+              <b>3.</b> Fotografe o saco em cima da balança, com o visor
+              aparecendo: a IA confere o tipo, a cor do saco e o peso.
             </li>
           </ol>
           {demonstracao ? (
@@ -809,6 +918,80 @@ function Registro({
                 placeholder="Ex.: 3,4"
                 className="h-14 rounded-xl text-2xl font-bold"
               />
+            </label>
+          )}
+          <div className="grid gap-2 rounded-2xl border border-[#dce8e0] p-4">
+            <label className="grid gap-1.5 text-sm font-semibold">
+              <span className="flex items-center gap-2">
+                <QrCode className="h-4 w-4 text-[#0f7350]" />
+                Adesivo QR do saco
+                {morador?.adesivoObrigatorio ? " (obrigatório)" : " (opcional)"}
+              </span>
+              <Input
+                value={item.adesivo}
+                onChange={event =>
+                  mudarItem({ adesivo: event.target.value.toUpperCase() })
+                }
+                placeholder="EC-XXXX-XXXX"
+                autoCapitalize="characters"
+                className="h-12 rounded-xl font-mono text-lg tracking-[.08em]"
+              />
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Cole um adesivo do seu kit no saco e leia o QR (ou digite o
+              código impresso embaixo dele). Cada adesivo vale para um saco só.
+              {morador
+                ? ` Você tem ${morador.adesivosDisponiveis} adesivo(s) disponível(is).`
+                : ""}
+            </p>
+            {cameraDisponivel() &&
+              (lendoAdesivo ? (
+                <LeitorQr
+                  extrair={normalizarCodigoAdesivo}
+                  onLer={valor => {
+                    setLendoAdesivo(false);
+                    mudarItem({ adesivo: valor });
+                  }}
+                  onCancelar={() => setLendoAdesivo(false)}
+                />
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setLendoAdesivo(true)}
+                  className="h-10 rounded-xl"
+                >
+                  <QrCode className="mr-2 h-4 w-4" />
+                  Ler o QR do adesivo
+                </Button>
+              ))}
+          </div>
+          {demonstracao && (
+            <label className="grid gap-1.5 rounded-2xl border-2 border-dashed border-[#d98c1f] bg-[#fffaf1] p-4 text-sm font-semibold text-[#7a4d0a]">
+              <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.08em]">
+                <FlaskConical className="h-4 w-4" />O que a IA vai ver
+                (demonstração)
+              </span>
+              <select
+                value={item.simulacaoIa}
+                onChange={event =>
+                  mudarItem({ simulacaoIa: event.target.value as SimulacaoIa })
+                }
+                className="h-11 rounded-xl border border-[#e8d2ad] bg-white px-3 text-sm font-medium text-foreground"
+              >
+                {(Object.keys(rotuloSimulacaoIa) as SimulacaoIa[]).map(
+                  opcao => (
+                    <option key={opcao} value={opcao}>
+                      {rotuloSimulacaoIa[opcao]}
+                    </option>
+                  )
+                )}
+              </select>
+              <span className="text-xs font-normal">
+                Sem chave da API, a análise é simulada. Escolha uma situação
+                para mostrar o descarte indo para a conferência da
+                administração.
+              </span>
             </label>
           )}
           <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#b9d8c5] bg-[#f6faf7] px-4 py-5 text-base font-semibold text-[#0f7350]">
@@ -907,6 +1090,7 @@ function Registro({
           No aplicativo EcoCondo, abra Descartes e toque em{" "}
           <b>Gerar código para a estação</b>. Digite os 6 números ou aproxime o
           QR do leitor. O código vale por 5 minutos e só pode ser usado uma vez.
+          Tenha em mãos um adesivo QR para cada saco.
         </p>
         <Input
           autoFocus
@@ -1012,96 +1196,6 @@ function Linha({
         {alerta && <AlertTriangle className="mr-1 inline h-4 w-4" />}
         {valor}
       </dd>
-    </div>
-  );
-}
-
-type Detector = {
-  detect: (fonte: HTMLVideoElement) => Promise<Array<{ rawValue: string }>>;
-};
-
-/** A câmera do navegador só abre em conexão segura (https ou localhost) e com o leitor de QR nativo (Chrome/Edge no Android). */
-function cameraDisponivel() {
-  return (
-    typeof window !== "undefined" &&
-    window.isSecureContext &&
-    "BarcodeDetector" in window &&
-    Boolean(navigator.mediaDevices?.getUserMedia)
-  );
-}
-
-function LeitorQr({
-  onLer,
-  onCancelar,
-}: {
-  onLer: (valor: string) => void;
-  onCancelar: () => void;
-}) {
-  const video = useRef<HTMLVideoElement>(null);
-  const [falha, setFalha] = useState<string | null>(null);
-  useEffect(() => {
-    let ativo = true;
-    let fluxo: MediaStream | null = null;
-    const Construtor = (
-      window as unknown as {
-        BarcodeDetector: new (opcoes: { formats: string[] }) => Detector;
-      }
-    ).BarcodeDetector;
-    const detector = new Construtor({ formats: ["qr_code"] });
-    (async () => {
-      try {
-        fluxo = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-        });
-        if (!video.current) return;
-        video.current.srcObject = fluxo;
-        await video.current.play();
-        while (ativo && video.current) {
-          const achados = await detector.detect(video.current).catch(() => []);
-          const codigo = achados
-            .map(item => item.rawValue.replace(/\D/g, ""))
-            .find(valor => valor.length === 6);
-          if (codigo) {
-            onLer(codigo);
-            return;
-          }
-          await new Promise(resolver => setTimeout(resolver, 250));
-        }
-      } catch {
-        setFalha("Não foi possível abrir a câmera. Digite o código.");
-      }
-    })();
-    return () => {
-      ativo = false;
-      fluxo?.getTracks().forEach(trilha => trilha.stop());
-    };
-  }, []);
-  return (
-    <div className="mt-3 grid gap-2">
-      {falha ? (
-        <p
-          role="alert"
-          className="rounded-xl bg-[#fbeceb] px-4 py-3 text-sm text-[#b3382c]"
-        >
-          {falha}
-        </p>
-      ) : (
-        <video
-          ref={video}
-          muted
-          playsInline
-          aria-label="Imagem da câmera para ler o QR"
-          className="max-h-64 w-full rounded-2xl bg-black object-cover"
-        />
-      )}
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onCancelar}
-        className="h-10 rounded-xl"
-      >
-        Fechar a câmera
-      </Button>
     </div>
   );
 }
