@@ -118,9 +118,24 @@ Não existe perfil coletor nem agendamento: o próprio morador pesa e registra o
 2. No tablet, abra `/estacao` e digite o código (ou abra o link de pareamento). O `pnpm db:seed` já cria uma estação e mostra o link no terminal.
 3. O morador toca em **Gerar código para a estação** em **Descartes** no celular e digita os 6 números no tablet. O tablet guia o descarte: escolher um ou vários tipos (com a cor do saco de cada um), pesar cada saco, fotografar o visor (o tablet avisa se a foto sai escura ou tremida) e conferir antes de confirmar. O botão **Como usar** mostra o passo a passo a qualquer momento.
 
-Todo descarte fica **pendente de aprovação**. Em **Descartes**, a administração confere a foto e o peso de cada tipo e **aprova** (os pontos entram pela regra do tipo), **reprova** com motivo ou abre **auditoria** para casos graves (furto, fraude); a auditoria termina como regular (aprova) ou irregular (reprova e pode aplicar punição em pontos). O morador é avisado em cada passo.
+Cada saco leva um **adesivo QR** do morador (lido pela câmera do tablet ou digitado). A **análise automática (IA)** confere a foto de cada saco: tipo do resíduo, peso no visor e cor do saco. Se tudo bate com o que foi informado, a confiança passa do mínimo configurado e não há alerta antifraude, o descarte é **aprovado sozinho** (os pontos entram na hora). Qualquer divergência, dúvida ou falha da análise deixa o descarte **pendente**, com os motivos registrados, para um responsável avaliar. Em **Descartes**, a administração confere a foto, o peso e o resultado da IA e **aprova**, **reprova** com motivo ou abre **auditoria**; também pode **reverter uma aprovação** (inclusive a da IA) e mandar para nova avaliação ou auditoria. A auditoria termina como regular ou irregular, com as **medidas** escolhidas da lista do condomínio. O morador é avisado em cada passo.
 
 Travas antifraude: só tablet pareado registra; código do morador de uso único, válido por 5 minutos, com espera crescente no tablet depois de 5 códigos errados seguidos (15 s até 2 min, sem travar o tablet para os outros moradores); o limite diário conta os dias pelo horário de Brasília e ignora descartes reprovados; foto obrigatória fora do modo demonstração; peso mínimo e máximo por tipo (definidos em **Configurações**); até 40 kg e 4 descartes por dia, com 10 minutos entre descartes; alertas para pesos acima de 10 kg ou muito acima do histórico do morador. Os limites gerais ficam em `server/dominio/estacaoPesagem.ts` e as regras padrão de cada tipo em `shared/descarte.ts`.
+
+### Análise automática (IA)
+
+A análise usa a API do Claude (`server/ia/analiseDescarte.ts`). Sem a variável `ANTHROPIC_API_KEY` (ou com `IA_SIMULACAO=1`), ela roda em **modo simulação**: na estação em modo demonstração, o administrador escolhe o que a IA "vê" (tudo certo, cor errada, outro tipo, peso diferente, foto ilegível). Em **Configurações > Análise automática** ficam a aprovação automática (liga/desliga), a confiança mínima e se o adesivo é obrigatório. Cada análise fica gravada (`analises_ia`) e aparece no detalhe do descarte. A balança não é ligada ao sistema: a IA lê o peso na foto do visor.
+
+### Adesivos QR
+
+Cada morador recebe um kit de adesivos (um por saco, uso único). O QR e o código impresso (`EC-XXXX-XXXX`) não trazem dados pessoais. Em **Adesivos QR**, o morador vê quantos tem, o histórico e pede mais; a administração atende os pedidos, entrega kits, imprime a folha de adesivos e cancela adesivos perdidos. O sistema marca o adesivo como usado no descarte e avisa quando o kit está acabando. Em **Ler QR de um saco** (só administração), a câmera ou o código digitado mostra o dono (nome, bloco e apartamento, sem e-mail ou telefone) e o descarte; cada consulta fica registrada na auditoria.
+
+### Medidas, ocorrências e avisos
+
+- **Medidas administrativas** (Configurações): retirada de pontos, suspensão das campanhas ou da participação por dias ou meses, advertência ou outra medida; o administrador escolhe na auditoria, na ocorrência ou no relatório do morador. O histórico mostra ocorrência, medida, período e responsável; suspensões terminam sozinhas e a revogação devolve os pontos.
+- **Ocorrências e denúncias** (Gestão ambiental): o morador pode informar o número do descarte ou o código do adesivo; a administração é notificada, encaminha o descarte para nova avaliação ou auditoria e conclui como procedente, improcedente ou denúncia falsa, com medidas para quem errou. Denúncias falsas repetidas geram alerta. Quem denunciou nunca é revelado ao morador envolvido.
+- **Campanhas**: editar, pausar (com data para voltar), retomar, encerrar e excluir, com indicadores e avisos de participação, alteração, fim próximo e encerramento.
+- **Avisos gerais** (Notificações): para todos, só moradores ou só administradores, com assunto e marcação de importante; a administração vê quem visualizou cada aviso.
 
 ### Pontos
 
@@ -163,6 +178,8 @@ Com o modo demonstração ligado, a tela de login também tem os botões **Entra
 | `LOGIN_DEMONSTRACAO=desativado` | Desliga os botões "Entrar como" (sem senha). Use num servidor público, porque com eles qualquer visitante entra como administrador. O login com e-mail e senha continua. |
 | `DATABASE_URL` | Endereço do MySQL, no formato `mysql://usuario:senha@servidor:porta/banco` (padrão `mysql://root@127.0.0.1:3306/ecocondo`). |
 | `DATABASE_SSL=true` | Usa conexão segura com o MySQL (necessário na maioria dos serviços na nuvem). |
+| `ANTHROPIC_API_KEY` | Chave da API do Claude para a análise automática dos descartes. Sem ela, a análise roda em modo simulação. |
+| `IA_SIMULACAO=1` | Força o modo simulação mesmo com a chave configurada. |
 | `DATABASE_SSL_CA` | Caminho do certificado CA do provedor, quando ele fornece um (ex.: `./ca.pem`). |
 
 ## Arquivos enviados

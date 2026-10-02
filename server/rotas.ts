@@ -15,6 +15,8 @@ import { certificatesRouter } from "./rotas/certificados";
 import { estacoesRouter } from "./rotas/estacoes";
 import { contaRouter } from "./rotas/conta";
 import { configuracoesDescarteRouter } from "./rotas/configuracoesDescarte";
+import { adesivosRouter } from "./rotas/adesivos";
+import { penalidadesRouter } from "./rotas/penalidadesRotas";
 
 export const appRouter = router({
   auth: router({
@@ -41,6 +43,8 @@ export const appRouter = router({
   ...certificatesRouter._def.record,
   ...estacoesRouter._def.record,
   ...configuracoesDescarteRouter._def.record,
+  ...adesivosRouter._def.record,
+  ...penalidadesRouter._def.record,
 });
 
 export type AppRouter = typeof appRouter;

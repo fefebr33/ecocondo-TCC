@@ -17,7 +17,7 @@ describe("matriz de permissões do EcoCondo", () => {
   });
 
   it("mantém o morador nos módulos de participação e consulta", () => {
-    expect(allowedRoutesFor("morador")).toEqual(["/dashboard", "/descartes", "/engajamento", "/podio", "/guia", "/notificacoes", "/ambiental", "/comunidade", "/manual"]);
+    expect(allowedRoutesFor("morador")).toEqual(["/dashboard", "/descartes", "/adesivos", "/engajamento", "/podio", "/guia", "/notificacoes", "/ambiental", "/comunidade", "/manual"]);
     expect(canAccessRoute("morador", "/configuracoes")).toBe(false);
   });
 

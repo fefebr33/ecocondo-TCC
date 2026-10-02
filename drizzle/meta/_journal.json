@@ -36,6 +36,13 @@
       "when": 1790797443112,
       "tag": "0004_correcoes_criticas",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1790954602854,
+      "tag": "0005_ia_adesivos_penalidades",
+      "breakpoints": true
     }
   ]
 }

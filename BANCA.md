@@ -60,6 +60,15 @@ Se perder o link da estação: Administração › *Configurações* › *Estaç
 | 6:30–8:30 | Administração | **Moradores**: filtro por bloco e busca; **Painel** de um morador. **Relatórios**: escolha o **bloco** e veja a comparação entre blocos, quilos por mês e tipo (cores dos sacos), situação dos descartes; exporte o PDF do bloco. **Configurações**: peso mínimo/máximo, pontos por kg e cor do saco de cada tipo; quem recebe cada aviso; **Zerar pontos de todos** (não execute na banca). |
 | 8:30–10:00 | Os dois | **Guia de descarte** com a cor do saco de cada tipo; **Campanhas e QR do guia** › **Imprimir só o QR** (sai uma folha com o QR e as cores). **Pessoas e acessos** › **Link de primeiro acesso** (o morador cria a senha). Segurança: o morador não acessa Relatórios nem Auditoria; o código da estação vale uma vez; pesos fora do mínimo/máximo do tipo são barrados; senha errada 5 vezes bloqueia por 15 minutos. |
 
+### Novidades: IA, adesivos QR e medidas (se sobrar tempo ou a banca perguntar)
+
+- **Estação**: cada saco pede o código do adesivo (no modo demonstração já vem preenchido). Escolha o que a IA "vê": com **Tudo certo** o descarte é aprovado na hora; com **Saco de cor errada** ele fica pendente com o motivo.
+- **Ler QR de um saco** (administração): digite o código de um adesivo usado (ex.: o do descarte do João em Descartes) e mostre o dono, o descarte e o resultado da IA; a consulta vai para a Auditoria.
+- **Adesivos QR**: pedido da Luísa aguardando entrega; **Entregar** e **Folha** para imprimir.
+- **Painel** do administrador: cartões de IA, auditoria, medidas, campanhas, adesivos e ocorrências. **Moradores › Painel** de um morador: histórico de medidas e **Aplicar medida**.
+- **Gestão ambiental › Ocorrências**: a denúncia da Camila (com código de adesivo) já reverteu a aprovação da IA; a do Pedro foi concluída como denúncia falsa, com advertência.
+- **Campanhas**: uma ativa, uma pausada e uma encerrada. **Notificações**: aviso importante com a contagem de quem viu.
+
 ## Se algo sair diferente
 
 | Mensagem | O que fazer |

@@ -68,6 +68,8 @@ beforeAll(async () => {
   adminUsuario = await criarUsuario("criticas-admin", "criticas-admin@teste.local", "administrador");
   admin = chamador(adminUsuario);
   await admin.perfil.meuPerfil();
+  // Estes testes cobrem a conferência manual: sem adesivo obrigatório e sem aprovação automática da IA (cobertas em iaAdesivos.database.test.ts).
+  await admin.configuracoesIa.salvar({ iaAprovacaoAutomatica: false, iaConfiancaMinima: 80, adesivoObrigatorio: false });
   const { id, token } = await admin.estacoes.criar({ name: "Estação de teste", location: "Térreo" });
   await admin.estacoes.definirModoDemonstracao({ id, enabled: true });
   estacaoDemo = tablet(token);

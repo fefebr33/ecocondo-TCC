@@ -58,6 +58,8 @@ beforeAll(async () => {
   usuarioAdmin = await criarUsuario("admin-1", "admin1@teste.local", "administrador");
   admin = chamador(usuarioAdmin);
   await admin.perfil.meuPerfil();
+  // Estes testes cobrem a conferência manual: sem adesivo obrigatório e sem aprovação automática da IA (cobertas em iaAdesivos.database.test.ts).
+  await admin.configuracoesIa.salvar({ iaAprovacaoAutomatica: false, iaConfiancaMinima: 80, adesivoObrigatorio: false });
   admin2 = chamador(await criarUsuario("admin-2", "admin2@teste.local", "administrador"));
   await admin2.perfil.meuPerfil();
   morador = chamador(await criarUsuario("morador-1", "morador@teste.local"));

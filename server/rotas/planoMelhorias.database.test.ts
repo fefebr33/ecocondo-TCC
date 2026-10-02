@@ -57,6 +57,8 @@ beforeAll(async () => {
   await prepararBanco();
   admin = chamador(await criarUsuario("plano-admin", "plano-admin@teste.local", "administrador"));
   await admin.perfil.meuPerfil();
+  // Estes testes cobrem a conferência manual: sem adesivo obrigatório e sem aprovação automática da IA (cobertas em iaAdesivos.database.test.ts).
+  await admin.configuracoesIa.salvar({ iaAprovacaoAutomatica: false, iaConfiancaMinima: 80, adesivoObrigatorio: false });
   admin2 = chamador(await criarUsuario("plano-admin-2", "plano-admin2@teste.local", "administrador"));
   await admin2.perfil.meuPerfil();
   const { id, token } = await admin.estacoes.criar({ name: "Estação da banca", location: "Notebook da apresentação" });
@@ -190,14 +192,14 @@ describeComMysql("plano de melhorias: testes obrigatórios", () => {
     await estacaoDemo.estacao.registrar({ code, itens: [{ wasteType: "reciclavel", weightGrams: 2000 }] });
     const lista = await morador.notificacoes.listar();
     // Um descarte registrado gera uma notificação só para o morador (antes eram três).
-    expect(lista.map((item) => item.tipo).sort()).toEqual(["comunicado", "pesagem_registrada"]);
+    expect(lista.map((item) => item.tipo).sort()).toEqual(["aviso_geral", "pesagem_registrada"]);
     const antes = (await morador.notificacoes.contagemNaoLidas()).count;
     expect(antes).toBeGreaterThan(0);
 
     const pesagem = lista.find((item) => item.tipo === "pesagem_registrada")!;
     expect((await morador.notificacoes.abrir({ id: pesagem.id })).lidaEm).toBeTruthy();
     expect((await morador.notificacoes.contagemNaoLidas()).count).toBe(antes - 1);
-    const comunicado = lista.find((item) => item.tipo === "comunicado")!;
+    const comunicado = lista.find((item) => item.tipo === "aviso_geral")!;
     await morador.notificacoes.marcarLida({ id: comunicado.id });
     expect((await morador.notificacoes.contagemNaoLidas()).count).toBe(antes - 2);
     await morador.notificacoes.marcarTodasLidas();

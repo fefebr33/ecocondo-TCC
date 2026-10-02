@@ -1,3 +1,4 @@
+import IndicadoresGestao from "@/components/IndicadoresGestao";
 import PageIntro from "@/components/PageIntro";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -862,6 +863,14 @@ export default function Reports() {
           )}
         </div>
       </section>
+      {data?.gestao && (
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">
+            Gestão no período: IA, auditorias, medidas, campanhas, adesivos e ocorrências
+          </h2>
+          <IndicadoresGestao gestao={data.gestao} />
+        </section>
+      )}
     </div>
   );
 }
