@@ -1,5 +1,6 @@
 import BotaoTema from "@/components/BotaoTema";
 import { Button } from "@/components/ui/button";
+import { CampoSenha } from "@/components/ui/campo-senha";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import {
@@ -96,9 +97,8 @@ function FormularioSenha() {
       {modo === "entrar" && (
         <label className="grid gap-1.5 text-xs font-semibold">
           Senha
-          <Input
+          <CampoSenha
             required
-            type="password"
             autoComplete="current-password"
             value={senha}
             onChange={event => setSenha(event.target.value)}

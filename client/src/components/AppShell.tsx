@@ -43,7 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { CampoSenha } from "@/components/ui/campo-senha";
 import { toast } from "sonner";
 
 type EcoRole = SharedEcoRole;
@@ -534,9 +534,8 @@ function TrocarSenha({
           {temSenha && (
             <label className="grid gap-1.5 text-xs font-semibold">
               Senha atual
-              <Input
+              <CampoSenha
                 required
-                type="password"
                 autoComplete="current-password"
                 value={atual}
                 onChange={event => setAtual(event.target.value)}
@@ -546,10 +545,9 @@ function TrocarSenha({
           )}
           <label className="grid gap-1.5 text-xs font-semibold">
             Nova senha
-            <Input
+            <CampoSenha
               required
               minLength={8}
-              type="password"
               autoComplete="new-password"
               value={nova}
               onChange={event => setNova(event.target.value)}
