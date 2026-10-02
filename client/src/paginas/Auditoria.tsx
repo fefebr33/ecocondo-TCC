@@ -33,7 +33,11 @@ const entityLabels = {
   recompensa: "Recompensa",
   pessoa: "Pessoa / perfil",
   morador: "Cadastro de morador",
-  comunicado: "Comunicado",
+  comunicado: "Comunicado / aviso geral",
+  adesivo: "Adesivo QR",
+  penalidade: "Medida administrativa",
+  campanha: "Campanha",
+  avaliacao: "Feedback",
 } as const;
 /** Ações que pedem atenção de quem lê a auditoria (reprovação, peso suspeito). */
 const acoesDeAlerta = new Set([
@@ -43,6 +47,9 @@ const acoesDeAlerta = new Set([
   "auditoria_aberta",
   "punicao_aplicada",
   "pontos_zerados",
+  "penalidade_aplicada",
+  "aprovacao_revertida",
+  "denuncia_falsa",
 ]);
 type EntityFilter = "todas" | keyof typeof entityLabels;
 
