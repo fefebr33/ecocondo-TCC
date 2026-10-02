@@ -27,7 +27,7 @@ function contarPor<T>(lista: T[], chave: (item: T) => string) {
  */
 export async function indicadoresGerais(db: any, condominioId: number, periodo?: Periodo) {
   const analises = await db.select({ resultado: analisesIa.resultado, motivos: analisesIa.motivos, confianca: analisesIa.confianca, modo: analisesIa.modo }).from(analisesIa).where(and(eq(analisesIa.condominioId, condominioId), ...noPeriodo(analisesIa.criadoEm, periodo)));
-  const motivos: string[] = analises.flatMap((analise: { motivos: string }) => (JSON.parse(analise.motivos) as string[]).map((motivo: string) => motivo.replace(/\(.*?\)/g, "").replace(/:.*$/, "").trim().slice(0, 80)));
+  const motivos: string[] = analises.flatMap((analise: { motivos: string }) => (JSON.parse(analise.motivos) as string[]).map((motivo: string) => motivo.replace(/\(.*?\)/g, "").replace(/:.*$/, "").replace(/\s+\./g, ".").trim().slice(0, 80)));
   const motivosComuns = Object.entries(contarPor(motivos, (motivo) => motivo)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([motivo, quantidade]) => ({ motivo, quantidade }));
   const aprovadasIa = analises.filter((analise: { resultado: string }) => analise.resultado === "aprovado_automatico").length;
 
@@ -101,7 +101,7 @@ export async function gestaoDoMorador(db: any, condominioId: number, moradorId: 
   const medidas = await historicoPenalidades(db, condominioId, moradorId);
   const etiquetas = await db.select({ status: adesivos.status }).from(adesivos).where(eq(adesivos.moradorId, moradorId));
   const pedidos = await db.select().from(pedidosAdesivos).where(eq(pedidosAdesivos.moradorId, moradorId)).orderBy(desc(pedidosAdesivos.criadoEm)).limit(10);
-  const minhasCampanhas = await db.select({ id: campanhas.id, titulo: campanhas.titulo, status: campanhas.status, dataFim: campanhas.dataFim, entrouEm: participantesCampanha.entrouEm }).from(participantesCampanha).innerJoin(campanhas, eq(campanhas.id, participantesCampanha.campanhaId)).where(and(eq(participantesCampanha.moradorId, moradorId), isNull(campanhas.excluidaEm))).orderBy(desc(campanhas.dataInicio));
+  const minhasCampanhas: Array<{ id: number; titulo: string; status: (typeof campanhas.$inferSelect)["status"]; dataFim: Date; entrouEm: Date }> = await db.select({ id: campanhas.id, titulo: campanhas.titulo, status: campanhas.status, dataFim: campanhas.dataFim, entrouEm: participantesCampanha.entrouEm }).from(participantesCampanha).innerJoin(campanhas, eq(campanhas.id, participantesCampanha.campanhaId)).where(and(eq(participantesCampanha.moradorId, moradorId), isNull(campanhas.excluidaEm))).orderBy(desc(campanhas.dataInicio));
   const registradas = usuarioId ? await db.select({ id: ocorrencias.id, categoria: ocorrencias.categoria, status: ocorrencias.status, conclusao: ocorrencias.conclusao, criadoEm: ocorrencias.criadoEm }).from(ocorrencias).where(and(eq(ocorrencias.condominioId, condominioId), eq(ocorrencias.relatorId, usuarioId))).orderBy(desc(ocorrencias.criadoEm)).limit(20) : [];
   // Ocorrências sobre descartes do morador: só o administrador vê (quem denunciou não é revelado a ninguém).
   const envolvido = paraAdministrador ? await db.select({ id: ocorrencias.id, categoria: ocorrencias.categoria, status: ocorrencias.status, conclusao: ocorrencias.conclusao, coletaId: ocorrencias.coletaId, criadoEm: ocorrencias.criadoEm }).from(ocorrencias).where(and(eq(ocorrencias.condominioId, condominioId), eq(ocorrencias.moradorEnvolvidoId, moradorId))).orderBy(desc(ocorrencias.criadoEm)).limit(20) : [];

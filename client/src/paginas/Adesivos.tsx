@@ -100,7 +100,7 @@ function MeusAdesivos() {
     });
   }
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-6 [&>*]:min-w-0">
       <PageIntro
         eyebrow="Identificação dos sacos"
         title="Meus adesivos"
@@ -331,7 +331,7 @@ function AdesivosAdministracao() {
     [porMorador.data, filtro]
   );
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-6 [&>*]:min-w-0">
       <PageIntro
         eyebrow="Identificação dos sacos"
         title="Adesivos QR"

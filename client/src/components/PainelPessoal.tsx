@@ -31,6 +31,7 @@ import {
   YAxis,
 } from "recharts";
 import { Link } from "wouter";
+import GestaoMorador from "@/components/GestaoMorador";
 
 const cartao =
   "rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6";
@@ -358,6 +359,7 @@ export default function PainelPessoal({ residentId }: { residentId?: number }) {
           )}
         </article>
       </section>
+      <GestaoMorador gestao={data.gestao} moradorId={residentId} />
     </div>
   );
 }

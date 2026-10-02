@@ -267,10 +267,10 @@ export default function Settings() {
         <RegrasDescarte />
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <div id="ia" className="scroll-mt-24">
+        <div id="ia" className="min-w-0 scroll-mt-24">
           <ConfiguracaoAnaliseIa />
         </div>
-        <div id="medidas" className="scroll-mt-24">
+        <div id="medidas" className="min-w-0 scroll-mt-24">
           <MedidasAdministrativas />
         </div>
       </div>

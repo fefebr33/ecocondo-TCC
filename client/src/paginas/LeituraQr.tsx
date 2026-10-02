@@ -205,7 +205,7 @@ export default function LeituraQr() {
                   </Badge>
                 </div>
                 <p>
-                  {formatarKg(dados.descarte.pesoGramas)} kg ·{" "}
+                  {formatarKg(dados.descarte.pesoGramas)} ·{" "}
                   {formatarData(dados.descarte.data)} · estação{" "}
                   {dados.descarte.estacao ?? "—"} ({dados.descarte.local ?? "—"})
                 </p>
@@ -267,7 +267,7 @@ export default function LeituraQr() {
                         className="underline"
                       >
                         Nº {registro.id} · {registro.material} ·{" "}
-                        {formatarKg(registro.pesoGramas)} kg
+                        {formatarKg(registro.pesoGramas)}
                       </Link>
                       <span className="text-muted-foreground">
                         {rotuloSituacaoCurto[registro.situacao]}
