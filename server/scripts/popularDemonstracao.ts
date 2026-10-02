@@ -7,8 +7,8 @@ import { CORES_PADRAO } from "@shared/descarte";
 import { fotoDoVisor } from "./fotoVisor";
 import fs from "node:fs";
 import path from "node:path";
-import { inArray, ne, sql } from "drizzle-orm";
-import { coletas, movimentacoesPontos, notificacoes, usuarios } from "../../drizzle/schema";
+import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { adesivos, analisesIa, campanhas, coletas, movimentacoesPontos, notificacoes, pedidosAdesivos, usuarios } from "../../drizzle/schema";
 import type { Usuario } from "../../drizzle/schema";
 import { fecharDb, getDb, getUserByOpenId, prepararBanco, upsertUser } from "../db";
 import { appRouter } from "../rotas";
@@ -17,6 +17,8 @@ import { garantirContaDemonstracao } from "../_core/login";
 import { gerarHashSenha } from "../senhas";
 import { CABECALHO_TOKEN_ESTACAO } from "../rotas/estacoes";
 import { saldosInconsistentes } from "../pontos";
+import type { SimulacaoIa } from "../ia/analiseDescarte";
+import { processarCampanhas } from "../campanhas";
 
 const pastaUploads = path.resolve("data", "uploads");
 /** Senha de todas as contas de demonstração no login com e-mail e senha. */
@@ -53,6 +55,8 @@ function tablet(token: string) {
 }
 
 async function main() {
+  // Os dados de demonstração usam sempre a IA simulada (sem gastar a API), mesmo com ANTHROPIC_API_KEY configurada.
+  process.env.IA_SIMULACAO = "1";
   const limpar = process.argv.includes("--limpar");
   if (limpar) limparUploads();
   await prepararBanco({ recriar: limpar });
@@ -98,27 +102,53 @@ async function main() {
 
   const agora = new Date();
 
+  // Estação com IA: aprova sozinha o que estiver de acordo e exige um adesivo QR em cada saco.
+  await admin.configuracoesIa.salvar({ iaAprovacaoAutomatica: true, iaConfiancaMinima: 80, adesivoObrigatorio: true });
+  // Kits de adesivos QR entregues há seis meses (um adesivo por saco).
+  const idMorador: Record<string, number> = Object.fromEntries((await admin.moradores.listar()).map((item) => [item.nome, item.id]));
+  const seisMesesAtras = new Date(agora.getFullYear(), agora.getMonth() - 6, 1, 10);
+  for (const nome of Object.keys(pessoasPorNome)) {
+    await admin.adesivos.entregar({ moradorId: idMorador[nome], quantidade: 30, observacao: "Kit inicial entregue na portaria." });
+  }
+  await db.update(adesivos).set({ criadoEm: seisMesesAtras });
+  await db.update(pedidosAdesivos).set({ criadoEm: seisMesesAtras, entregueEm: seisMesesAtras });
+
   // Estação de pesagem (tablet + balança ao lado das lixeiras).
   const { id: idEstacao, token: tokenEstacao } = await admin.estacoes.criar({ name: "Lixeiras do térreo", location: "Garagem, ao lado do bloco A" });
   const estacao = tablet(tokenEstacao);
+  // Modo demonstração (balança simulada): pesos rápidos na tela, foto opcional e escolha do que a IA simulada "vê".
+  await admin.estacoes.definirModoDemonstracao({ id: idEstacao, enabled: true });
 
   /** Leva um descarte para uma data passada, junto com as linhas do extrato e as notificações dele (já lidas). */
   async function moverParaData(ids: number[], data: Date) {
     await db.update(coletas).set({ agendadaPara: data, concluidaEm: data, criadoEm: data, atualizadoEm: data }).where(inArray(coletas.id, ids));
     await db.update(movimentacoesPontos).set({ criadoEm: data }).where(inArray(movimentacoesPontos.coletaId, ids));
     await db.update(notificacoes).set({ criadoEm: data, lidaEm: data }).where(inArray(notificacoes.coletaId, ids));
+    await db.update(adesivos).set({ utilizadoEm: data }).where(inArray(adesivos.coletaId, ids));
+    await db.update(analisesIa).set({ criadoEm: data }).where(inArray(analisesIa.coletaId, ids));
   }
 
-  type Item = { wasteType: "reciclavel" | "organico" | "rejeito" | "eletronico" | "perigoso"; weightGrams: number };
+  /** Próximos adesivos ainda não usados do morador (um por saco). */
+  async function proximosAdesivos(nome: string, quantidade: number) {
+    const linhas = await db.select({ codigo: adesivos.codigo }).from(adesivos).where(and(eq(adesivos.moradorId, idMorador[nome]), eq(adesivos.status, "disponivel"))).orderBy(asc(adesivos.id)).limit(quantidade);
+    return linhas.map((linha) => linha.codigo);
+  }
+
+  /** `ia`: o que a IA simulada "vê" na foto (padrão: tudo certo, e a IA aprova sozinha). */
+  type Item = { wasteType: "reciclavel" | "organico" | "rejeito" | "eletronico" | "perigoso"; weightGrams: number; ia?: SimulacaoIa };
   /**
    * O morador gera o código no aplicativo e descarta na estação (um ou vários tipos de uma vez, com foto do visor de cada um).
-   * Depois o administrador decide: aprova (os pontos entram), reprova ou deixa pendente. Com `data`, o descarte vai para o passado.
+   * Cada saco leva um adesivo QR do morador. A IA aprova sozinha o que estiver de acordo; o que ela mandar para conferência,
+   * o administrador aprova (decisao "aprovar") ou deixa pendente. Com `data`, o descarte vai para o passado.
    */
   async function descarte(nome: string, itens: Item[], data: Date | null, decisao: "aprovar" | "pendente" = "aprovar") {
     const { code } = await pessoasPorNome[nome].estacao.gerarCodigo();
-    const { ids } = await estacao.estacao.registrar({ code, itens: itens.map((item) => ({ ...item, imageDataUrl: fotoDoVisor(item.weightGrams, CORES_PADRAO[item.wasteType].cor) })) });
+    const codigos = await proximosAdesivos(nome, itens.length);
+    const resultado = await estacao.estacao.registrar({ code, itens: itens.map((item, indice) => ({ wasteType: item.wasteType, weightGrams: item.weightGrams, stickerCode: codigos[indice], simulacaoIa: item.ia ?? "tudo_certo", imageDataUrl: fotoDoVisor(item.weightGrams, CORES_PADRAO[item.wasteType].cor) })) });
+    const ids = resultado.ids;
     if (data) await moverParaData(ids, data);
-    if (decisao === "aprovar") await admin.coletas.aprovarVarios({ ids });
+    const pendentes = resultado.itens.filter((item) => item.situacao === "pendente").map((item) => item.id);
+    if (decisao === "aprovar" && pendentes.length) await admin.coletas.aprovarVarios({ ids: pendentes });
     if (data) await moverParaData(ids, data);
     return ids;
   }
@@ -148,6 +178,7 @@ async function main() {
   // Descartes de ontem com vários tipos de uma vez (já aprovados).
   await descarte("Pedro Almeida", [{ wasteType: "eletronico", weightGrams: 1800 }, { wasteType: "perigoso", weightGrams: 400 }], ontem(10, 15));
   await descarte("Marina Moradora", [{ wasteType: "reciclavel", weightGrams: 4200 }, { wasteType: "organico", weightGrams: 1500 }], ontem(18, 40));
+  const [idDenunciado] = await descarte("Beatriz Lima", [{ wasteType: "reciclavel", weightGrams: 4400 }], ontem(8, 20));
 
   // Um descarte reprovado com motivo: os pontos voltam (estorno no extrato) e o caso aparece na auditoria.
   const [idReprovado] = await descarte("João Pereira", [{ wasteType: "reciclavel", weightGrams: 5200 }], ontem(9, 5));
@@ -156,20 +187,18 @@ async function main() {
 
   // Uma auditoria concluída no mês passado: irregularidade confirmada (mesmo saco pesado duas vezes) e punição de 5 pontos.
   const mesPassadoDia = new Date(agora.getFullYear(), agora.getMonth() - 1, 20, 19, 10);
-  const [idAuditado] = await descarte("Camila Rocha", [{ wasteType: "reciclavel", weightGrams: 7900 }], mesPassadoDia, "pendente");
+  const [idAuditado] = await descarte("Camila Rocha", [{ wasteType: "reciclavel", weightGrams: 7900, ia: "foto_ilegivel" }], mesPassadoDia, "pendente");
   await admin.coletas.abrirAuditoria({ id: idAuditado, motivo: "A foto mostra o mesmo saco do descarte anterior, pesado de novo dez minutos depois." });
   await admin.coletas.concluirAuditoria({ id: idAuditado, resultado: "irregular", parecer: "Conversamos com a moradora: o saco foi pesado duas vezes. Descarte reprovado e 5 pontos de punição.", penalidadePontos: 5 });
   await moverParaData([idAuditado], mesPassadoDia);
 
   // Pendentes de hoje, para a demonstração da aprovação: Beatriz com dois tipos; Luísa com 26 kg (bem acima do padrão dela).
-  await descarte("Beatriz Lima", [{ wasteType: "reciclavel", weightGrams: 3100 }, { wasteType: "eletronico", weightGrams: 800 }], null, "pendente");
+  await descarte("Beatriz Lima", [{ wasteType: "reciclavel", weightGrams: 3100 }, { wasteType: "eletronico", weightGrams: 800, ia: "cor_errada" }], null, "pendente");
   await descarte("Luísa Martins", [{ wasteType: "reciclavel", weightGrams: 26000 }], null, "pendente");
   // Um descarte em auditoria aberta: o morador já foi avisado e a administração ainda vai dar o parecer.
-  const [idEmAuditoria] = await descarte("Rafael Souza", [{ wasteType: "reciclavel", weightGrams: 9800 }], null, "pendente");
+  const [idEmAuditoria] = await descarte("Rafael Souza", [{ wasteType: "reciclavel", weightGrams: 9800, ia: "peso_diferente" }], null, "pendente");
   await admin.coletas.abrirAuditoria({ id: idEmAuditoria, motivo: "O peso é o dobro do normal do morador e o saco da foto parece o mesmo do descarte anterior." });
 
-  // Modo demonstração (balança simulada): pesos rápidos na tela e foto opcional.
-  await admin.estacoes.definirModoDemonstracao({ id: idEstacao, enabled: true });
 
   // Metas, recompensas e resgates.
   const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
@@ -218,13 +247,51 @@ async function main() {
   await morador.campanhas.participar({ campaignId: campanha.id });
   await morador.ocorrencias.criar({ block: "A", wasteType: "reciclavel", location: "Lixeira do térreo, bloco A", description: "Recicláveis misturados com restos de comida.", imageDataUrl: fotoDoVisor(null, CORES_PADRAO.reciclavel.cor) });
   await morador.avaliacoes.criar({ rating: 5, message: "A estação de pesagem é rápida de usar." });
-  await admin.notificacoes.criarComunicado({ title: "Sacos coloridos na portaria", message: "Retire na portaria os sacos de cada tipo de resíduo (azul para recicláveis, marrom para orgânicos e cinza para rejeitos). Veja as cores no Guia de descarte." });
+  const sacos = await admin.notificacoes.criarComunicado({ title: "Sacos coloridos na portaria", message: "Retire na portaria os sacos de cada tipo de resíduo (azul para recicláveis, marrom para orgânicos e cinza para rejeitos). Veja as cores no Guia de descarte.", publico: "moradores", categoria: "coleta" });
+  for (const nome of ["Beatriz Lima", "Camila Rocha", "João Pereira", "Pedro Almeida"]) await pessoasPorNome[nome].notificacoes.marcarLida({ id: sacos.id });
+
+  // IA na estação hoje: um descarte aprovado sozinho pela IA e um que ela mandou para conferência (tipo diferente do declarado).
+  await descarte("Pedro Almeida", [{ wasteType: "reciclavel", weightGrams: 3600 }], null, "pendente");
+  await descarte("João Pereira", [{ wasteType: "reciclavel", weightGrams: 2900, ia: "tipo_diferente" }], null, "pendente");
+
+  // Denúncia com o código do adesivo: a IA tinha aprovado; o administrador reverte a aprovação e manda para nova avaliação.
+  const [adesivoDenunciado] = await db.select({ codigo: adesivos.codigo }).from(adesivos).where(eq(adesivos.coletaId, idDenunciado)).limit(1);
+  const denuncia = await pessoasPorNome["Camila Rocha"].ocorrencias.criar({ category: "descarte_irregular", reference: adesivoDenunciado.codigo, block: "B", wasteType: "reciclavel", location: "Lixeira de recicláveis da garagem", description: "Vi este saco azul com restos de comida e fraldas misturados aos recicláveis." });
+  await admin.ocorrencias.encaminharDescarte({ id: denuncia.id, destino: "nova_avaliacao", motivo: "Denúncia com foto: conferir o conteúdo do saco antes de manter os pontos." });
+
+  // Denúncia falsa: Pedro denunciou um descarte do João, a administração conferiu as fotos e concluiu que era falsa (advertência ao Pedro).
+  const modelos = await admin.penalidades.modelos({ somenteAtivos: true });
+  const modelo = (nome: string) => modelos.find((item) => item.nome === nome)!.id;
+  const [descarteDoJoao] = await db.select({ id: coletas.id }).from(coletas).where(and(eq(coletas.moradorId, idMorador["João Pereira"]), eq(coletas.status, "concluida"))).orderBy(asc(coletas.id)).limit(1);
+  const falsa = await pessoasPorNome["Pedro Almeida"].ocorrencias.criar({ category: "suspeita_fraude", reference: String(descarteDoJoao.id), block: "C", wasteType: "reciclavel", location: "Estação de pesagem", description: "Acho que esse saco foi pesado com o pé em cima da balança." });
+  await admin.ocorrencias.concluir({ id: falsa.id, conclusao: "denuncia_falsa", nota: "As fotos do visor e o peso batem com o saco; não houve irregularidade. Denúncia sem fundamento.", medidasRelator: [modelo("Advertência por escrito")] });
+
+  // Medidas administrativas: suspensão das campanhas para o João, pelo descarte reprovado de ontem.
+  await admin.penalidades.aplicar({ moradorId: idMorador["João Pereira"], modeloId: modelo("Suspensão das campanhas por 30 dias"), motivo: "Descarte reprovado: rejeito e restos de comida no saco de recicláveis.", coletaId: idReprovado });
+
+  // Campanhas: uma pausada (com data para voltar) e uma encerrada no mês passado, com resultado.
+  const ate = new Date(agora.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const oleo = await admin.campanhas.criar({ title: "Óleo de cozinha usado", description: "Traga o óleo usado em garrafa PET fechada para o coletor da garagem.", targetDescription: "50 litros no mês", startDate: inicioMes, endDate: fimMes, status: "ativa" });
+  await pessoasPorNome["Camila Rocha"].campanhas.participar({ campaignId: oleo.id });
+  await admin.campanhas.pausar({ id: oleo.id, ate, motivo: "Coletor de óleo em manutenção." });
+  const eletronicos = await admin.campanhas.criar({ title: "Semana do lixo eletrônico", description: "Pilhas, celulares e cabos velhos vão para a caixa da portaria.", targetDescription: "Todos os blocos", startDate: new Date(agora.getFullYear(), agora.getMonth() - 1, 3), endDate: new Date(agora.getTime() + 60 * 60 * 1000), status: "ativa" });
+  await pessoasPorNome["Pedro Almeida"].campanhas.participar({ campaignId: eletronicos.id });
+  await pessoasPorNome["Beatriz Lima"].campanhas.participar({ campaignId: eletronicos.id });
+  await db.update(campanhas).set({ dataFim: new Date(agora.getFullYear(), agora.getMonth() - 1, 10, 23, 59) }).where(eq(campanhas.id, eletronicos.id));
+  await processarCampanhas(db, agora);
+
+  // Adesivos: Luísa pediu mais um kit (aguardando entrega).
+  await pessoasPorNome["Luísa Martins"].adesivos.solicitar({ quantidade: 20, observacao: "Quero um kit reserva para as festas de fim de ano." });
+
+  // Aviso geral importante: fica em destaque no painel até cada um marcar como lido.
+  await admin.notificacoes.criarComunicado({ title: "Agora cada saco precisa de um adesivo QR", message: "Cole um adesivo do seu kit em cada saco antes de pesar. A estação lê o QR (ou você digita o código) e a análise automática confere tipo, peso e cor do saco. Peça mais adesivos em Adesivos QR.", publico: "todos", categoria: "regras", importante: true });
 
   const [{ criadas }] = await db.select({ criadas: sql<number>`count(*)` }).from(coletas);
   const divergentes = await saldosInconsistentes(db);
   console.log(`Dados de demonstração criados: ${criadas} descartes, ${vizinhos.length + 1} moradores. Rode pnpm dev e entre como Administrador ou Morador.`);
   console.log(`Login com e-mail e senha: admin@ecocondo.local ou morador@ecocondo.local, senha ${SENHA_DEMONSTRACAO}.`);
   console.log(divergentes.length ? `ATENÇÃO: ${divergentes.length} saldo(s) de pontos não batem com o extrato.` : "Saldos de pontos conferidos com o extrato: tudo certo.");
+  console.log("IA da estação em modo simulação nos dados de demonstração; com ANTHROPIC_API_KEY no .env, os novos descartes são analisados pelo Claude.");
   console.log(`Estação de pesagem "Lixeiras do térreo" (modo demonstração ligado): abra /estacao?codigo=${encodeURIComponent(tokenEstacao)} no tablet (ou em outra aba) para parear.`);
 }
 

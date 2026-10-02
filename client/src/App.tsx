@@ -23,6 +23,8 @@ import Sustentabilidade from "@/paginas/Sustentabilidade";
 import Comunidade from "@/paginas/Comunidade";
 import Auditoria from "@/paginas/Auditoria";
 import Estacao from "@/paginas/Estacao";
+import Adesivos from "@/paginas/Adesivos";
+import LeituraQr from "@/paginas/LeituraQr";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -40,6 +42,8 @@ function Router() {
       <Route path="/definir-senha" component={DefinirSenha} />
       <Route path="/descartes"><ProtectedRoute><Descartes /></ProtectedRoute></Route>
       <Route path="/coletas"><Redirect to="/descartes" replace /></Route>
+      <Route path="/adesivos"><ProtectedRoute><Adesivos /></ProtectedRoute></Route>
+      <Route path="/leitura"><ProtectedRoute><LeituraQr /></ProtectedRoute></Route>
       <Route path="/manual"><ProtectedRoute><Manual /></ProtectedRoute></Route>
       <Route path="/moradores/painel"><ProtectedRoute><PainelMorador /></ProtectedRoute></Route>
       <Route path="/moradores"><ProtectedRoute><Moradores /></ProtectedRoute></Route>

@@ -60,13 +60,22 @@ Se perder o link da estação: Administração › *Configurações* › *Estaç
 | 6:30–8:30 | Administração | **Moradores**: filtro por bloco e busca; **Painel** de um morador. **Relatórios**: escolha o **bloco** e veja a comparação entre blocos, quilos por mês e tipo (cores dos sacos), situação dos descartes; exporte o PDF do bloco. **Configurações**: peso mínimo/máximo, pontos por kg e cor do saco de cada tipo; quem recebe cada aviso; **Zerar pontos de todos** (não execute na banca). |
 | 8:30–10:00 | Os dois | **Guia de descarte** com a cor do saco de cada tipo; **Campanhas e QR do guia** › **Imprimir só o QR** (sai uma folha com o QR e as cores). **Pessoas e acessos** › **Link de primeiro acesso** (o morador cria a senha). Segurança: o morador não acessa Relatórios nem Auditoria; o código da estação vale uma vez; pesos fora do mínimo/máximo do tipo são barrados; senha errada 5 vezes bloqueia por 15 minutos. |
 
+### Novidades: IA, adesivos QR e medidas (se sobrar tempo ou a banca perguntar)
+
+- **Estação**: cada saco pede o código do adesivo (no modo demonstração já vem preenchido). Escolha o que a IA "vê": com **Tudo certo** o descarte é aprovado na hora; com **Saco de cor errada** ele fica pendente com o motivo.
+- **Ler QR de um saco** (administração): digite o código de um adesivo usado (ex.: o do descarte do João em Descartes) e mostre o dono, o descarte e o resultado da IA; a consulta vai para a Auditoria.
+- **Adesivos QR**: pedido da Luísa aguardando entrega; **Entregar** e **Folha** para imprimir.
+- **Painel** do administrador: cartões de IA, auditoria, medidas, campanhas, adesivos e ocorrências. **Moradores › Painel** de um morador: histórico de medidas e **Aplicar medida**.
+- **Gestão ambiental › Ocorrências**: a denúncia da Camila (com código de adesivo) já reverteu a aprovação da IA; a do Pedro foi concluída como denúncia falsa, com advertência.
+- **Campanhas**: uma ativa, uma pausada e uma encerrada. **Notificações**: aviso importante com a contagem de quem viu.
+
 ## Se algo sair diferente
 
 | Mensagem | O que fazer |
 |---|---|
 | "Aguarde 10 minutos entre um descarte e outro" ou limite do dia | O morador já registrou há pouco (ensaio). Rode `pnpm db:seed --limpar` e pareie de novo. |
 | "Código inválido ou vencido" | O código passou de 5 minutos ou já foi usado. Gere outro no morador. |
-| Estação bloqueada por códigos errados | Após 8 códigos errados, a estação fica 15 minutos bloqueada. Espere ou reinicie o `pnpm dev` (o bloqueio fica na memória do servidor). |
-| "Muitas tentativas erradas" no login | 5 senhas erradas bloqueiam o e-mail por 15 minutos. Reinicie o `pnpm dev` ou use "Esqueci minha senha" (em demonstração o link aparece na tela). |
+| Estação pede para esperar | Depois de 5 códigos errados seguidos, o tablet pede uma espera antes da próxima tentativa (15 s, 30 s, 60 s, no máximo 2 min). Espere ou reinicie o `pnpm dev` (a contagem fica na memória do servidor). |
+| "Muitas tentativas erradas" no login | 5 senhas erradas bloqueiam o e-mail por 15 minutos. Reinicie o `pnpm dev` ou gere o link de nova senha em **Pessoas e acessos** (entrando pelo outro perfil). |
 | O morador cai no manual toda vez | Ele não marcou "Li e entendi". Marque a caixa e confirme. |
 | Estação pede a foto | O modo demonstração está desligado. Administração › Configurações › Estações de pesagem › **Ligar demonstração**. |

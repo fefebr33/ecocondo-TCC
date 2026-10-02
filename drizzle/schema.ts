@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   datetime,
   double,
   index,
@@ -31,6 +32,8 @@ export const usuarios = mysqlTable("usuarios", {
   senhaHash: varchar("senha_hash", { length: 255 }),
   /** Quando a pessoa leu o manual e marcou "Li e entendi"; enquanto for nulo, o sistema abre o manual no primeiro acesso. */
   manualLidoEm: dataHora("manual_lido_em"),
+  /** Aumenta a cada troca de senha ou acesso desativado: todas as sessões abertas com a versão anterior deixam de valer. */
+  versaoSessao: int("versao_sessao").default(0).notNull(),
 });
 
 /** Link de uso único para criar a senha no primeiro acesso ou recuperar uma senha esquecida (no banco fica só o hash). */
@@ -59,13 +62,20 @@ export const condominios = mysqlTable("condominios", {
   ativo: boolean("ativo").default(true).notNull(),
   /** Início do ciclo de pontos atual: quando o administrador zera os pontos de todos, o ranking geral recomeça desta data. */
   pontosZeradosEm: dataHora("pontos_zerados_em"),
+  /** A análise da IA aprova sozinha os descartes que estão de acordo com as regras (os demais ficam pendentes para o administrador). */
+  iaAprovacaoAutomatica: boolean("ia_aprovacao_automatica").default(true).notNull(),
+  /** Confiança mínima (0 a 100) da análise da IA para aprovar sem revisão humana. */
+  iaConfiancaMinima: int("ia_confianca_minima").default(80).notNull(),
+  /** Cada saco precisa de um adesivo com QR Code do morador para ser registrado na estação. */
+  adesivoObrigatorio: boolean("adesivo_obrigatorio").default(true).notNull(),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
 });
 
 /** Só dois perfis: o próprio morador registra a reciclagem na estação de pesagem (tablet + balança), sem coletor. */
 export const papeisEco = ["administrador", "morador"] as const;
-export const statusAcesso = ["pendente", "ativo"] as const;
+/** "desativado": a administração tirou o acesso (morador que se mudou, ex-síndico); a pessoa não entra mais no sistema. */
+export const statusAcesso = ["pendente", "ativo", "desativado"] as const;
 export const statusMorador = ["ativo", "inativo"] as const;
 export const tiposResiduo = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"] as const;
 export const statusColeta = ["agendada", "em_andamento", "concluida", "cancelada", "ocorrencia"] as const;
@@ -80,14 +90,22 @@ export const tiposNotificacao = [
   "revisao_administrativa", "premio_resgatado", "resgate_atualizado", "resgate_recusado", "novo_premio", "cadastro_alterado", "premio_podio",
   "nova_coleta", "aguardando_pesagem", "peso_suspeito", "pontos_pendentes", "novo_resgate", "estoque_baixo", "sem_estoque", "novo_cadastro", "falha_operacional",
   "auditoria_aberta", "auditoria_concluida", "pontos_zerados", "pontos_ajustados", "descarte_aguardando_aprovacao",
+  "descarte_aprovado_ia", "descarte_revertido", "penalidade_aplicada", "penalidade_encerrada", "irregularidade_detectada",
+  "nova_campanha", "campanha_participacao", "campanha_atualizada", "campanha_pausada", "campanha_encerrando", "campanha_encerrada",
+  "nova_ocorrencia", "ocorrencia_atualizada", "novo_feedback", "feedback_respondido",
+  "adesivos_solicitados", "adesivos_entregues", "adesivos_acabando", "aviso_geral",
 ] as const;
 /** "desconto_podio" fica só para os registros antigos, de quando o pódio dava desconto na taxa condominial. */
-export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio", "premio_podio", "estacao", "resgate", "recompensa", "pessoa", "morador", "comunicado", "pontos", "configuracao", "usuario"] as const;
+export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio", "premio_podio", "estacao", "resgate", "recompensa", "pessoa", "morador", "comunicado", "pontos", "configuracao", "usuario", "adesivo", "penalidade", "campanha", "avaliacao"] as const;
 /** Movimentações do extrato de pontos: entradas (coleta, devolução de resgate) e saídas (estorno de coleta reprovada, resgate). */
 export const tiposMovimentacaoPontos = ["credito_coleta", "estorno_coleta", "resgate", "devolucao_resgate", "ajuste", "zeragem", "penalidade"] as const;
 export const statusResgate = ["solicitado", "aprovado", "entregue", "cancelado"] as const;
-export const statusOcorrencia = ["aberta", "em_analise", "resolvida"] as const;
-export const statusCampanha = ["planejada", "ativa", "encerrada"] as const;
+export const statusOcorrencia = ["aberta", "em_analise", "em_auditoria", "resolvida"] as const;
+/** Assunto da ocorrência ou denúncia registrada pelo morador. */
+export const categoriasOcorrencia = ["ambiental", "descarte_irregular", "suspeita_fraude", "problema_sistema", "outro"] as const;
+/** Conclusão da análise: procedente (o problema existia), improcedente (não se confirmou) ou denúncia falsa (feita de má-fé). */
+export const conclusoesOcorrencia = ["procedente", "improcedente", "denuncia_falsa"] as const;
+export const statusCampanha = ["planejada", "ativa", "pausada", "encerrada"] as const;
 export const statusAvaliacao = ["nova", "respondida", "arquivada"] as const;
 export const periodosPodio = ["mensal", "semestral", "anual"] as const;
 /**
@@ -107,6 +125,8 @@ export const moradores = mysqlTable("moradores", {
   apartamento: varchar("apartamento", { length: 255 }).notNull(),
   status: mysqlEnum("status", statusMorador).default("ativo").notNull(),
   pontos: int("pontos").default(0).notNull(),
+  /** Fração de ponto (em milésimos, 0 a 999) que sobrou dos descartes aprovados; quando as frações somam 1 ponto, ele entra no saldo. */
+  restoPontosMilesimos: int("resto_pontos_milesimos").default(0).notNull(),
   /** Código curto único usado para gerar o QR code do apartamento (identificação rápida pelo administrador). */
   codigoAcesso: varchar("codigo_acesso", { length: 32 }),
   /** Código temporário (6 dígitos, uso único) gerado no app do morador para se identificar na estação de pesagem. */
@@ -173,6 +193,8 @@ export const coletas = mysqlTable("coletas", {
   concluidaEm: dataHora("concluida_em"),
   pesoGramas: int("peso_gramas"),
   pontosConcedidos: int("pontos_concedidos").default(0).notNull(),
+  /** Pontos prometidos no tablet (em milésimos, pela regra do tipo no momento do registro); a aprovação credita este valor. */
+  pontosPrevistosMilesimos: int("pontos_previstos_milesimos"),
   status: mysqlEnum("status", statusColeta).default("agendada").notNull(),
   observacoes: text("observacoes"),
   /** Comprovação fotográfica anexada ao concluir a coleta (proteção antifraude). */
@@ -194,6 +216,13 @@ export const coletas = mysqlTable("coletas", {
   /** Motivo informado ao abrir a auditoria (caso grave); o resultado fica no motivo da decisão e na trilha de auditoria. */
   motivoAuditoria: text("motivo_auditoria"),
   auditoriaAbertaEm: dataHora("auditoria_aberta_em"),
+  /** Adesivo com QR Code colado no saco deste descarte (um adesivo por saco, uso único). */
+  adesivoId: int("adesivo_id"),
+  /**
+   * Quantas vezes a aprovação foi revertida para nova avaliação. Entra no extrato de pontos, para que o mesmo descarte possa
+   * ser creditado de novo depois de uma reversão sem furar a trava de "uma vez só" por descarte.
+   */
+  revisao: int("revisao").default(0).notNull(),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
 }, (table) => [
@@ -206,6 +235,7 @@ export const coletas = mysqlTable("coletas", {
   index("coletas_pendente_aprovacao_idx").on(table.condominioId, table.pendenteAprovacaoPeso),
   index("coletas_morador_concluida_idx").on(table.moradorId, table.concluidaEm),
   index("coletas_lote_idx").on(table.lote),
+  uniqueIndex("coletas_adesivo_unique").on(table.adesivoId),
 ]);
 
 export const logsAuditoria = mysqlTable("logs_auditoria", {
@@ -236,6 +266,11 @@ export const notificacoes = mysqlTable("notificacoes", {
   titulo: varchar("titulo", { length: 255 }).notNull(),
   mensagem: text("mensagem").notNull(),
   lidaEm: dataHora("lida_em"),
+  /** Aviso geral do administrador: para quem vai (sem valor = conforme o tipo), assunto, se fica fixado no painel e quem enviou. */
+  publico: mysqlEnum("publico", ["todos", "moradores", "administradores"]),
+  categoria: varchar("categoria", { length: 40 }),
+  importante: boolean("importante").default(false).notNull(),
+  autorId: int("autor_id"),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
 }, (table) => [
   index("notificacoes_destinatario_idx").on(table.destinatarioId),
@@ -323,6 +358,12 @@ export const ocorrencias = mysqlTable("ocorrencias", {
   chaveImagem: varchar("chave_imagem", { length: 255 }),
   urlImagem: varchar("url_imagem", { length: 512 }),
   status: mysqlEnum("status", statusOcorrencia).default("aberta").notNull(),
+  categoria: mysqlEnum("categoria", categoriasOcorrencia).default("ambiental").notNull(),
+  /** Descarte relacionado (informado pelo número ou pelo código do adesivo visto no saco). */
+  coletaId: int("coleta_id"),
+  /** Morador responsável pelo descarte denunciado (nunca é mostrado a quem denunciou). */
+  moradorEnvolvidoId: int("morador_envolvido_id"),
+  conclusao: mysqlEnum("conclusao", conclusoesOcorrencia),
   notaResolucao: text("nota_resolucao"),
   resolvidoPorId: int("resolvido_por_id"),
   resolvidaEm: dataHora("resolvida_em"),
@@ -332,6 +373,8 @@ export const ocorrencias = mysqlTable("ocorrencias", {
   index("ocorrencias_condominio_idx").on(table.condominioId),
   index("ocorrencias_status_idx").on(table.status),
   index("ocorrencias_condominio_status_criado_idx").on(table.condominioId, table.status, table.criadoEm),
+  index("ocorrencias_coleta_idx").on(table.coletaId),
+  index("ocorrencias_relator_idx").on(table.relatorId),
 ]);
 
 export const campanhas = mysqlTable("campanhas", {
@@ -344,6 +387,15 @@ export const campanhas = mysqlTable("campanhas", {
   dataFim: dataHora("data_fim").notNull(),
   status: mysqlEnum("status", statusCampanha).default("planejada").notNull(),
   criadoPorId: int("criado_por_id").notNull(),
+  /** Pausa: desde quando, até quando (sem data = até o administrador retomar) e o motivo, mostrado aos participantes. */
+  pausadaEm: dataHora("pausada_em"),
+  pausadaAte: dataHora("pausada_ate"),
+  motivoPausa: varchar("motivo_pausa", { length: 300 }),
+  /** Exclusão lógica: some das telas, mas o histórico (participantes, auditoria) continua no banco. */
+  excluidaEm: dataHora("excluida_em"),
+  /** Avisos automáticos já enviados (para não repetir): "faltam poucos dias" e "encerrada". */
+  avisoEncerrandoEm: dataHora("aviso_encerrando_em"),
+  avisoEncerradaEm: dataHora("aviso_encerrada_em"),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
   atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
 }, (table) => [
@@ -447,13 +499,17 @@ export const movimentacoesPontos = mysqlTable("movimentacoes_pontos", {
   saldoApos: int("saldo_apos"),
   coletaId: int("coleta_id"),
   resgateId: int("resgate_id"),
+  /** Revisão do descarte (coletas.revisao) a que a linha se refere: depois de uma reversão, o descarte pode pontuar de novo. */
+  revisaoColeta: int("revisao_coleta").default(0).notNull(),
+  /** Penalidade administrativa que gerou a saída de pontos, quando houver. */
+  penalidadeId: int("penalidade_id"),
   descricao: varchar("descricao", { length: 255 }).notNull(),
   autorId: int("autor_id"),
   criadoEm: dataHora("criado_em").default(agora).notNull(),
 }, (table) => [
   index("movimentacoes_pontos_morador_idx").on(table.moradorId, table.criadoEm),
   index("movimentacoes_pontos_condominio_idx").on(table.condominioId, table.criadoEm),
-  uniqueIndex("movimentacoes_pontos_coleta_unique").on(table.tipo, table.coletaId),
+  uniqueIndex("movimentacoes_pontos_coleta_unique").on(table.tipo, table.coletaId, table.revisaoColeta),
   uniqueIndex("movimentacoes_pontos_resgate_unique").on(table.tipo, table.resgateId),
 ]);
 
@@ -545,6 +601,120 @@ export const relatoriosAnuais = mysqlTable("relatorios_anuais", {
   uniqueIndex("relatorios_anuais_unique").on(table.condominioId, table.ano),
 ]);
 
+/** Resultado da análise automática (IA) de cada descarte: o que foi identificado na foto e a decisão tomada. */
+export const modosAnaliseIa = ["claude", "simulacao"] as const;
+export const resultadosAnaliseIa = ["aprovado_automatico", "pendente", "erro"] as const;
+export const analisesIa = mysqlTable("analises_ia", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  coletaId: int("coleta_id").notNull(),
+  /** "claude": API do Claude com visão; "simulacao": modo demonstração, sem chave de API (resultado determinístico). */
+  modo: mysqlEnum("modo", modosAnaliseIa).notNull(),
+  modelo: varchar("modelo", { length: 80 }),
+  tipoIdentificado: mysqlEnum("tipo_identificado", tiposResiduo),
+  pesoLidoGramas: int("peso_lido_gramas"),
+  corSacoIdentificada: varchar("cor_saco_identificada", { length: 40 }),
+  corSacoEsperada: varchar("cor_saco_esperada", { length: 40 }),
+  /** 0 a 100. */
+  confianca: int("confianca"),
+  resultado: mysqlEnum("resultado", resultadosAnaliseIa).notNull(),
+  /** Lista (JSON) dos motivos que levaram o descarte para a avaliação humana; vazia quando aprovado. */
+  motivos: text("motivos").notNull(),
+  descricao: text("descricao"),
+  duracaoMs: int("duracao_ms"),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [
+  index("analises_ia_coleta_idx").on(table.coletaId),
+  index("analises_ia_condominio_idx").on(table.condominioId, table.criadoEm),
+]);
+
+/** Adesivo com QR Code entregue ao morador: um por saco, uso único. O QR traz só o código, nunca dados pessoais. */
+export const statusAdesivo = ["disponivel", "utilizado", "cancelado"] as const;
+export const adesivos = mysqlTable("adesivos", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  moradorId: int("morador_id").notNull(),
+  /** Código impresso embaixo do QR (ex.: EC-7K3F-9Q2M), para digitar quando o QR não puder ser lido. */
+  codigo: varchar("codigo", { length: 20 }).notNull(),
+  status: mysqlEnum("status", statusAdesivo).default("disponivel").notNull(),
+  pedidoId: int("pedido_id"),
+  coletaId: int("coleta_id"),
+  utilizadoEm: dataHora("utilizado_em"),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [
+  uniqueIndex("adesivos_codigo_unique").on(table.codigo),
+  index("adesivos_morador_idx").on(table.moradorId, table.status),
+]);
+
+/** Pedido de adesivos feito pelo morador (ou entrega feita direto pela administração) e o registro da entrega. */
+export const statusPedidoAdesivos = ["solicitado", "entregue", "recusado"] as const;
+export const pedidosAdesivos = mysqlTable("pedidos_adesivos", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  moradorId: int("morador_id").notNull(),
+  quantidadeSolicitada: int("quantidade_solicitada").notNull(),
+  quantidadeEntregue: int("quantidade_entregue"),
+  status: mysqlEnum("status", statusPedidoAdesivos).default("solicitado").notNull(),
+  observacao: varchar("observacao", { length: 300 }),
+  solicitadoPorId: int("solicitado_por_id").notNull(),
+  entreguePorId: int("entregue_por_id"),
+  entregueEm: dataHora("entregue_em"),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [
+  index("pedidos_adesivos_condominio_idx").on(table.condominioId, table.status),
+  index("pedidos_adesivos_morador_idx").on(table.moradorId),
+]);
+
+/**
+ * Medidas administrativas aplicáveis em caso de fraude, burla ou denúncia falsa: perda de pontos, suspensão das campanhas,
+ * suspensão da participação no programa (estação e resgates), advertência ou outra medida descrita pelo administrador.
+ */
+export const tiposPenalidade = ["perda_pontos", "suspensao_campanhas", "suspensao_participacao", "advertencia", "outra"] as const;
+export const unidadesDuracao = ["dias", "meses"] as const;
+/** Medidas pré-definidas pelo administrador, escolhidas na hora da auditoria. */
+export const modelosPenalidade = mysqlTable("modelos_penalidade", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  nome: varchar("nome", { length: 120 }).notNull(),
+  tipo: mysqlEnum("tipo", tiposPenalidade).notNull(),
+  pontos: int("pontos"),
+  duracaoValor: int("duracao_valor"),
+  duracaoUnidade: mysqlEnum("duracao_unidade", unidadesDuracao),
+  descricao: varchar("descricao", { length: 500 }),
+  ativo: boolean("ativo").default(true).notNull(),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+  atualizadoEm: dataHora("atualizado_em").default(agora).notNull(),
+}, (table) => [index("modelos_penalidade_condominio_idx").on(table.condominioId)]);
+
+/** Medida aplicada a um morador: fica no histórico dele com o motivo, o período e quem aplicou. */
+export const statusPenalidade = ["ativa", "encerrada", "revogada"] as const;
+export const penalidades = mysqlTable("penalidades", {
+  id: int("id").autoincrement().primaryKey(),
+  condominioId: int("condominio_id").notNull(),
+  moradorId: int("morador_id").notNull(),
+  modeloId: int("modelo_id"),
+  tipo: mysqlEnum("tipo", tiposPenalidade).notNull(),
+  nome: varchar("nome", { length: 120 }).notNull(),
+  pontos: int("pontos"),
+  inicioEm: dataHora("inicio_em").notNull(),
+  /** Sem data = medida sem prazo (perda de pontos, advertência) ou até ser revogada. */
+  fimEm: dataHora("fim_em"),
+  motivo: text("motivo").notNull(),
+  coletaId: int("coleta_id"),
+  ocorrenciaId: int("ocorrencia_id"),
+  aplicadaPorId: int("aplicada_por_id").notNull(),
+  status: mysqlEnum("status", statusPenalidade).default("ativa").notNull(),
+  revogadaPorId: int("revogada_por_id"),
+  revogadaEm: dataHora("revogada_em"),
+  motivoRevogacao: varchar("motivo_revogacao", { length: 300 }),
+  /** Quando o aviso de fim da suspensão foi enviado (rotina automática). */
+  avisoEncerramentoEm: dataHora("aviso_encerramento_em"),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [
+  index("penalidades_morador_idx").on(table.moradorId, table.status),
+  index("penalidades_condominio_idx").on(table.condominioId, table.criadoEm),
+]);
+
 export type Usuario = typeof usuarios.$inferSelect;
 export type NovoUsuario = typeof usuarios.$inferInsert;
 export type PerfilAcesso = typeof perfisAcesso.$inferSelect;
@@ -555,3 +725,29 @@ export type Pessoa = typeof pessoas.$inferSelect;
 export type EstacaoPesagem = typeof estacoesPesagem.$inferSelect;
 export type MovimentacaoPontos = typeof movimentacoesPontos.$inferSelect;
 export type RegraResiduo = typeof regrasResiduo.$inferSelect;
+export type AnaliseIa = typeof analisesIa.$inferSelect;
+export type Adesivo = typeof adesivos.$inferSelect;
+export type Penalidade = typeof penalidades.$inferSelect;
+export type Campanha = typeof campanhas.$inferSelect;
+
+const blobMedio = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "mediumblob" });
+
+/** Arquivos enviados (fotos do visor, certificados, relatórios) guardados no próprio MySQL, para não se perderem quando o servidor reinicia. */
+export const arquivos = mysqlTable("arquivos", {
+  id: int("id").autoincrement().primaryKey(),
+  chave: varchar("chave", { length: 255 }).notNull(),
+  tipoConteudo: varchar("tipo_conteudo", { length: 100 }).notNull(),
+  tamanho: int("tamanho").notNull(),
+  dados: blobMedio("dados").notNull(),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [uniqueIndex("arquivos_chave_unique").on(table.chave)]);
+
+/** Sessões encerradas pelo "Sair" (identificador da sessão no cookie): o cookie daquele aparelho deixa de valer, os outros continuam. */
+export const sessoesEncerradas = mysqlTable("sessoes_encerradas", {
+  id: int("id").autoincrement().primaryKey(),
+  sessaoId: varchar("sessao_id", { length: 64 }).notNull(),
+  usuarioId: int("usuario_id").notNull(),
+  /** Depois disso o cookie já expirou sozinho e a linha pode ser apagada. */
+  expiraEm: dataHora("expira_em").notNull(),
+  criadoEm: dataHora("criado_em").default(agora).notNull(),
+}, (table) => [uniqueIndex("sessoes_encerradas_sessao_unique").on(table.sessaoId)]);

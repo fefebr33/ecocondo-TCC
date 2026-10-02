@@ -23,9 +23,15 @@ export const MAXIMO_ITENS_POR_DESCARTE = 5;
 export const PESO_REVISAO_OBRIGATORIA_GRAMAS = 10_000;
 /** Validade do código temporário que o morador gera no app para se identificar no tablet. */
 export const VALIDADE_CODIGO_ESTACAO_MINUTOS = 5;
-/** Tentativas de código errado aceitas por tablet antes de bloqueá-lo por alguns minutos. */
-export const LIMITE_TENTATIVAS_CODIGO = 8;
-export const BLOQUEIO_TENTATIVAS_MINUTOS = 15;
+/** Códigos errados seguidos aceitos por tablet sem espera; a partir daí, cada novo erro dobra a espera antes da próxima tentativa. */
+export const LIMITE_TENTATIVAS_CODIGO = 5;
+/** Espera depois do primeiro erro além do limite, e o teto: nunca mais que 2 minutos, para ninguém travar o tablet do prédio. */
+export const ESPERA_INICIAL_SEGUNDOS = 15;
+export const ESPERA_MAXIMA_SEGUNDOS = 120;
+/** Erros mais antigos que isto são esquecidos (a contagem recomeça). */
+export const JANELA_TENTATIVAS_MINUTOS = 15;
+/** A partir de tantos erros seguidos, o administrador recebe um aviso de falha operacional (uma vez). */
+export const ERROS_PARA_AVISAR_ADMINISTRADOR = 10;
 
 type RegistroAnterior = { pesoGramas: number | null; concluidaEm: Date | null; lote?: string | null; id?: number };
 
@@ -96,31 +102,53 @@ export function gerarCodigoEstacao() {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
-/** Controle de tentativas erradas por tablet, em memória: após várias tentativas, o tablet fica bloqueado por alguns minutos. */
-const tentativas = new Map<number, { erros: number; primeiraEm: number; bloqueadoAte: number }>();
+/**
+ * Controle de códigos errados por tablet, em memória. Em vez de travar o tablet por 15 minutos (o que deixava qualquer pessoa
+ * brincando no tablet impedir os descartes do prédio), cada erro além do limite impõe uma espera crescente (15 s, 30 s, 60 s,
+ * até 2 min). Chutar os 6 números continua inviável, e o morador de verdade espera no máximo 2 minutos.
+ */
+const tentativas = new Map<number, { erros: number; ultimaEm: number }>();
+
+function esperaMs(erros: number) {
+  if (erros < LIMITE_TENTATIVAS_CODIGO) return 0;
+  return Math.min(ESPERA_INICIAL_SEGUNDOS * 2 ** (erros - LIMITE_TENTATIVAS_CODIGO), ESPERA_MAXIMA_SEGUNDOS) * 1000;
+}
+
+function registroAtual(estacaoId: number, agora: number) {
+  const registro = tentativas.get(estacaoId);
+  if (registro && agora - registro.ultimaEm > JANELA_TENTATIVAS_MINUTOS * 60_000) {
+    tentativas.delete(estacaoId);
+    return null;
+  }
+  return registro ?? null;
+}
+
+/** Quanto falta (ms) para o tablet aceitar outro código; 0 quando está liberado. */
+export function esperaRestanteMs(estacaoId: number, agora = Date.now()) {
+  const registro = registroAtual(estacaoId, agora);
+  if (!registro) return 0;
+  return Math.max(0, registro.ultimaEm + esperaMs(registro.erros) - agora);
+}
 
 export function verificarBloqueioTentativas(estacaoId: number, agora = Date.now()) {
-  const registro = tentativas.get(estacaoId);
-  if (registro && registro.bloqueadoAte > agora) {
-    throw new LimiteAntifraudeExcedidoError("Muitos códigos errados neste tablet. Aguarde alguns minutos e gere um novo código no aplicativo.");
+  const restante = esperaRestanteMs(estacaoId, agora);
+  if (restante > 0) {
+    throw new LimiteAntifraudeExcedidoError(`Muitos códigos errados neste tablet. Espere ${Math.ceil(restante / 1000)} segundos e tente de novo.`);
   }
 }
 
-/** Estações com o tablet bloqueado agora por excesso de códigos errados (alerta no painel do administrador). */
+/** Estações com o tablet em espera agora por excesso de códigos errados (alerta no painel do administrador). */
 export function estacoesBloqueadas(agora = Date.now()) {
-  return Array.from(tentativas.entries()).filter(([, registro]) => registro.bloqueadoAte > agora).map(([estacaoId]) => estacaoId);
+  return Array.from(tentativas.keys()).filter((estacaoId) => esperaRestanteMs(estacaoId, agora) > 0);
 }
 
-/** Registra um código errado; devolve true quando esta tentativa acabou de bloquear o tablet. */
+/** Registra um código errado; devolve true quando este erro acabou de atingir o número que avisa o administrador. */
 export function registrarTentativaErrada(estacaoId: number, agora = Date.now()) {
-  const janela = BLOQUEIO_TENTATIVAS_MINUTOS * 60_000;
-  const atual = tentativas.get(estacaoId);
-  const registro = !atual || agora - atual.primeiraEm > janela ? { erros: 0, primeiraEm: agora, bloqueadoAte: 0 } : atual;
+  const registro = registroAtual(estacaoId, agora) ?? { erros: 0, ultimaEm: agora };
   registro.erros += 1;
-  const bloqueouAgora = registro.erros >= LIMITE_TENTATIVAS_CODIGO && registro.bloqueadoAte <= agora;
-  if (registro.erros >= LIMITE_TENTATIVAS_CODIGO) registro.bloqueadoAte = agora + janela;
+  registro.ultimaEm = agora;
   tentativas.set(estacaoId, registro);
-  return bloqueouAgora;
+  return registro.erros === ERROS_PARA_AVISAR_ADMINISTRADOR;
 }
 
 export function limparTentativas(estacaoId: number) {

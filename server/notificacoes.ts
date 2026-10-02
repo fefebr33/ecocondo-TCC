@@ -13,7 +13,7 @@ type DadosNotificacao = {
 };
 
 /** Tipos que sempre chegam, qualquer que seja a configuração (a pessoa precisa saber: afetam pontos ou são casos graves). */
-export const NOTIFICACOES_OBRIGATORIAS: TipoNotificacao[] = ["coleta_reprovada", "pontos_estornados", "auditoria_aberta", "auditoria_concluida", "pontos_zerados", "pontos_ajustados", "falha_operacional", "cadastro_alterado"];
+export const NOTIFICACOES_OBRIGATORIAS: TipoNotificacao[] = ["coleta_reprovada", "pontos_estornados", "auditoria_aberta", "auditoria_concluida", "pontos_zerados", "pontos_ajustados", "falha_operacional", "cadastro_alterado", "descarte_revertido", "penalidade_aplicada", "penalidade_encerrada", "aviso_geral"];
 
 /** O perfil do destinatário recebe este tipo de notificação neste condomínio? (O administrador configura em Configurações.) */
 async function perfilRecebe(db: any, destinatarioId: number, condominioId: number, tipo: TipoNotificacao) {
@@ -41,6 +41,15 @@ export async function notificarAdministradores(db: any, dados: DadosNotificacao,
     if (exceto && administrador.usuarioId === exceto) continue;
     await notificarUsuario(db, administrador.usuarioId, dados);
   }
+}
+
+/**
+ * Aviso para todos do condomínio (uma linha só, sem destinatário): aparece para cada pessoa do público escolhido, e a leitura
+ * de cada um fica em notificacoes_lidas (assim a administração vê quem visualizou).
+ */
+export async function notificarTodos(db: any, dados: DadosNotificacao & { publico?: "todos" | "moradores" | "administradores"; categoria?: string | null; importante?: boolean; autorId?: number | null }) {
+  const [inserida] = await db.insert(notificacoes).values({ condominioId: dados.condominioId, destinatarioId: null, coletaId: dados.coletaId ?? null, tipo: dados.tipo, titulo: dados.titulo.slice(0, 255), mensagem: dados.mensagem, publico: dados.publico ?? "todos", categoria: dados.categoria ?? null, importante: dados.importante ?? false, autorId: dados.autorId ?? null }).$returningId();
+  return inserida.id as number;
 }
 
 /**

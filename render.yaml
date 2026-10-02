@@ -21,6 +21,7 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
-      # "ativado" deixa o botão de entrar sem senha (bom para a apresentação); troque para "desativado" no painel quando não estiver usando.
+      # Desativado: sem o botão de entrar sem senha, que deixaria qualquer visitante entrar como administrador.
+      # O login com e-mail e senha basta para a banca; se quiser o botão, troque para "ativado" no painel só durante a apresentação.
       - key: LOGIN_DEMONSTRACAO
-        value: ativado
+        value: desativado
