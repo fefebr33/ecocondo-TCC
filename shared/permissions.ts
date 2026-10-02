@@ -4,6 +4,7 @@ export type EcoRole = (typeof ecoRoles)[number];
 const routePermissions: Record<string, EcoRole[]> = {
   "/dashboard": ["administrador", "morador"],
   "/descartes": ["administrador", "morador"],
+  "/adesivos": ["administrador", "morador"],
   "/moradores": ["administrador"],
   "/pessoas": ["administrador"],
   "/relatorios": ["administrador"],
@@ -17,7 +18,6 @@ const routePermissions: Record<string, EcoRole[]> = {
   "/configuracoes": ["administrador"],
   "/manual": ["administrador", "morador"],
   "/moradores/painel": ["administrador"],
-  "/adesivos": ["administrador", "morador"],
   "/leitura": ["administrador"],
 };
 

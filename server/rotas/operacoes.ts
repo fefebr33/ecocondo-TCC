@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, estacoesPesagem, statusColeta, pessoas, moradores, statusMorador, usuarios, tiposResiduo } from "../../drizzle/schema";
+import { adesivos, analisesIa, coletas, estacoesPesagem, logsAuditoria, ocorrencias, penalidades, statusColeta, pessoas, moradores, statusMorador, usuarios, tiposResiduo } from "../../drizzle/schema";
 import type { Coleta } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { residuoNaFrase } from "@shared/rotulos";
@@ -163,13 +163,39 @@ export const operationsRouter = router({
       const [morador] = coleta.moradorId ? await db.select({ nome: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento }).from(moradores).where(eq(moradores.id, coleta.moradorId)).limit(1) : [];
       const origens = await origensDosRegistros(ctx.eco.condominio.id, mesmoLote);
       const regras = await regrasDoCondominio(ctx.eco.condominio.id);
+      const ids = mesmoLote.map((registro) => registro.id);
+      const administrador = ctx.eco.perfil.papel === "administrador";
+      // Tudo o que está ligado ao descarte: adesivo, estação, análise da IA, histórico de alterações, ocorrências e medidas.
+      const adesivosLote = await db.select({ id: adesivos.id, codigo: adesivos.codigo }).from(adesivos).where(inArray(adesivos.coletaId, ids));
+      const analises = await db.select().from(analisesIa).where(inArray(analisesIa.coletaId, ids)).orderBy(desc(analisesIa.id));
+      const [estacao] = coleta.estacaoId ? await db.select({ nome: estacoesPesagem.nome, local: estacoesPesagem.local }).from(estacoesPesagem).where(eq(estacoesPesagem.id, coleta.estacaoId)).limit(1) : [];
+      const historico = await db.select({ id: logsAuditoria.id, entidadeId: logsAuditoria.entidadeId, acao: logsAuditoria.acao, resumo: logsAuditoria.resumo, motivo: logsAuditoria.motivo, criadoEm: logsAuditoria.criadoEm, autor: usuarios.nome, autorId: logsAuditoria.autorId })
+        .from(logsAuditoria).leftJoin(usuarios, eq(usuarios.id, logsAuditoria.autorId))
+        .where(and(eq(logsAuditoria.condominioId, ctx.eco.condominio.id), eq(logsAuditoria.tipoEntidade, "coleta"), inArray(logsAuditoria.entidadeId, ids)))
+        .orderBy(asc(logsAuditoria.criadoEm), asc(logsAuditoria.id));
+      const relacionadas = administrador ? await db.select({ id: ocorrencias.id, coletaId: ocorrencias.coletaId, status: ocorrencias.status, categoria: ocorrencias.categoria, conclusao: ocorrencias.conclusao, descricao: ocorrencias.descricao, criadoEm: ocorrencias.criadoEm }).from(ocorrencias).where(and(eq(ocorrencias.condominioId, ctx.eco.condominio.id), inArray(ocorrencias.coletaId, ids))) : [];
+      const medidas = await db.select({ id: penalidades.id, coletaId: penalidades.coletaId, nome: penalidades.nome, tipo: penalidades.tipo, status: penalidades.status, inicioEm: penalidades.inicioEm, fimEm: penalidades.fimEm, motivo: penalidades.motivo }).from(penalidades).where(inArray(penalidades.coletaId, ids));
+      const aprovadores = await db.select({ id: usuarios.id, nome: usuarios.nome }).from(usuarios).where(inArray(usuarios.id, mesmoLote.map((registro) => registro.aprovacaoPesoPorId ?? 0)));
       return {
         id: coleta.id,
         lote: coleta.lote,
         morador: morador ?? null,
+        estacao: estacao ?? null,
         itens: mesmoLote.map((registro) => {
           const situacao = situacaoDescarte(registro);
-          return { ...registro, situacao, origin: origens(registro), pontosPrevistos: situacao === "pendente" || situacao === "auditoria" ? milesimosPrevistos(registro, regras) / 1000 : registro.pontosConcedidos };
+          const analise = analises.find((item) => item.coletaId === registro.id);
+          return {
+            ...registro,
+            situacao,
+            origin: origens(registro),
+            pontosPrevistos: situacao === "pendente" || situacao === "auditoria" ? milesimosPrevistos(registro, regras) / 1000 : registro.pontosConcedidos,
+            adesivo: adesivosLote.find((item) => item.id === registro.adesivoId)?.codigo ?? null,
+            decididoPor: registro.aprovacaoPesoPorId ? aprovadores.find((item) => item.id === registro.aprovacaoPesoPorId)?.nome ?? null : null,
+            analiseIa: analise ? { ...analise, motivos: JSON.parse(analise.motivos) as string[] } : null,
+            historico: historico.filter((item) => item.entidadeId === registro.id).map((item) => ({ ...item, autor: administrador || item.autorId === ctx.user.id ? item.autor ?? "Sistema" : item.autor?.startsWith("EcoCondo IA") ? item.autor : "Administração", autorId: undefined })),
+            ocorrencias: relacionadas.filter((item) => item.coletaId === registro.id),
+            medidas: medidas.filter((item) => item.coletaId === registro.id),
+          };
         }),
       };
     }),
@@ -502,7 +528,7 @@ export async function abrirAuditoriaColeta(ctx: ContextoAdministrador, coleta: C
 }
 
 /** Tira os pontos de um descarte aprovado e o devolve para a fila de aprovação (nova avaliação por um responsável). */
-async function reverterParaNovaAvaliacao(ctx: ContextoAdministrador, coleta: Coleta, motivo: string) {
+export async function reverterParaNovaAvaliacao(ctx: ContextoAdministrador, coleta: Coleta, motivo: string) {
   const db = await getDb();
   const agora = new Date();
   const contabilizado = jaContabilizado(coleta);

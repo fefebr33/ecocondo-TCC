@@ -44,6 +44,15 @@ export async function notificarAdministradores(db: any, dados: DadosNotificacao,
 }
 
 /**
+ * Aviso para todos do condomínio (uma linha só, sem destinatário): aparece para cada pessoa do público escolhido, e a leitura
+ * de cada um fica em notificacoes_lidas (assim a administração vê quem visualizou).
+ */
+export async function notificarTodos(db: any, dados: DadosNotificacao & { publico?: "todos" | "moradores" | "administradores"; categoria?: string | null; importante?: boolean; autorId?: number | null }) {
+  const [inserida] = await db.insert(notificacoes).values({ condominioId: dados.condominioId, destinatarioId: null, coletaId: dados.coletaId ?? null, tipo: dados.tipo, titulo: dados.titulo.slice(0, 255), mensagem: dados.mensagem, publico: dados.publico ?? "todos", categoria: dados.categoria ?? null, importante: dados.importante ?? false, autorId: dados.autorId ?? null }).$returningId();
+  return inserida.id as number;
+}
+
+/**
  * Falha operacional (rotina agendada que quebrou, tablet bloqueado etc.): avisa os administradores de todos os condomínios.
  * Nunca lança erro, para não esconder a falha original.
  */

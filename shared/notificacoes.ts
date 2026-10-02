@@ -117,3 +117,8 @@ export function destinoDaNotificacao(notificacao: { tipo: string; coletaId: numb
   const rota = destino.href.split(/[?#]/)[0];
   return canAccessRoute(papel, rota) ? destino : null;
 }
+
+/** Assuntos dos avisos gerais enviados pela administração. */
+export const categoriasAviso = ["geral", "regras", "manutencao", "coleta", "evento", "seguranca"] as const;
+export const rotuloCategoriaAviso: Record<(typeof categoriasAviso)[number], string> = { geral: "Aviso geral", regras: "Regras do programa", manutencao: "Manutenção", coleta: "Coleta e descarte", evento: "Evento", seguranca: "Segurança" };
+export const rotuloPublicoAviso: Record<"todos" | "moradores" | "administradores", string> = { todos: "Todos", moradores: "Só moradores", administradores: "Só administradores" };
