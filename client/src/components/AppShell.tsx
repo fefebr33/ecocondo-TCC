@@ -29,6 +29,8 @@ import {
   Trophy,
   UsersRound,
   X,
+  QrCode,
+  ScanLine,
 } from "lucide-react";
 import { FormEvent, ReactNode, useState } from "react";
 import { Link, Redirect, useLocation } from "wouter";
@@ -65,6 +67,18 @@ const navigation: NavItem[] = [
     label: "Descartes",
     icon: Recycle,
     roles: ["administrador", "morador"],
+  },
+  {
+    href: "/adesivos",
+    label: "Adesivos QR",
+    icon: QrCode,
+    roles: ["administrador", "morador"],
+  },
+  {
+    href: "/leitura",
+    label: "Ler QR de um saco",
+    icon: ScanLine,
+    roles: ["administrador"],
   },
   {
     href: "/moradores",
@@ -122,7 +136,7 @@ const navigation: NavItem[] = [
   },
   {
     href: "/comunidade",
-    label: "Campanhas e QR do guia",
+    label: "Campanhas e feedback",
     icon: CalendarDays,
     roles: ["administrador", "morador"],
   },

@@ -1,3 +1,4 @@
+import { useAncora } from "@/hooks/useAncora";
 import PageIntro from "@/components/PageIntro";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export default function Community() {
   const guias = trpc.guias.listar.useQuery();
   const campaigns = trpc.campanhas.listar.useQuery();
   const feedback = trpc.avaliacoes.listar.useQuery();
+  useAncora(!campaigns.isLoading && !feedback.isLoading);
   const [qrData, setQrData] = useState("");
   const [campaign, setCampaign] = useState({
     title: "Semana do plástico limpo",
@@ -47,6 +49,7 @@ export default function Community() {
     endDate: dateValue(14),
     status: "planejada" as "planejada" | "ativa" | "encerrada",
   });
+  const [editandoId, setEditandoId] = useState<number | null>(null);
   const [feedbackForm, setFeedbackForm] = useState({
     rating: "5",
     message: "",
@@ -82,6 +85,14 @@ export default function Community() {
     },
     onError: error => toast.error(error.message),
   });
+  const updateCampaign = trpc.campanhas.atualizar.useMutation({
+    onSuccess: () => {
+      toast.success("Campanha alterada; os participantes foram avisados.");
+      setEditandoId(null);
+      refresh();
+    },
+    onError: error => toast.error(error.message),
+  });
   const joinCampaign = trpc.campanhas.participar.useMutation({
     onSuccess: () => {
       toast.success("Participação confirmada.");
@@ -106,12 +117,32 @@ export default function Community() {
   });
   const onCampaignSubmit = (event: FormEvent) => {
     event.preventDefault();
-    createCampaign.mutate({
-      ...campaign,
+    const datas = {
       startDate: new Date(`${campaign.startDate}T00:00:00`),
       endDate: new Date(`${campaign.endDate}T23:59:59`),
-    });
+    };
+    if (editandoId) {
+      const { status: _status, ...resto } = campaign;
+      updateCampaign.mutate({ ...resto, ...datas, id: editandoId });
+      return;
+    }
+    createCampaign.mutate({ ...campaign, ...datas });
   };
+  type CampanhaDaLista = NonNullable<typeof campaigns.data>[number];
+  function editar(item: CampanhaDaLista) {
+    setEditandoId(item.id);
+    setCampaign({
+      title: item.titulo,
+      description: item.descricao,
+      targetDescription: item.descricaoMeta,
+      startDate: new Date(item.dataInicio).toISOString().slice(0, 10),
+      endDate: new Date(item.dataFim).toISOString().slice(0, 10),
+      status: item.status === "pausada" ? "ativa" : item.status,
+    });
+    document.getElementById("campanhas")?.scrollIntoView({ behavior: "smooth" });
+  }
+  const contagem = (status: string) =>
+    campaigns.data?.filter(item => item.status === status).length ?? 0;
   const onFeedbackSubmit = (event: FormEvent) => {
     event.preventDefault();
     sendFeedback.mutate({
@@ -127,9 +158,27 @@ export default function Community() {
     <div>
       <PageIntro
         eyebrow="Comunidade e educação"
-        title="Campanhas e QR do guia"
-        description="QR Code do guia para fixar nas lixeiras, campanhas de participação e feedback dos moradores."
+        title="Campanhas e feedback"
+        description="Campanhas de participação (com indicadores, pausa e avisos automáticos), QR Code do guia para fixar nas lixeiras e feedback dos moradores."
       />
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          ["Ativas", contagem("ativa"), "text-[#0a7048]"],
+          ["Pausadas", contagem("pausada"), "text-[#7a4d0a]"],
+          ["Planejadas", contagem("planejada"), "text-[#1f6fd1]"],
+          ["Encerradas", contagem("encerrada"), "text-muted-foreground"],
+        ].map(([rotulo, valor, cor]) => (
+          <div
+            key={rotulo as string}
+            className="rounded-2xl border border-[#e1ebe5] bg-white p-4"
+          >
+            <p className="text-[11px] font-bold tracking-[.08em] text-muted-foreground uppercase">
+              Campanhas {String(rotulo).toLowerCase()}
+            </p>
+            <p className={`mt-1 text-3xl font-bold ${cor}`}>{valor}</p>
+          </div>
+        ))}
+      </div>
       <section
         aria-label="QR Code do guia de descarte"
         className="flex flex-col gap-5 rounded-[24px] border border-[#dce8e0] bg-[#103f2e] p-5 text-white shadow-[0_16px_34px_-28px_rgba(4,66,42,.45)] sm:flex-row sm:items-center sm:p-6"
@@ -217,9 +266,16 @@ export default function Community() {
           </div>
           {isAdmin && (
             <form
+              id="campanhas"
               onSubmit={onCampaignSubmit}
-              className="mt-5 grid gap-3 rounded-2xl bg-[#f6faf7] p-4"
+              className="mt-5 grid scroll-mt-24 gap-3 rounded-2xl bg-[#f6faf7] p-4"
             >
+              {editandoId && (
+                <p className="text-sm font-semibold text-[#7a4d0a]">
+                  Editando a campanha nº {editandoId} (os participantes serão
+                  avisados da alteração)
+                </p>
+              )}
               <Input
                 aria-label="Título da campanha"
                 value={campaign.title}
@@ -267,6 +323,7 @@ export default function Community() {
                   required
                 />
               </div>
+              {!editandoId && (
               <select
                 aria-label="Status da campanha"
                 value={campaign.status}
@@ -282,55 +339,42 @@ export default function Community() {
                 <option value="ativa">Ativa</option>
                 <option value="encerrada">Encerrada</option>
               </select>
-              <Button
-                type="submit"
-                disabled={createCampaign.isPending}
-                className="rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]"
-              >
-                Criar campanha
-              </Button>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  disabled={createCampaign.isPending || updateCampaign.isPending}
+                  className="flex-1 rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]"
+                >
+                  {editandoId ? "Salvar alterações" : "Criar campanha"}
+                </Button>
+                {editandoId && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setEditandoId(null)}
+                  >
+                    Cancelar
+                  </Button>
+                )}
+              </div>
             </form>
           )}
           <div className="mt-5 grid gap-3">
             {campaigns.data?.length ? (
               campaigns.data.map(item => (
-                <div
+                <CartaoCampanha
                   key={item.id}
-                  className="rounded-2xl border border-[#e2ebe5] p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{item.titulo}</p>
-                      <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                        {item.descricao}
-                      </p>
-                    </div>
-                    <Badge className="border-0 bg-[#e8f4ed] text-[#0a7048] hover:bg-[#e8f4ed]">
-                      {item.status}
-                    </Badge>
-                  </div>
-                  <p className="mt-3 text-xs font-semibold text-[#0f7350]">
-                    Meta: {item.descricaoMeta}
-                  </p>
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      {formatDate(item.dataInicio)} a {formatDate(item.dataFim)}{" "}
-                      · {item.participantCount} participante(s)
-                    </span>
-                    {isResident && item.status === "ativa" && (
-                      <Button
-                        size="sm"
-                        disabled={item.joined || joinCampaign.isPending}
-                        onClick={() =>
-                          joinCampaign.mutate({ campaignId: item.id })
-                        }
-                        className="rounded-xl bg-[#0f7350] text-white"
-                      >
-                        {item.joined ? "Participando" : "Participar"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                  campanha={item}
+                  isAdmin={isAdmin}
+                  isResident={isResident}
+                  participando={joinCampaign.isPending}
+                  onParticipar={() =>
+                    joinCampaign.mutate({ campaignId: item.id })
+                  }
+                  onEditar={() => editar(item)}
+                  onAlterado={refresh}
+                />
               ))
             ) : (
               <p className="rounded-2xl bg-[#f6faf7] p-5 text-sm text-muted-foreground">
@@ -339,7 +383,7 @@ export default function Community() {
             )}
           </div>
         </article>
-        <article className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
+        <article id="feedback" className="scroll-mt-24 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]">
               <MessageSquareText className="h-5 w-5" />
@@ -465,6 +509,257 @@ export default function Community() {
           </div>
         </article>
       </section>
+    </div>
+  );
+}
+
+const rotuloStatus = {
+  planejada: "Planejada",
+  ativa: "Ativa",
+  pausada: "Pausada",
+  encerrada: "Encerrada",
+} as const;
+const estiloStatus = {
+  planejada: "border-0 bg-[#e8f0fb] text-[#1f6fd1] hover:bg-[#e8f0fb]",
+  ativa: "border-0 bg-[#e8f4ed] text-[#0a7048] hover:bg-[#e8f4ed]",
+  pausada: "border-0 bg-[#fff3df] text-[#7a4d0a] hover:bg-[#fff3df]",
+  encerrada: "border-0 bg-[#f0f4f2] text-muted-foreground hover:bg-[#f0f4f2]",
+} as const;
+
+type Campanha = {
+  id: number;
+  titulo: string;
+  descricao: string;
+  descricaoMeta: string;
+  status: keyof typeof rotuloStatus;
+  dataInicio: Date;
+  dataFim: Date;
+  pausadaAte: Date | null;
+  motivoPausa: string | null;
+  participantCount: number;
+  joined: boolean;
+  indicadores: {
+    participantes: number;
+    adesao: number;
+    andamento: number;
+    diasRestantes: number;
+    kgReciclados: number;
+    descartes: number;
+  };
+};
+
+/** Uma campanha com os indicadores e, para a administração, editar, pausar, retomar, encerrar e excluir. */
+function CartaoCampanha({
+  campanha: item,
+  isAdmin,
+  isResident,
+  participando,
+  onParticipar,
+  onEditar,
+  onAlterado,
+}: {
+  campanha: Campanha;
+  isAdmin: boolean;
+  isResident: boolean;
+  participando: boolean;
+  onParticipar: () => void;
+  onEditar: () => void;
+  onAlterado: () => void;
+}) {
+  const [acao, setAcao] = useState<"pausar" | "excluir" | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const [ate, setAte] = useState("");
+  const aoTerminar = (mensagem: string) => ({
+    onSuccess: () => {
+      toast.success(mensagem);
+      setAcao(null);
+      setMotivo("");
+      setAte("");
+      onAlterado();
+    },
+    onError: (error: { message: string }) => toast.error(error.message),
+  });
+  const pausar = trpc.campanhas.pausar.useMutation(
+    aoTerminar("Campanha pausada; os participantes foram avisados.")
+  );
+  const retomar = trpc.campanhas.retomar.useMutation(
+    aoTerminar("Campanha retomada.")
+  );
+  const encerrar = trpc.campanhas.encerrar.useMutation(
+    aoTerminar("Campanha encerrada; o resultado foi enviado aos participantes.")
+  );
+  const excluir = trpc.campanhas.excluir.useMutation(
+    aoTerminar("Campanha excluída.")
+  );
+  const indicadores = item.indicadores;
+  return (
+    <div className="rounded-2xl border border-[#e2ebe5] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold">{item.titulo}</p>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">
+            {item.descricao}
+          </p>
+        </div>
+        <Badge className={estiloStatus[item.status]}>
+          {rotuloStatus[item.status]}
+        </Badge>
+      </div>
+      <p className="mt-3 text-xs font-semibold text-[#0f7350]">
+        Meta: {item.descricaoMeta}
+      </p>
+      {item.status === "pausada" && (
+        <p className="mt-2 rounded-xl bg-[#fff8ec] px-3 py-2 text-xs text-[#7a4d0a]">
+          Pausada
+          {item.pausadaAte ? ` até ${formatDate(item.pausadaAte)}` : ""}
+          {item.motivoPausa ? `: ${item.motivoPausa}` : ""}
+        </p>
+      )}
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <Indicador rotulo="Participantes" valor={`${indicadores.participantes} (${indicadores.adesao}%)`} />
+        <Indicador
+          rotulo="Tempo restante"
+          valor={
+            item.status === "encerrada"
+              ? "Encerrada"
+              : `${indicadores.diasRestantes} dia(s)`
+          }
+        />
+        <Indicador rotulo="Reciclado" valor={`${indicadores.kgReciclados.toLocaleString("pt-BR")} kg`} />
+        <Indicador rotulo="Descartes" valor={String(indicadores.descartes)} />
+      </div>
+      <div
+        className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#edf2ef]"
+        role="progressbar"
+        aria-label="Andamento do prazo da campanha"
+        aria-valuenow={indicadores.andamento}
+      >
+        <div
+          className="h-full rounded-full bg-[#0f7350]"
+          style={{ width: `${indicadores.andamento}%` }}
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          {formatDate(item.dataInicio)} a {formatDate(item.dataFim)}
+        </span>
+        {isResident && item.status === "ativa" && (
+          <Button
+            size="sm"
+            disabled={item.joined || participando}
+            onClick={onParticipar}
+            className="rounded-xl bg-[#0f7350] text-white"
+          >
+            {item.joined ? "Participando" : "Participar"}
+          </Button>
+        )}
+        {isAdmin && (
+          <span className="flex flex-wrap gap-1.5">
+            {item.status !== "encerrada" && (
+              <Button size="sm" variant="ghost" onClick={onEditar}>
+                Editar
+              </Button>
+            )}
+            {item.status === "ativa" && (
+              <Button size="sm" variant="outline" onClick={() => setAcao("pausar")}>
+                Pausar
+              </Button>
+            )}
+            {item.status === "pausada" && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={retomar.isPending}
+                onClick={() => retomar.mutate({ id: item.id })}
+              >
+                Retomar
+              </Button>
+            )}
+            {(item.status === "ativa" || item.status === "pausada") && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={encerrar.isPending}
+                onClick={() => {
+                  if (window.confirm(`Encerrar agora a campanha "${item.titulo}"?`))
+                    encerrar.mutate({ id: item.id });
+                }}
+              >
+                Encerrar
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAcao("excluir")}
+              className="border-[#e3b6b0] text-[#b3382c]"
+            >
+              Excluir
+            </Button>
+          </span>
+        )}
+      </div>
+      {acao && (
+        <form
+          onSubmit={event => {
+            event.preventDefault();
+            if (acao === "pausar")
+              pausar.mutate({
+                id: item.id,
+                motivo,
+                ate: ate ? new Date(`${ate}T00:00:00`) : null,
+              });
+            else excluir.mutate({ id: item.id, motivo });
+          }}
+          className="mt-3 grid gap-2 rounded-xl bg-[#f6faf7] p-3 sm:grid-cols-[1fr_auto_auto]"
+        >
+          <Input
+            required
+            minLength={5}
+            value={motivo}
+            onChange={event => setMotivo(event.target.value)}
+            placeholder={
+              acao === "pausar"
+                ? "Motivo da pausa (vai para os participantes)"
+                : "Motivo da exclusão"
+            }
+            className="h-9 rounded-lg bg-white"
+          />
+          {acao === "pausar" && (
+            <Input
+              type="date"
+              aria-label="Retomar automaticamente em (opcional)"
+              title="Retomar automaticamente em (opcional)"
+              value={ate}
+              onChange={event => setAte(event.target.value)}
+              className="h-9 rounded-lg bg-white"
+            />
+          )}
+          <span className="flex gap-1.5">
+            <Button
+              size="sm"
+              disabled={pausar.isPending || excluir.isPending}
+              className="h-9 rounded-lg bg-[#0f7350] text-white"
+            >
+              {acao === "pausar" ? "Pausar" : "Excluir"}
+            </Button>
+            <Button size="sm" type="button" variant="ghost" onClick={() => setAcao(null)}>
+              Cancelar
+            </Button>
+          </span>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function Indicador({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div className="rounded-lg bg-[#f6faf7] px-2.5 py-2">
+      <p className="text-[10px] font-bold tracking-[.06em] text-muted-foreground uppercase">
+        {rotulo}
+      </p>
+      <p className="font-semibold text-foreground">{valor}</p>
     </div>
   );
 }

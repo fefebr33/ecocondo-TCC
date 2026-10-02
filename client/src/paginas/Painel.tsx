@@ -1,5 +1,6 @@
 import PageIntro from "@/components/PageIntro";
 import PainelPessoal from "@/components/PainelPessoal";
+import IndicadoresGestao, { AvisosImportantes } from "@/components/IndicadoresGestao";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
@@ -154,6 +155,7 @@ export default function Dashboard() {
             </Button>
           }
         />
+        <AvisosImportantes />
         <PainelPessoal />
         <article className={`mt-5 ${cartao}`}>
           <div className="flex items-center justify-between gap-3">
@@ -258,6 +260,7 @@ export default function Dashboard() {
         }
       />
 
+      <AvisosImportantes />
       {isAdmin && data?.alertas && data.alertas.length > 0 && (
         <section
           aria-label="Alertas administrativos"
@@ -779,6 +782,7 @@ export default function Dashboard() {
           </p>
         )}
       </section>
+      {isAdmin && data?.gestao && <IndicadoresGestao gestao={data.gestao} />}
     </div>
   );
 }
