@@ -6,12 +6,12 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerLoginRoute } from "./login";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../rotas";
-import { prepararBanco, urlDoBanco } from "../db";
+import { getDb, prepararBanco, urlDoBanco } from "../db";
+import { encerrarPenalidadesVencidas } from "../penalidades";
+import { processarCampanhas } from "../campanhas";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { runCollectionReminders, sendCollectionReminders } from "../scheduled/collectionReminders";
 import { runAnnualReport, sendAnnualReportCheck } from "../scheduled/annualReport";
-import { runRecurringCollections, sendRecurringCollectionsCheck } from "../scheduled/recurringCollections";
 import { notificarFalhaOperacional } from "../notificacoes";
 
 /** Registra a falha no log do servidor e avisa os administradores (notificação de falha operacional). */
@@ -22,8 +22,8 @@ function falhaDaRotina(rotina: string) {
   };
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -66,9 +66,7 @@ async function startServer() {
   registerStorageProxy(app);
   registerLoginRoute(app);
   app.get("/api/health", (_req, res) => res.json({ ok: true, timestamp: Date.now() }));
-  app.post("/api/scheduled/collection-reminders", sendCollectionReminders);
   app.post("/api/scheduled/annual-report", sendAnnualReportCheck);
-  app.post("/api/scheduled/recurring-collections", sendRecurringCollectionsCheck);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -95,21 +93,22 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
   });
 
-  // A cada hora, sem agendador externo: gera as coletas recorrentes ("toda terça, bloco B") com um dia de antecedência e, em seguida,
-  // cria os lembretes das coletas das próximas 24h (a ordem garante que a coleta recém-gerada já receba o lembrete).
-  const verificarColetas = () =>
-    runRecurringCollections()
-      .catch(falhaDaRotina("Coletas recorrentes"))
-      .then(() => runCollectionReminders())
-      .catch(falhaDaRotina("Lembretes e coletas atrasadas"));
-  verificarColetas();
-  setInterval(verificarColetas, HOUR_MS);
-
   // Em janeiro, gera o relatório anual consolidado.
   runAnnualReport().catch(falhaDaRotina("Relatório anual"));
   setInterval(() => {
     runAnnualReport().catch(falhaDaRotina("Relatório anual"));
   }, DAY_MS);
+
+  // De hora em hora: encerra suspensões vencidas e cuida das campanhas (começo, fim da pausa, "faltam poucos dias", encerramento).
+  const rotinaHoraria = async () => {
+    const db = await getDb();
+    await encerrarPenalidadesVencidas(db);
+    await processarCampanhas(db);
+  };
+  rotinaHoraria().catch(falhaDaRotina("Campanhas e medidas"));
+  setInterval(() => {
+    rotinaHoraria().catch(falhaDaRotina("Campanhas e medidas"));
+  }, HOUR_MS);
 }
 
 startServer().catch((error) => {

@@ -3,7 +3,8 @@ export type EcoRole = (typeof ecoRoles)[number];
 
 const routePermissions: Record<string, EcoRole[]> = {
   "/dashboard": ["administrador", "morador"],
-  "/coletas": ["administrador", "morador"],
+  "/descartes": ["administrador", "morador"],
+  "/adesivos": ["administrador", "morador"],
   "/moradores": ["administrador"],
   "/pessoas": ["administrador"],
   "/relatorios": ["administrador"],
@@ -15,6 +16,9 @@ const routePermissions: Record<string, EcoRole[]> = {
   "/ambiental": ["administrador", "morador"],
   "/comunidade": ["administrador", "morador"],
   "/configuracoes": ["administrador"],
+  "/manual": ["administrador", "morador"],
+  "/moradores/painel": ["administrador"],
+  "/leitura": ["administrador"],
 };
 
 export function canAccessRoute(role: EcoRole, route: string) {

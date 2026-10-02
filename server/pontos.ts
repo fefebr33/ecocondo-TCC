@@ -27,6 +27,9 @@ export async function movimentarPontos(tx: any, dados: {
   autorId?: number | null;
   coletaId?: number | null;
   resgateId?: number | null;
+  /** Revisão do descarte (coletas.revisao): depois de uma reversão para nova avaliação, o mesmo descarte pode pontuar de novo. */
+  revisaoColeta?: number;
+  penalidadeId?: number | null;
   exigirSaldo?: boolean;
 }) {
   if (!Number.isInteger(dados.pontos) || dados.pontos === 0) throw new Error("Movimentação de pontos precisa de um valor inteiro diferente de zero.");
@@ -47,6 +50,8 @@ export async function movimentarPontos(tx: any, dados: {
       saldoApos: saldo.pontos,
       coletaId: dados.coletaId ?? null,
       resgateId: dados.resgateId ?? null,
+      revisaoColeta: dados.revisaoColeta ?? 0,
+      penalidadeId: dados.penalidadeId ?? null,
       descricao: dados.descricao.slice(0, 255),
       autorId: dados.autorId ?? null,
     });

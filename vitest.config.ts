@@ -14,6 +14,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Os testes de migração recriam o banco inteiro no MySQL e passam de 5 s no CI, que roda vários arquivos ao mesmo tempo.
+    testTimeout: 20_000,
     include: ["server/**/*.test.ts", "server/**/*.spec.ts", "shared/**/*.test.ts", "shared/**/*.spec.ts"],
   },
 });

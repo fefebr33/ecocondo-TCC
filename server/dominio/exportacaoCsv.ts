@@ -23,7 +23,7 @@ function formatDate(value: Date | null) {
 }
 
 export function buildCollectionsCsv(rows: CollectionCsvRow[]) {
-  const header = ["ID", "Status", "Categoria", "Bloco", "Agendada para", "Concluída em", "Peso (kg)", "Pontos", "Morador", "Origem do registro", "Observações"];
+  const header = ["ID", "Situação", "Categoria", "Bloco", "Registrado em", "Pesado em", "Peso (kg)", "Pontos", "Morador", "Origem do registro", "Observações"];
   const records = rows.map((row) => [
     row.id,
     row.status,

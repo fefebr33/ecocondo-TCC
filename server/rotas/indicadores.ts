@@ -1,7 +1,8 @@
+import { exigirSemSuspensao } from "../penalidades";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, estacoesPesagem, guiasDescarte, logsAuditoria, movimentacoesPontos, notificacoesLidas, notificacoes, moradores, ocorrencias, recompensas, resgates, relatoriosAnuais, tiposResiduo, usuarios } from "../../drizzle/schema";
+import { coletas, estacoesPesagem, guiasDescarte, logsAuditoria, movimentacoesPontos, notificacoesLidas, notificacoes, moradores, perfisAcesso, preferenciasNotificacao, ocorrencias, recompensas, resgates, relatoriosAnuais, tiposResiduo, usuarios } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { rotuloResiduo } from "@shared/rotulos";
 import { administratorOnly, withProfile } from "./nucleo";
@@ -14,23 +15,30 @@ import { pesoConfirmadoGramas } from "../dominio/antifraude";
 import { nomePublico, recortarRankingPublico } from "../dominio/privacidadeRanking";
 import { classificarPodio } from "../dominio/regrasPodio";
 import { origensDosRegistros } from "./operacoes";
-import { calcularIntervalo, classificacaoDoPeriodo, somarPorMorador } from "./podio";
+import { calcularIntervalo, classificacaoDoPeriodo, inicioDoCiclo, somarPorMorador } from "./podio";
+import { rotuloSituacao, situacaoDescarte, TIPOS_RESIDUO, type SituacaoDescarte } from "@shared/descarte";
+import { guiasDoCondominio } from "../guias";
 import { writeAuditLog } from "../audit";
 import { extratoDoMorador, movimentarPontos, saldosInconsistentes } from "../pontos";
-import { notificarAdministradores, notificarUsuario } from "../notificacoes";
+import { NOTIFICACOES_OBRIGATORIAS, notificarAdministradores, notificarTodos, notificarUsuario } from "../notificacoes";
+import { categoriasAviso, rotuloPublicoAviso } from "@shared/notificacoes";
+import { gestaoDoMorador, indicadoresGerais } from "../indicadoresGestao";
+import { pedidosAdesivos } from "../../drizzle/schema";
+import { tiposPorPerfil } from "@shared/notificacoes";
+import type { EcoRole } from "@shared/permissions";
 import { estacoesBloqueadas } from "../dominio/estacaoPesagem";
 import { compararPeriodos, evolucaoMensal, resumirPontos, taxaDeConclusao } from "../dominio/indicadoresPainel";
 
 /** Com este estoque (ou menos) a administração recebe o aviso de estoque baixo. */
 export const LIMITE_ESTOQUE_BAIXO = 2;
 
-const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
+const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional(), block: z.string().trim().min(1).max(32).optional() }).optional();
 const csvFiltersInput = z.object({
   startDate: z.date().optional(),
   endDate: z.date().optional(),
   block: z.string().trim().min(1).max(32).optional(),
   wasteType: z.enum(tiposResiduo).optional(),
-  /** Qual planilha: coletas (padrão), extrato de pontos, resgates ou auditoria. */
+  /** Qual planilha: descartes (padrão), extrato de pontos, resgates ou auditoria. */
   kind: z.enum(["coletas", "pontos", "resgates", "auditoria"]).default("coletas"),
 }).optional();
 
@@ -41,13 +49,15 @@ function condicoesDataEm(coluna: any, periodo?: { startDate?: Date; endDate?: Da
   return condicoes;
 }
 
-const rotuloMovimentacao: Record<string, string> = { credito_coleta: "Crédito de coleta", estorno_coleta: "Estorno de coleta reprovada", resgate: "Resgate de recompensa", devolucao_resgate: "Devolução de resgate cancelado", ajuste: "Ajuste" };
+const rotuloMovimentacao: Record<string, string> = { credito_coleta: "Crédito de descarte", estorno_coleta: "Estorno de descarte reprovado", resgate: "Resgate de recompensa", devolucao_resgate: "Devolução de resgate cancelado", ajuste: "Ajuste da administração", zeragem: "Pontos zerados (novo ciclo)", penalidade: "Medida administrativa (retirada de pontos)" };
 const rotuloStatusResgate: Record<string, string> = { solicitado: "Solicitado", aprovado: "Aprovado", entregue: "Entregue", cancelado: "Cancelado" };
 
 /** Pontos ganhos (créditos menos estornos) e peso confirmado de cada morador, a partir das coletas concluídas. */
 async function pontosAcumulados(condominioId: number, periodo?: { startDate?: Date; endDate?: Date }) {
   const db = await getDb();
-  const registros = await db.select().from(coletas).where(and(eq(coletas.condominioId, condominioId), eq(coletas.status, "concluida"), ...condicoesDataEm(coletas.concluidaEm, periodo)));
+  // Depois que o administrador zera os pontos, o ranking geral conta só o ciclo novo.
+  const inicio = await inicioDoCiclo(condominioId, periodo?.startDate);
+  const registros = await db.select().from(coletas).where(and(eq(coletas.condominioId, condominioId), eq(coletas.status, "concluida"), ...condicoesDataEm(coletas.concluidaEm, { startDate: inicio, endDate: periodo?.endDate })));
   return somarPorMorador(registros);
 }
 
@@ -94,18 +104,114 @@ function resumir(registros: Array<typeof coletas.$inferSelect>) {
     occurrenceCount: registros.filter((registro) => registro.status === "ocorrencia").length,
     cancelledCount: registros.filter((registro) => registro.status === "cancelada").length,
     rejectedCount: concluidas.filter((registro) => registro.aprovacaoPesoStatus === "rejeitado").length,
-    pendingReviewCount: concluidas.filter((registro) => registro.pendenteAprovacaoPeso).length,
+    pendingReviewCount: concluidas.filter((registro) => situacaoDescarte(registro) === "pendente").length,
+    auditCount: registros.filter((registro) => situacaoDescarte(registro) === "auditoria").length,
+    porSituacao: contarSituacoes(registros),
     byWasteType: porTipoResiduo,
   };
 }
 
-const guiasPadrao = [
-  { tipoResiduo: "reciclavel", titulo: "Recicláveis", itensAceitos: "Papel, plástico, metal e vidro limpos e secos.", itensRejeitados: "Embalagens com resíduos de alimento, papel higiênico e espelhos.", instrucoes: "Esvazie, limpe quando necessário e mantenha os materiais secos antes do descarte." },
-  { tipoResiduo: "organico", titulo: "Orgânicos", itensAceitos: "Restos de frutas, legumes, folhas e borra de café.", itensRejeitados: "Pilhas, plásticos, metais e produtos químicos.", instrucoes: "Acondicione em recipiente fechado; quando houver compostagem, encaminhe os materiais adequados." },
-  { tipoResiduo: "rejeito", titulo: "Rejeitos", itensAceitos: "Materiais sem possibilidade de reciclagem ou reaproveitamento no fluxo local.", itensRejeitados: "Eletrônicos, pilhas, baterias e lâmpadas.", instrucoes: "Descarte apenas materiais que não possam ser direcionados às demais categorias." },
-  { tipoResiduo: "eletronico", titulo: "Eletrônicos", itensAceitos: "Cabos, carregadores, celulares, periféricos e pequenos eletroeletrônicos.", itensRejeitados: "Resíduos orgânicos e materiais comuns.", instrucoes: "Não descarte com recicláveis convencionais. Use ponto de recebimento ou coleta especializada." },
-  { tipoResiduo: "perigoso", titulo: "Resíduos perigosos", itensAceitos: "Pilhas, baterias, lâmpadas, tintas e produtos químicos domésticos.", itensRejeitados: "Materiais recicláveis ou orgânicos.", instrucoes: "Mantenha a embalagem identificada e procure os canais de logística reversa adequados." },
-] as const;
+function contarSituacoes(registros: Array<typeof coletas.$inferSelect>) {
+  const contagem: Record<SituacaoDescarte, number> = { pendente: 0, aprovado: 0, reprovado: 0, auditoria: 0, cancelado: 0 };
+  for (const registro of registros) contagem[situacaoDescarte(registro)] += 1;
+  return contagem;
+}
+
+/** Blocos conhecidos (cadastro de moradores e descartes), em ordem. */
+async function blocosDoCondominio(condominioId: number) {
+  const db = await getDb();
+  const doCadastro = await db.select({ bloco: moradores.bloco }).from(moradores).where(eq(moradores.condominioId, condominioId));
+  const dosDescartes = await db.selectDistinct({ bloco: coletas.bloco }).from(coletas).where(eq(coletas.condominioId, condominioId));
+  return Array.from(new Set([...doCadastro, ...dosDescartes].map((linha) => linha.bloco).filter((bloco): bloco is string => Boolean(bloco)))).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+}
+
+/** Um bloco contra o outro: quilos aprovados, descartes, moradores, participação e pontos. */
+function compararBlocos(registros: Array<typeof coletas.$inferSelect>, comunidade: Array<typeof moradores.$inferSelect>, somenteBloco?: string) {
+  const blocos = Array.from(new Set([...comunidade.map((morador) => morador.bloco), ...registros.map((registro) => registro.bloco)].filter(Boolean))).filter((bloco) => !somenteBloco || bloco === somenteBloco).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+  return blocos.map((bloco) => {
+    const doBloco = registros.filter((registro) => registro.bloco === bloco && situacaoDescarte(registro) === "aprovado");
+    const moradoresDoBloco = comunidade.filter((morador) => morador.bloco === bloco).length;
+    const participantes = new Set(doBloco.map((registro) => registro.moradorId).filter(Boolean)).size;
+    const gramas = doBloco.reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
+    const reciclavel = doBloco.filter((registro) => registro.tipoResiduo === "reciclavel").reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
+    return {
+      block: bloco,
+      kilograms: Number((gramas / 1000).toFixed(2)),
+      recyclableKg: Number((reciclavel / 1000).toFixed(2)),
+      descartes: doBloco.length,
+      moradores: moradoresDoBloco,
+      participantes,
+      participationRate: moradoresDoBloco ? Number(((participantes / moradoresDoBloco) * 100).toFixed(1)) : null,
+      kgPorMorador: moradoresDoBloco ? Number((gramas / 1000 / moradoresDoBloco).toFixed(2)) : null,
+      pontos: doBloco.reduce((soma, registro) => soma + registro.pontosConcedidos, 0),
+    };
+  });
+}
+
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** Quilos aprovados por mês (últimos `meses` meses), separados por tipo de resíduo, para os gráficos empilhados. */
+function kgPorMesETipo(registros: Array<typeof coletas.$inferSelect>, agora: Date, meses = 6) {
+  return Array.from({ length: meses }, (_, indice) => {
+    const inicio = new Date(agora.getFullYear(), agora.getMonth() - (meses - 1 - indice), 1);
+    const fim = new Date(inicio.getFullYear(), inicio.getMonth() + 1, 1);
+    const doMes = registros.filter((registro) => registro.status === "concluida" && registro.concluidaEm && registro.concluidaEm >= inicio && registro.concluidaEm < fim);
+    const linha: Record<string, number | string> = { mes: `${MESES_CURTOS[inicio.getMonth()]}/${String(inicio.getFullYear()).slice(2)}`, descartes: doMes.length };
+    for (const tipo of TIPOS_RESIDUO) linha[tipo] = Number((doMes.filter((registro) => registro.tipoResiduo === tipo).reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0) / 1000).toFixed(2));
+    return linha;
+  });
+}
+
+/** Painel pessoal de um morador: quanto descartou, de que tipos, quando, e a situação de cada descarte. */
+async function painelDoMorador(condominioId: number, moradorId: number, paraAdministrador = false) {
+  const db = await getDb();
+  const [morador] = await db.select().from(moradores).where(and(eq(moradores.id, moradorId), eq(moradores.condominioId, condominioId))).limit(1);
+  if (!morador) throw new TRPCError({ code: "NOT_FOUND", message: "Morador não encontrado." });
+  const registros = await db.select().from(coletas).where(and(eq(coletas.condominioId, condominioId), eq(coletas.moradorId, moradorId))).orderBy(desc(coletas.agendadaPara), desc(coletas.id));
+  const agora = new Date();
+  const resumo = resumir(registros);
+  const aprovados = registros.filter((registro) => situacaoDescarte(registro) === "aprovado");
+  const porTipo = TIPOS_RESIDUO.map((tipo) => {
+    const doTipo = aprovados.filter((registro) => registro.tipoResiduo === tipo);
+    return { wasteType: tipo, descartes: doTipo.length, kilograms: Number((doTipo.reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0) / 1000).toFixed(2)), pontos: doTipo.reduce((soma, registro) => soma + registro.pontosConcedidos, 0) };
+  });
+  // Dias da semana e horários em que a pessoa mais descarta (ajuda a ver o hábito).
+  const porDiaSemana = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"].map((dia, indice) => ({ dia, descartes: aprovados.filter((registro) => (registro.concluidaEm ?? registro.agendadaPara).getDay() === indice).length }));
+  const datas = registros.filter((registro) => registro.status === "concluida").map((registro) => registro.concluidaEm ?? registro.agendadaPara);
+  const extrato = await extratoDoMorador(db, moradorId, 10);
+  return {
+    morador: { id: morador.id, nome: morador.nome, bloco: morador.bloco, apartamento: morador.apartamento, saldo: morador.pontos, fracaoGuardada: morador.restoPontosMilesimos / 1000, status: morador.status },
+    totalKg: resumo.totalKg,
+    recyclableKg: resumo.recyclableKg,
+    descartesAprovados: aprovados.length,
+    porSituacao: resumo.porSituacao,
+    porTipo,
+    porMes: kgPorMesETipo(registros, agora),
+    porDiaSemana,
+    primeiroDescarte: datas.length ? new Date(Math.min(...datas.map((data) => data.getTime()))) : null,
+    ultimoDescarte: datas.length ? new Date(Math.max(...datas.map((data) => data.getTime()))) : null,
+    pontosGanhos: aprovados.reduce((soma, registro) => soma + registro.pontosConcedidos, 0),
+    equivalencias: calcularEquivalenciasAmbientais(resumo.recyclableKg),
+    recentes: registros.slice(0, 12).map((registro) => ({ id: registro.id, lote: registro.lote, data: registro.concluidaEm ?? registro.agendadaPara, wasteType: registro.tipoResiduo, pesoKg: registro.pesoGramas === null ? null : Number((registro.pesoGramas / 1000).toFixed(2)), pontos: registro.pontosConcedidos, situacao: situacaoDescarte(registro) })),
+    extrato: extrato.map((linha) => ({ ...linha, rotulo: rotuloMovimentacao[linha.tipo] })),
+    gestao: await gestaoDoMorador(db, condominioId, moradorId, morador.usuarioId, paraAdministrador),
+  };
+}
+
+
+/**
+ * Notificações que a pessoa vê: as dirigidas a ela e os avisos gerais (comunicados, novo prêmio no catálogo) dos tipos que o
+ * perfil dela recebe, conforme Configurações > Quem recebe cada aviso.
+ */
+async function notificacoesVisiveis(ctx: { user: { id: number }; eco: { condominio: { id: number }; perfil: { papel: string } } }) {
+  const db = await getDb();
+  const papel = ctx.eco.perfil.papel as EcoRole;
+  const desligados = await db.select({ tipo: preferenciasNotificacao.tipo }).from(preferenciasNotificacao).where(and(eq(preferenciasNotificacao.condominioId, ctx.eco.condominio.id), eq(preferenciasNotificacao.papel, papel), eq(preferenciasNotificacao.ativo, false)));
+  const tipos = (tiposPorPerfil[papel] ?? []).filter((tipo) => NOTIFICACOES_OBRIGATORIAS.includes(tipo) || !desligados.some((linha) => linha.tipo === tipo));
+  // Avisos gerais podem ir só para moradores ou só para administradores (campo "publico").
+  const publico = or(sql`${notificacoes.publico} IS NULL`, eq(notificacoes.publico, "todos"), eq(notificacoes.publico, papel === "morador" ? "moradores" : "administradores"));
+  return or(eq(notificacoes.destinatarioId, ctx.user.id), and(sql`${notificacoes.destinatarioId} IS NULL`, tipos.length ? inArray(notificacoes.tipo, tipos) : sql`false`, publico));
+}
 
 export const analyticsRouter = router({
   dashboard: router({
@@ -149,24 +255,41 @@ export const analyticsRouter = router({
         minhaPosicao,
         totalNoRanking: classificados.length,
         alertas: ehMorador ? [] : await alertasAdministrativos(ctx.eco.condominio.id, registros, agora),
+        gestao: ehMorador ? null : await indicadoresGerais(db, ctx.eco.condominio.id),
+        pessoal: ehMorador && ctx.eco.morador ? await gestaoDoMorador(db, ctx.eco.condominio.id, ctx.eco.morador.id, ctx.user.id, false) : null,
       };
+    }),
+    /** Painel pessoal: o morador vê o dele; o administrador abre o de qualquer morador (Moradores > Ver painel). */
+    morador: withProfile.input(z.object({ residentId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => {
+      if (ctx.eco.perfil.papel === "morador") {
+        if (input?.residentId && input.residentId !== ctx.eco.morador?.id) throw new TRPCError({ code: "FORBIDDEN", message: "Você só pode ver o seu próprio painel." });
+        if (!ctx.eco.morador) throw new TRPCError({ code: "NOT_FOUND", message: "Seu cadastro de morador não foi encontrado." });
+        return painelDoMorador(ctx.eco.condominio.id, ctx.eco.morador.id);
+      }
+      if (!input?.residentId) throw new TRPCError({ code: "BAD_REQUEST", message: "Escolha um morador." });
+      return painelDoMorador(ctx.eco.condominio.id, input.residentId, true);
     }),
   }),
   relatorios: router({
+    /** Blocos que aparecem nos cadastros e nos descartes, para o filtro dos relatórios. */
+    blocos: administratorOnly.query(async ({ ctx }) => blocosDoCondominio(ctx.eco.condominio.id)),
     visaoGeral: administratorOnly.input(periodInput).query(async ({ ctx, input }) => {
       const db = await getDb();
-      const registros = await db.select().from(coletas).where(and(...condicoesPeriodo(ctx.eco.condominio.id, input))).orderBy(desc(coletas.agendadaPara));
-      const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
+      const registros = await db.select().from(coletas).where(and(...condicoesCsv(ctx.eco.condominio.id, input))).orderBy(desc(coletas.agendadaPara));
+      const todosMoradores = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
+      const comunidade = input?.block ? todosMoradores.filter((morador) => morador.bloco === input.block) : todosMoradores;
       // Ranking pelos pontos ganhos no período (não pelo saldo, que cai quando o morador resgata uma recompensa).
       const classificados = classificarPodio(somarPorMorador(registros.filter((registro) => registro.status === "concluida")));
       const ranking = classificados.slice(0, 10).map((linha) => {
-        const morador = comunidade.find((item) => item.id === linha.moradorId);
+        const morador = todosMoradores.find((item) => item.id === linha.moradorId);
         return { position: linha.posicao, id: linha.moradorId, name: morador?.nome ?? "Morador removido", block: morador?.bloco ?? "—", points: linha.pontos, weightKg: Number((linha.pesoGramas / 1000).toFixed(2)) };
       });
-      const participantes = new Set(registros.filter((registro) => registro.status === "concluida" && registro.moradorId !== null).map((registro) => registro.moradorId));
+      const participantes = new Set(registros.filter((registro) => situacaoDescarte(registro) === "aprovado" && registro.moradorId !== null).map((registro) => registro.moradorId));
       const resumo = resumir(registros);
-      const pontos = resumirPontos(await movimentacoesDoPeriodo(ctx.eco.condominio.id, input));
-      const resgatesPeriodo = await db.select({ status: resgates.status, pontosGastos: resgates.pontosGastos, recompensa: recompensas.titulo }).from(resgates).leftJoin(recompensas, eq(recompensas.id, resgates.recompensaId)).where(and(eq(resgates.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(resgates.criadoEm, input)));
+      const idsDoFiltro = input?.block ? new Set(comunidade.map((morador) => morador.id)) : null;
+      const movimentacoes = (await db.select({ tipo: movimentacoesPontos.tipo, pontos: movimentacoesPontos.pontos, moradorId: movimentacoesPontos.moradorId }).from(movimentacoesPontos).where(and(eq(movimentacoesPontos.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(movimentacoesPontos.criadoEm, input)))).filter((linha) => !idsDoFiltro || idsDoFiltro.has(linha.moradorId));
+      const pontos = resumirPontos(movimentacoes);
+      const resgatesPeriodo = (await db.select({ status: resgates.status, pontosGastos: resgates.pontosGastos, recompensa: recompensas.titulo, moradorId: resgates.moradorId }).from(resgates).leftJoin(recompensas, eq(recompensas.id, resgates.recompensaId)).where(and(eq(resgates.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(resgates.criadoEm, input)))).filter((linha) => !idsDoFiltro || idsDoFiltro.has(linha.moradorId));
       const validos = resgatesPeriodo.filter((item) => item.status !== "cancelado");
       const porRecompensa = Array.from(validos.reduce((mapa, item) => {
         const chave = item.recompensa ?? "Recompensa removida";
@@ -189,13 +312,20 @@ export const analyticsRouter = router({
         resgates: { total: validos.length, entregues: validos.filter((item) => item.status === "entregue").length, pendentes: validos.filter((item) => item.status === "solicitado" || item.status === "aprovado").length, cancelados: resgatesPeriodo.length - validos.length, porRecompensa },
         environmentalIncidents: incidentes.length,
         auditEvents: Number(auditoria?.total ?? 0),
+        // A comparação entre blocos mostra sempre todos os blocos do período; o bloco escolhido aparece destacado na tela.
+        porBloco: input?.block ? compararBlocos(await db.select().from(coletas).where(and(...condicoesPeriodo(ctx.eco.condominio.id, input))), todosMoradores) : compararBlocos(registros, todosMoradores),
+        porMes: kgPorMesETipo(registros, input?.endDate ?? new Date(), 6),
+        blocos: await blocosDoCondominio(ctx.eco.condominio.id),
+        gestao: await indicadoresGerais(db, ctx.eco.condominio.id, input),
       };
     }),
     exportarPdf: administratorOnly.input(periodInput).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const registros = await db.select().from(coletas).where(and(...condicoesPeriodo(ctx.eco.condominio.id, input))).orderBy(desc(coletas.agendadaPara));
+      const registros = await db.select().from(coletas).where(and(...condicoesCsv(ctx.eco.condominio.id, input))).orderBy(desc(coletas.agendadaPara));
       const relatorio = resumir(registros);
-      const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
+      const todosMoradores = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
+      const comunidade = input?.block ? todosMoradores.filter((morador) => morador.bloco === input.block) : todosMoradores;
+      const blocos = compararBlocos(registros, todosMoradores, input?.block);
       const participantes = new Set(registros.filter((registro) => registro.status === "concluida" && registro.moradorId !== null).map((registro) => registro.moradorId));
       const pontos = resumirPontos(await movimentacoesDoPeriodo(ctx.eco.condominio.id, input));
       const resgatesPeriodo = await db.select({ status: resgates.status }).from(resgates).where(and(eq(resgates.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(resgates.criadoEm, input)));
@@ -211,18 +341,18 @@ export const analyticsRouter = router({
       const negrito = await pdf.embedFont(StandardFonts.HelveticaBold);
       const desenhar = (texto: string, x: number, y: number, tamanho = 11, ehNegrito = false, cor = rgb(0.12, 0.18, 0.15)) => pagina.drawText(texto, { x, y, size: tamanho, font: ehNegrito ? negrito : fonte, color: cor });
       desenhar("EcoCondo", 48, 790, 23, true, rgb(0.04, 0.39, 0.25));
-      desenhar("Relatório de gestão de coleta seletiva", 48, 765, 14, true);
-      desenhar(`Condomínio: ${ctx.eco.condominio.nome}`, 48, 740);
+      desenhar("Relatório de descartes e reciclagem", 48, 765, 14, true);
+      desenhar(`Condomínio: ${ctx.eco.condominio.nome}${input?.block ? ` · Bloco ${input.block}` : " · Todos os blocos"}`, 48, 740);
       desenhar(`Período: ${input?.startDate ? input.startDate.toLocaleDateString("pt-BR") : "início"} a ${input?.endDate ? input.endDate.toLocaleDateString("pt-BR") : "atual"}`, 48, 722);
       const linhas = [
         ["Peso total confirmado", `${relatorio.totalKg.toLocaleString("pt-BR")} kg`],
         ["Recicláveis", `${relatorio.recyclableKg.toLocaleString("pt-BR")} kg`],
         ["Taxa de reciclagem", relatorio.recyclingRate === null ? "Sem dados" : `${relatorio.recyclingRate.toLocaleString("pt-BR")}%`],
-        ["Coletas concluídas", `${relatorio.completedCount}`],
+        ["Descartes aprovados / pendentes", `${relatorio.porSituacao.aprovado} / ${relatorio.porSituacao.pendente}`],
         ["Participação dos moradores", comunidade.length ? `${participantes.size} de ${comunidade.length} (${((participantes.size / comunidade.length) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%)` : "Sem moradores"],
         ["Pontos distribuídos / estornados", `${pontos.distribuidos} / ${pontos.estornados}`],
         ["Pontos gastos em resgates", `${pontos.resgatados} (${resgatesPeriodo.filter((item) => item.status !== "cancelado").length} resgate(s))`],
-        ["Ocorrências / reprovações / cancelamentos", `${relatorio.occurrenceCount} / ${relatorio.rejectedCount} / ${relatorio.cancelledCount}`],
+        ["Reprovados / em auditoria", `${relatorio.porSituacao.reprovado} / ${relatorio.porSituacao.auditoria}`],
         ["Eventos de auditoria", `${Number(auditoria?.total ?? 0)}`],
         ["CO2 evitado (estimativa)", `${relatorio.co2EstimateKg.toLocaleString("pt-BR")} kg CO2e`],
       ];
@@ -230,14 +360,16 @@ export const analyticsRouter = router({
       linhas.forEach(([rotulo, valor]) => { desenhar(rotulo, 54, y, 10.5); desenhar(valor, 330, y, 10.5, true, rgb(0.04, 0.39, 0.25)); y -= 24; });
       desenhar("Resíduos por categoria", 48, y - 10, 13, true); y -= 36;
       relatorio.byWasteType.forEach((item) => { desenhar(`${rotuloResiduo[item.wasteType]}: ${item.kilograms.toLocaleString("pt-BR")} kg`, 54, y, 10.5); y -= 19; });
+      desenhar("Por bloco (kg aprovados · participação)", 48, y - 10, 13, true); y -= 36;
+      blocos.slice(0, 8).forEach((item) => { desenhar(`Bloco ${item.block}: ${item.kilograms.toLocaleString("pt-BR")} kg · ${item.participantes} de ${item.moradores} morador(es)${item.participationRate === null ? "" : ` (${item.participationRate.toLocaleString("pt-BR")}%)`}`, 54, y, 10.5); y -= 19; });
       desenhar("Top 3 do período", 48, y - 10, 13, true); y -= 36;
       (top3.length ? top3 : ["Ninguém pontuou no período."]).forEach((texto) => { desenhar(texto, 54, y, 10.5); y -= 19; });
       desenhar("Nota metodológica", 48, 150, 11, true);
-      desenhar("Pesos pendentes de revisão ou reprovados não entram no total. CO2: 0,75 kg CO2e por kg de reciclável.", 48, 132, 9);
+      desenhar("Só descartes aprovados entram no total (pendentes, reprovados e em auditoria ficam de fora). CO2: 0,75 kg CO2e por kg reciclável.", 48, 132, 9);
       desenhar("Os dados devem ser interpretados como estimativas de apoio à gestão e à prestação de contas.", 48, 118, 9);
       desenhar(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 48, 72, 9);
       const bytes = await pdf.save();
-      return { filename: `relatorio-ecocondo-${new Date().toISOString().slice(0, 10)}.pdf`, contentBase64: Buffer.from(bytes).toString("base64") };
+      return { filename: `relatorio-ecocondo${input?.block ? `-bloco-${input.block}` : ""}-${new Date().toISOString().slice(0, 10)}.pdf`, contentBase64: Buffer.from(bytes).toString("base64") };
     }),
     exportarCsv: administratorOnly.input(csvFiltersInput).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -261,7 +393,7 @@ export const analyticsRouter = router({
       const origens = await origensDosRegistros(ctx.eco.condominio.id, registros);
       const conteudo = buildCollectionsCsv(registros.map((registro) => ({
         id: registro.id,
-        status: registro.aprovacaoPesoStatus === "rejeitado" ? "reprovada" : registro.pendenteAprovacaoPeso ? "em revisão" : registro.status,
+        status: rotuloSituacao[situacaoDescarte(registro)],
         wasteType: registro.tipoResiduo,
         block: registro.bloco,
         scheduledAt: registro.agendadaPara,
@@ -272,7 +404,7 @@ export const analyticsRouter = router({
         residentName: nomeDoMorador(registro.moradorId) || null,
         origin: origens(registro),
       })));
-      return { filename: `coletas-ecocondo-${hoje}.csv`, content: conteudo };
+      return { filename: `descartes-ecocondo${input?.block ? `-bloco-${input.block}` : ""}-${hoje}.csv`, content: conteudo };
     }),
     anuais: administratorOnly.query(async ({ ctx }) => {
       const db = await getDb();
@@ -365,6 +497,7 @@ export const analyticsRouter = router({
       const encontrada = await db.select().from(recompensas).where(and(eq(recompensas.id, input.rewardId), eq(recompensas.condominioId, ctx.eco.condominio.id), eq(recompensas.ativo, true))).limit(1);
       const recompensa = encontrada[0];
       if (!recompensa) throw new TRPCError({ code: "NOT_FOUND", message: "Recompensa não encontrada." });
+      await exigirSemSuspensao(db, ctx.eco.morador.id, "suspensao_participacao", "resgatar prêmios");
       const morador = ctx.eco.morador;
       const recusar = async (motivo: "sem_pontos" | "sem_estoque") => {
         const mensagem = motivo === "sem_pontos" ? "Pontuação insuficiente para esta recompensa." : "Esta recompensa está sem estoque.";
@@ -435,47 +568,110 @@ export const analyticsRouter = router({
   notificacoes: router({
     listar: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), or(eq(notificacoes.destinatarioId, ctx.user.id), sql`${notificacoes.destinatarioId} IS NULL`))).orderBy(desc(notificacoes.criadoEm), desc(notificacoes.id));
+      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx))).orderBy(desc(notificacoes.criadoEm), desc(notificacoes.id));
       return linhas.map(({ notificacao, leitura }) => ({ ...notificacao, lidaEm: leitura?.lidaEm ?? notificacao.lidaEm ?? null }));
     }),
     /** Abre uma notificação (só se for do usuário ou um comunicado geral) e a marca como lida. */
     abrir: withProfile.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const visivel = await db.select().from(notificacoes).where(and(eq(notificacoes.id, input.id), eq(notificacoes.condominioId, ctx.eco.condominio.id), or(eq(notificacoes.destinatarioId, ctx.user.id), sql`${notificacoes.destinatarioId} IS NULL`))).limit(1);
+      const visivel = await db.select().from(notificacoes).where(and(eq(notificacoes.id, input.id), eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx))).limit(1);
       if (!visivel[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Notificação não encontrada." });
       await db.insert(notificacoesLidas).values({ notificacaoId: input.id, usuarioId: ctx.user.id }).onDuplicateKeyUpdate({ set: { lidaEm: new Date() } });
       return { ...visivel[0], lidaEm: new Date() };
     }),
+    /** Não lidas mais novas que `afterId`, para o aviso que aparece na tela (pop-up) assim que uma notificação chega. */
+    novas: withProfile.input(z.object({ afterId: z.number().int().min(0) })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), gt(notificacoes.id, input.afterId), await notificacoesVisiveis(ctx))).orderBy(desc(notificacoes.id)).limit(20);
+      const [ultima] = await db.select({ id: sql<number>`max(${notificacoes.id})` }).from(notificacoes).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx)));
+      return { ultimaId: Number(ultima?.id ?? 0), itens: linhas.filter(({ notificacao, leitura }) => !leitura && !notificacao.lidaEm).slice(0, 5).map(({ notificacao }) => notificacao) };
+    }),
     contagemNaoLidas: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), or(eq(notificacoes.destinatarioId, ctx.user.id), sql`${notificacoes.destinatarioId} IS NULL`)));
+      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx)));
       return { count: countUnreadNotifications(linhas.map((linha) => linha.notificacao.id), ctx.user.id, linhas.flatMap((linha) => (linha.leitura || linha.notificacao.lidaEm ? [{ notificationId: linha.notificacao.id, userId: ctx.user.id }] : []))) };
     }),
     marcarLida: withProfile.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const visivel = await db.select().from(notificacoes).where(and(eq(notificacoes.id, input.id), eq(notificacoes.condominioId, ctx.eco.condominio.id), or(eq(notificacoes.destinatarioId, ctx.user.id), sql`${notificacoes.destinatarioId} IS NULL`))).limit(1);
+      const visivel = await db.select().from(notificacoes).where(and(eq(notificacoes.id, input.id), eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx))).limit(1);
       if (!visivel[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Notificação não encontrada." });
       await db.insert(notificacoesLidas).values({ notificacaoId: input.id, usuarioId: ctx.user.id }).onDuplicateKeyUpdate({ set: { lidaEm: new Date() } });
       return { success: true };
     }),
     marcarTodasLidas: withProfile.mutation(async ({ ctx }) => {
       const db = await getDb();
-      const visiveis = await db.select().from(notificacoes).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), or(eq(notificacoes.destinatarioId, ctx.user.id), sql`${notificacoes.destinatarioId} IS NULL`)));
+      const visiveis = await db.select().from(notificacoes).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx)));
       for (const item of visiveis) await db.insert(notificacoesLidas).values({ notificacaoId: item.id, usuarioId: ctx.user.id }).onDuplicateKeyUpdate({ set: { lidaEm: new Date() } });
       return { success: true };
     }),
-    criarComunicado: administratorOnly.input(z.object({ title: z.string().trim().min(3).max(180), message: z.string().trim().min(3).max(2000) })).mutation(async ({ ctx, input }) => {
+    /**
+     * Aviso geral da administração (regras, manutenção, eventos...): vai para todos, só moradores ou só administradores,
+     * pode ficar fixado no painel ("importante") e registra quem enviou e quem já visualizou.
+     */
+    criarComunicado: administratorOnly.input(z.object({
+      title: z.string().trim().min(3).max(180),
+      message: z.string().trim().min(3).max(2000),
+      publico: z.enum(["todos", "moradores", "administradores"]).default("todos"),
+      categoria: z.enum(categoriasAviso).default("geral"),
+      importante: z.boolean().default(false),
+    })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const inserida = await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: null, tipo: "comunicado", titulo: input.title, mensagem: input.message }).$returningId();
-      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "comunicado", entidadeId: inserida[0].id, acao: "comunicado_publicado", resumo: `Comunicado "${input.title}" publicado para todos.`, estadoNovo: { titulo: input.title } });
-      return { id: inserida[0].id };
+      const id = await notificarTodos(db, { condominioId: ctx.eco.condominio.id, tipo: "aviso_geral", titulo: input.title, mensagem: input.message, publico: input.publico, categoria: input.categoria, importante: input.importante, autorId: ctx.user.id });
+      // Quem enviou já "leu" o próprio aviso.
+      await db.insert(notificacoesLidas).values({ notificacaoId: id, usuarioId: ctx.user.id }).onDuplicateKeyUpdate({ set: { lidaEm: new Date() } });
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "comunicado", entidadeId: id, acao: "comunicado_publicado", resumo: `Aviso geral "${input.title}" enviado para ${rotuloPublicoAviso[input.publico].toLowerCase()}${input.importante ? " (fixado no painel)" : ""}.`, estadoNovo: { titulo: input.title, publico: input.publico, categoria: input.categoria, importante: input.importante } });
+      return { id };
+    }),
+    /** Avisos gerais enviados, com quantas pessoas do público já visualizaram. */
+    enviados: administratorOnly.query(async ({ ctx }) => {
+      const db = await getDb();
+      const avisos = await db.select({ aviso: notificacoes, autor: usuarios.nome }).from(notificacoes).leftJoin(usuarios, eq(usuarios.id, notificacoes.autorId)).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), sql`${notificacoes.destinatarioId} IS NULL`, inArray(notificacoes.tipo, ["aviso_geral", "comunicado"]))).orderBy(desc(notificacoes.criadoEm), desc(notificacoes.id)).limit(100);
+      const perfis = await db.select({ usuarioId: perfisAcesso.usuarioId, papel: perfisAcesso.papel }).from(perfisAcesso).where(eq(perfisAcesso.condominioId, ctx.eco.condominio.id));
+      const ids = avisos.map((linha) => linha.aviso.id);
+      const leituras = ids.length ? await db.select({ notificacaoId: notificacoesLidas.notificacaoId, usuarioId: notificacoesLidas.usuarioId }).from(notificacoesLidas).where(inArray(notificacoesLidas.notificacaoId, ids)) : [];
+      return avisos.map(({ aviso, autor }) => {
+        const publico = aviso.publico ?? "todos";
+        const alvo = perfis.filter((perfil) => publico === "todos" || (publico === "moradores" ? perfil.papel === "morador" : perfil.papel === "administrador"));
+        const viram = new Set(leituras.filter((leitura) => leitura.notificacaoId === aviso.id).map((leitura) => leitura.usuarioId));
+        return { ...aviso, publico, autor: autor ?? "Administração", destinatarios: alvo.length, visualizacoes: alvo.filter((perfil) => viram.has(perfil.usuarioId)).length };
+      });
+    }),
+    /** Quem já visualizou um aviso geral (nome e quando); só para administradores. */
+    visualizacoes: administratorOnly.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      const [aviso] = await db.select().from(notificacoes).where(and(eq(notificacoes.id, input.id), eq(notificacoes.condominioId, ctx.eco.condominio.id), sql`${notificacoes.destinatarioId} IS NULL`)).limit(1);
+      if (!aviso) throw new TRPCError({ code: "NOT_FOUND", message: "Aviso não encontrado." });
+      const publico = aviso.publico ?? "todos";
+      const perfis = await db.select({ usuarioId: perfisAcesso.usuarioId, papel: perfisAcesso.papel, nome: usuarios.nome, bloco: moradores.bloco, apartamento: moradores.apartamento }).from(perfisAcesso).leftJoin(usuarios, eq(usuarios.id, perfisAcesso.usuarioId)).leftJoin(moradores, eq(moradores.id, perfisAcesso.moradorId)).where(eq(perfisAcesso.condominioId, ctx.eco.condominio.id));
+      const leituras = await db.select().from(notificacoesLidas).where(eq(notificacoesLidas.notificacaoId, aviso.id));
+      return perfis.filter((perfil) => publico === "todos" || (publico === "moradores" ? perfil.papel === "morador" : perfil.papel === "administrador"))
+        .map((perfil) => ({ nome: perfil.nome ?? "Sem nome", papel: perfil.papel, bloco: perfil.bloco, apartamento: perfil.apartamento, lidaEm: leituras.find((leitura) => leitura.usuarioId === perfil.usuarioId)?.lidaEm ?? null }))
+        .sort((a, b) => Number(Boolean(b.lidaEm)) - Number(Boolean(a.lidaEm)) || a.nome.localeCompare(b.nome));
+    }),
+    /** Avisos importantes ainda não lidos, para o destaque no painel. */
+    importantes: withProfile.query(async ({ ctx }) => {
+      const db = await getDb();
+      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), eq(notificacoes.importante, true), await notificacoesVisiveis(ctx))).orderBy(desc(notificacoes.criadoEm)).limit(5);
+      return linhas.filter((linha) => !linha.leitura).map((linha) => linha.notificacao);
     }),
   }),
   guias: router({
-    listar: withProfile.query(async ({ ctx }) => {
+    listar: withProfile.query(async ({ ctx }) => guiasDoCondominio(ctx.eco.condominio.id)),
+    /** O administrador ajusta o texto e a cor do saco de cada tipo (o condomínio fornece sacos coloridos). */
+    salvar: administratorOnly.input(z.object({
+      wasteType: z.enum(tiposResiduo),
+      title: z.string().trim().min(3).max(120),
+      accepted: z.string().trim().min(3).max(1000),
+      rejected: z.string().trim().min(3).max(1000),
+      instructions: z.string().trim().min(3).max(1000),
+      bagColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Escolha uma cor válida."),
+      bagColorName: z.string().trim().min(2).max(40),
+    })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      const armazenadas = await db.select().from(guiasDescarte).where(and(eq(guiasDescarte.condominioId, ctx.eco.condominio.id), eq(guiasDescarte.publicado, true))).orderBy(asc(guiasDescarte.tipoResiduo));
-      return armazenadas.length ? armazenadas : guiasPadrao.map((guia, indice) => ({ id: -(indice + 1), condominioId: ctx.eco.condominio.id, publicado: true, atualizadoEm: new Date(), ...guia }));
+      const valores = { titulo: input.title, itensAceitos: input.accepted, itensRejeitados: input.rejected, instrucoes: input.instructions, corSaco: input.bagColor.toLowerCase(), nomeCorSaco: input.bagColorName, publicado: true, atualizadoEm: new Date() };
+      await db.insert(guiasDescarte).values({ condominioId: ctx.eco.condominio.id, tipoResiduo: input.wasteType, ...valores }).onDuplicateKeyUpdate({ set: valores });
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "configuracao", entidadeId: ctx.eco.condominio.id, acao: "guia_descarte_alterado", resumo: `Guia de ${rotuloResiduo[input.wasteType]} atualizado (saco ${input.bagColorName.toLowerCase()}).`, estadoNovo: { corSaco: valores.corSaco, nomeCorSaco: input.bagColorName } });
+      return { success: true };
     }),
   }),
 });
@@ -485,25 +681,27 @@ class SemSaldoError extends Error {}
 /** Alertas do painel do administrador: o que precisa de uma decisão ou ação agora. */
 async function alertasAdministrativos(condominioId: number, registros: Array<typeof coletas.$inferSelect>, agora: Date) {
   const db = await getDb();
-  const pendentes = registros.filter((registro) => registro.pendenteAprovacaoPeso).length;
-  const atrasadas = registros.filter((registro) => (registro.status === "agendada" || registro.status === "em_andamento") && registro.agendadaPara < agora).length;
+  const pendentes = registros.filter((registro) => situacaoDescarte(registro) === "pendente").length;
+  const emAuditoria = registros.filter((registro) => situacaoDescarte(registro) === "auditoria").length;
   const resgatesAbertos = await db.select({ id: resgates.id }).from(resgates).where(and(eq(resgates.condominioId, condominioId), inArray(resgates.status, ["solicitado", "aprovado"])));
   const catalogo = await db.select({ titulo: recompensas.titulo, estoque: recompensas.estoque }).from(recompensas).where(and(eq(recompensas.condominioId, condominioId), eq(recompensas.ativo, true)));
   const semEstoque = catalogo.filter((item) => item.estoque === 0);
   const estoqueBaixo = catalogo.filter((item) => item.estoque !== null && item.estoque > 0 && item.estoque <= LIMITE_ESTOQUE_BAIXO);
-  const ocorrenciasAbertas = await db.select({ id: ocorrencias.id }).from(ocorrencias).where(and(eq(ocorrencias.condominioId, condominioId), or(eq(ocorrencias.status, "aberta"), eq(ocorrencias.status, "em_analise"))));
+  const ocorrenciasAbertas = await db.select({ id: ocorrencias.id }).from(ocorrencias).where(and(eq(ocorrencias.condominioId, condominioId), or(eq(ocorrencias.status, "aberta"), eq(ocorrencias.status, "em_analise"), eq(ocorrencias.status, "em_auditoria"))));
   const estacoes = await db.select({ id: estacoesPesagem.id, nome: estacoesPesagem.nome }).from(estacoesPesagem).where(eq(estacoesPesagem.condominioId, condominioId));
   const bloqueadas = estacoes.filter((estacao) => estacoesBloqueadas().includes(estacao.id));
   const inconsistentes = await saldosInconsistentes(db, condominioId);
   const falhas = await db.select({ id: notificacoes.id }).from(notificacoes).where(and(eq(notificacoes.condominioId, condominioId), eq(notificacoes.tipo, "falha_operacional"), gte(notificacoes.criadoEm, new Date(agora.getTime() - 24 * 60 * 60 * 1000))));
   const alertas: Array<{ id: string; titulo: string; detalhe: string; quantidade: number; link: string; nivel: "atencao" | "critico" }> = [];
-  if (pendentes) alertas.push({ id: "revisao", titulo: "Registros aguardando aprovação", detalhe: "Confira a foto da balança e aprove ou reprove com motivo.", quantidade: pendentes, link: "/coletas", nivel: "atencao" });
-  if (atrasadas) alertas.push({ id: "atrasadas", titulo: "Coletas aguardando pesagem", detalhe: "A data já passou e a coleta ainda não foi concluída.", quantidade: atrasadas, link: "/coletas", nivel: "atencao" });
-  if (resgatesAbertos.length) alertas.push({ id: "resgates", titulo: "Resgates para aprovar ou entregar", detalhe: "Pedidos de moradores no catálogo de recompensas.", quantidade: resgatesAbertos.length, link: "/engajamento", nivel: "atencao" });
+  if (pendentes) alertas.push({ id: "revisao", titulo: "Descartes aguardando aprovação", detalhe: "Confira a foto e o peso e aprove, reprove com motivo ou abra auditoria.", quantidade: pendentes, link: "/descartes?situacao=pendente", nivel: "atencao" });
+  if (emAuditoria) alertas.push({ id: "auditoria", titulo: "Descartes em auditoria", detalhe: "Casos suspeitos esperando o parecer da administração.", quantidade: emAuditoria, link: "/descartes?situacao=auditoria", nivel: "critico" });
+  if (resgatesAbertos.length) alertas.push({ id: "resgates", titulo: "Resgates para aprovar ou entregar", detalhe: "Pedidos de moradores no catálogo de recompensas.", quantidade: resgatesAbertos.length, link: "/engajamento#pedidos", nivel: "atencao" });
   if (semEstoque.length) alertas.push({ id: "sem-estoque", titulo: "Prêmios sem estoque", detalhe: semEstoque.map((item) => item.titulo).join(", "), quantidade: semEstoque.length, link: "/engajamento", nivel: "critico" });
   if (estoqueBaixo.length) alertas.push({ id: "estoque-baixo", titulo: "Estoque baixo", detalhe: estoqueBaixo.map((item) => `${item.titulo} (${item.estoque})`).join(", "), quantidade: estoqueBaixo.length, link: "/engajamento", nivel: "atencao" });
-  if (ocorrenciasAbertas.length) alertas.push({ id: "ocorrencias", titulo: "Ocorrências ambientais em aberto", detalhe: "Registradas por moradores ou pela administração.", quantidade: ocorrenciasAbertas.length, link: "/ambiental", nivel: "atencao" });
-  if (bloqueadas.length) alertas.push({ id: "estacao-bloqueada", titulo: "Estação bloqueada por códigos errados", detalhe: bloqueadas.map((estacao) => estacao.nome).join(", "), quantidade: bloqueadas.length, link: "/configuracoes", nivel: "critico" });
+  if (ocorrenciasAbertas.length) alertas.push({ id: "ocorrencias", titulo: "Ocorrências e denúncias em aberto", detalhe: "Registradas por moradores ou pela administração.", quantidade: ocorrenciasAbertas.length, link: "/ambiental#ocorrencias", nivel: "atencao" });
+  const pedidosAbertos = await db.select({ id: pedidosAdesivos.id }).from(pedidosAdesivos).where(and(eq(pedidosAdesivos.condominioId, condominioId), eq(pedidosAdesivos.status, "solicitado")));
+  if (pedidosAbertos.length) alertas.push({ id: "adesivos", titulo: "Pedidos de adesivos QR", detalhe: "Moradores pedindo mais adesivos para os sacos.", quantidade: pedidosAbertos.length, link: "/adesivos", nivel: "atencao" });
+  if (bloqueadas.length) alertas.push({ id: "estacao-bloqueada", titulo: "Estação bloqueada por códigos errados", detalhe: bloqueadas.map((estacao) => estacao.nome).join(", "), quantidade: bloqueadas.length, link: "/configuracoes#estacoes", nivel: "critico" });
   if (falhas.length) alertas.push({ id: "falhas", titulo: "Falhas operacionais nas últimas 24 h", detalhe: "Veja os detalhes em Notificações.", quantidade: falhas.length, link: "/notificacoes", nivel: "critico" });
   if (inconsistentes.length) alertas.push({ id: "saldos", titulo: "Saldo diferente do extrato", detalhe: inconsistentes.map((item) => item.nome).join(", "), quantidade: inconsistentes.length, link: "/engajamento", nivel: "critico" });
   return alertas;

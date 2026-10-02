@@ -1,6 +1,9 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { publicProcedure, router } from "./_core/trpc";
+import { getDb } from "./db";
+import { encerrarSessao } from "./senhas";
+import { sdk } from "./_core/sdk";
 import { ecoRouter } from "./rotas/nucleo";
 import { operationsRouter } from "./rotas/operacoes";
 import { analyticsRouter } from "./rotas/indicadores";
@@ -9,13 +12,19 @@ import { auditRouter } from "./rotas/auditoria";
 import { podioRouter } from "./rotas/podio";
 import { personalGoalsRouter } from "./rotas/metasPessoais";
 import { certificatesRouter } from "./rotas/certificados";
-import { recurrenceRouter } from "./rotas/recorrencia";
 import { estacoesRouter } from "./rotas/estacoes";
+import { contaRouter } from "./rotas/conta";
+import { configuracoesDescarteRouter } from "./rotas/configuracoesDescarte";
+import { adesivosRouter } from "./rotas/adesivos";
+import { penalidadesRouter } from "./rotas/penalidadesRotas";
 
 export const appRouter = router({
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    ...contaRouter._def.record,
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      // Sair encerra esta sessão no servidor: o cookie copiado ou esquecido neste aparelho deixa de valer.
+      const sessao = await sdk.verifySession(sdk.tokenDaRequisicao(ctx.req));
+      if (ctx.user && sessao) await encerrarSessao(await getDb(), { sessaoId: sessao.sessaoId, usuarioId: ctx.user.id, expiraEm: sessao.expiraEm }).catch((error) => console.warn("[Sessão] Não foi possível encerrar a sessão no servidor:", error));
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return {
@@ -32,8 +41,10 @@ export const appRouter = router({
   ...podioRouter._def.record,
   ...personalGoalsRouter._def.record,
   ...certificatesRouter._def.record,
-  ...recurrenceRouter._def.record,
   ...estacoesRouter._def.record,
+  ...configuracoesDescarteRouter._def.record,
+  ...adesivosRouter._def.record,
+  ...penalidadesRouter._def.record,
 });
 
 export type AppRouter = typeof appRouter;

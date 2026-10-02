@@ -78,7 +78,7 @@ describeWithDatabase("auditoria com banco isolado por transação", () => {
     expect(rows[0].estado_novo).toContain("1000");
   });
 
-  it("exporta somente a coleta temporária filtrada por período, bloco e categoria antes do rollback", async () => {
+  it("exporta somente o descarte temporário filtrada por período, bloco e categoria antes do rollback", async () => {
     const [administradores] = await connection.query<RowDataPacket[]>("SELECT usuario_id, condominio_id FROM perfis_acesso WHERE papel = 'administrador' LIMIT 1");
     const administrator = administradores[0] as { usuario_id: number; condominio_id: number } | undefined;
     expect(administrator).toBeTruthy();
@@ -91,7 +91,7 @@ describeWithDatabase("auditoria com banco isolado por transação", () => {
     const csv = await caller.relatorios.exportarCsv({ startDate: new Date("2026-08-25T00:00:00Z"), endDate: new Date("2026-08-25T23:59:59Z"), block: marker, wasteType: "reciclavel" });
     expect(csv.content).toContain(`"${marker}"`);
     expect(csv.content).toContain('"2,35"');
-    expect(csv.content).toContain('"concluida"');
+    expect(csv.content).toContain('"Aprovado"');
     expect(csv.content).not.toContain(excludedMarker);
   });
 });

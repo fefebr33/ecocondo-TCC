@@ -1,4 +1,4 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "../../shared/const";
+import { COOKIE_NAME, SESSAO_MS } from "../../shared/const";
 import { eq } from "drizzle-orm";
 import type { Express, Request, Response } from "express";
 import * as bancoUsuarios from "../db";
@@ -107,8 +107,8 @@ export function registerLoginRoute(app: Express) {
       return;
     }
 
-    const sessionToken = await sdk.createSessionToken(conta.idExterno, { name: conta.nome, expiresInMs: ONE_YEAR_MS });
-    res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(req), maxAge: ONE_YEAR_MS });
+    const sessionToken = await sdk.createSessionToken(conta.idExterno, { name: conta.nome, expiresInMs: SESSAO_MS, versao: usuario.versaoSessao });
+    res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(req), maxAge: SESSAO_MS });
     res.redirect(302, "/dashboard");
   });
 }
