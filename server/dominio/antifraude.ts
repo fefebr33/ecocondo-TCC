@@ -18,14 +18,14 @@ export class LimiteAntifraudeExcedidoError extends Error {}
 /** Impede que quem confirma a coleta seja a mesma pessoa que o morador beneficiado pelos pontos. */
 export function verificarSegregacaoDeFuncao(usuarioResponsavelId: number, usuarioMoradorBeneficiadoId: number | null | undefined) {
   if (usuarioMoradorBeneficiadoId !== null && usuarioMoradorBeneficiadoId !== undefined && usuarioResponsavelId === usuarioMoradorBeneficiadoId) {
-    throw new LimiteAntifraudeExcedidoError("Quem confirma a coleta não pode ser o próprio morador beneficiado pelos pontos.");
+    throw new LimiteAntifraudeExcedidoError("Quem confirma o descarte não pode ser o próprio morador beneficiado pelos pontos.");
   }
 }
 
 /** Impede um único lançamento de peso irrealista para uma coleta residencial. */
 export function verificarLimitePorColeta(pesoGramas: number, limite = LIMITE_PESO_POR_COLETA_GRAMAS) {
   if (pesoGramas > limite) {
-    throw new LimiteAntifraudeExcedidoError(`O peso informado (${(pesoGramas / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg) excede o limite plausível por coleta (${(limite / 1000).toFixed(0)} kg). Revise o lançamento ou divida em coletas separadas.`);
+    throw new LimiteAntifraudeExcedidoError(`O peso informado (${(pesoGramas / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg) excede o limite plausível por descarte (${(limite / 1000).toFixed(0)} kg). Revise o lançamento ou divida em descartes separados.`);
   }
 }
 

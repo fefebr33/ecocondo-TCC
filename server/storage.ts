@@ -1,8 +1,8 @@
-// Armazenamento de arquivos em disco local — sem depender de nenhum serviço externo.
-import fs from "node:fs";
-import path from "node:path";
-
-const UPLOADS_DIR = path.resolve(process.cwd(), "data", "uploads");
+// Armazenamento de arquivos (fotos do visor, certificados, relatórios) no próprio MySQL — sem serviço externo e sem depender
+// do disco do servidor, que no plano gratuito do Render é apagado a cada reinício ou nova publicação.
+import { eq } from "drizzle-orm";
+import { arquivos } from "../drizzle/schema";
+import { getDb } from "./db";
 
 function normalizeKey(relKey: string): string {
   return relKey.replace(/^\/+/, "");
@@ -18,13 +18,20 @@ function appendHashSuffix(relKey: string): string {
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
-  _contentType = "application/octet-stream",
+  contentType = "application/octet-stream",
 ): Promise<{ key: string; url: string }> {
   const key = appendHashSuffix(normalizeKey(relKey));
-  const filePath = path.join(UPLOADS_DIR, key);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, data);
+  const dados = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const db = await getDb();
+  await db.insert(arquivos).values({ chave: key, tipoConteudo: contentType, tamanho: dados.length, dados });
   return { key, url: `/uploads/${key}` };
+}
+
+/** Lê um arquivo guardado no banco (null se não existir). */
+export async function lerArquivo(relKey: string) {
+  const db = await getDb();
+  const [arquivo] = await db.select().from(arquivos).where(eq(arquivos.chave, normalizeKey(relKey))).limit(1);
+  return arquivo ?? null;
 }
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {

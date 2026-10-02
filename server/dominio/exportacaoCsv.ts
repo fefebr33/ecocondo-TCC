@@ -23,7 +23,7 @@ function formatDate(value: Date | null) {
 }
 
 export function buildCollectionsCsv(rows: CollectionCsvRow[]) {
-  const header = ["ID", "Status", "Categoria", "Bloco", "Agendada para", "Concluída em", "Peso (kg)", "Pontos", "Morador", "Origem do registro", "Observações"];
+  const header = ["ID", "Situação", "Categoria", "Bloco", "Registrado em", "Pesado em", "Peso (kg)", "Pontos", "Morador", "Origem do registro", "Observações"];
   const records = rows.map((row) => [
     row.id,
     row.status,
@@ -38,4 +38,13 @@ export function buildCollectionsCsv(rows: CollectionCsvRow[]) {
     row.notes,
   ].map(escapeCsv).join(";"));
   return `\ufeff${header.map(escapeCsv).join(";")}\r\n${records.join("\r\n")}\r\n`;
+}
+
+/** CSV genérico no mesmo formato (separador ";", BOM e CRLF), que o Excel abre direto com acentos e vírgula decimal. */
+export function construirCsv(cabecalho: string[], linhas: Array<Array<string | number | null | undefined>>) {
+  return `\ufeff${cabecalho.map(escapeCsv).join(";")}\r\n${linhas.map((linha) => linha.map(escapeCsv).join(";")).join("\r\n")}\r\n`;
+}
+
+export function dataHoraCsv(valor: Date | null) {
+  return formatDate(valor);
 }

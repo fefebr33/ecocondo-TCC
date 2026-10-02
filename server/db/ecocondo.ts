@@ -9,6 +9,7 @@ import {
 } from "../../drizzle/schema";
 import { ENV } from "../_core/env";
 import { getDb } from "../db";
+import { notificarAdministradores } from "../notificacoes";
 
 export type ContextoPerfil = {
   perfil: PerfilAcesso;
@@ -46,7 +47,7 @@ export async function obterOuCriarPerfil(usuario: Usuario): Promise<ContextoPerf
     const pessoaPorUsuario = await db.select().from(pessoas).where(eq(pessoas.usuarioId, usuario.id)).limit(1);
     const pessoaCadastrada = pessoaPorUsuario[0] ? pessoaPorUsuario : await db.select().from(pessoas).where(and(eq(pessoas.condominioId, condominio[0].id), eq(pessoas.email, chaveEmail))).limit(1);
     if (pessoaCadastrada[0]) {
-      await db.update(pessoas).set({ usuarioId: usuario.id, moradorId: existente[0].moradorId, statusAcesso: "ativo", papel: existente[0].papel, nome: usuario.nome || pessoaCadastrada[0].nome, atualizadoEm: new Date() }).where(eq(pessoas.id, pessoaCadastrada[0].id));
+      await db.update(pessoas).set({ usuarioId: usuario.id, moradorId: existente[0].moradorId, statusAcesso: pessoaCadastrada[0].statusAcesso === "desativado" ? "desativado" : "ativo", papel: existente[0].papel, nome: usuario.nome || pessoaCadastrada[0].nome, atualizadoEm: new Date() }).where(eq(pessoas.id, pessoaCadastrada[0].id));
     } else {
       await db.insert(pessoas).values({
         condominioId: condominio[0].id,
@@ -94,7 +95,7 @@ export async function obterOuCriarPerfil(usuario: Usuario): Promise<ContextoPerf
   }
 
   if (pessoaPendente[0]) {
-    await db.update(pessoas).set({ usuarioId: usuario.id, moradorId, statusAcesso: "ativo", papel, nome: usuario.nome || pessoaPendente[0].nome, atualizadoEm: new Date() }).where(eq(pessoas.id, pessoaPendente[0].id));
+    await db.update(pessoas).set({ usuarioId: usuario.id, moradorId, statusAcesso: pessoaPendente[0].statusAcesso === "desativado" ? "desativado" : "ativo", papel, nome: usuario.nome || pessoaPendente[0].nome, atualizadoEm: new Date() }).where(eq(pessoas.id, pessoaPendente[0].id));
   } else {
     await db.insert(pessoas).values({
       condominioId: condominio.id,
@@ -116,6 +117,8 @@ export async function obterOuCriarPerfil(usuario: Usuario): Promise<ContextoPerf
   const perfil = await db.select().from(perfisAcesso).where(eq(perfisAcesso.id, inserido[0].id)).limit(1);
   const morador = moradorId ? await db.select().from(moradores).where(eq(moradores.id, moradorId)).limit(1) : [];
   if (!perfil[0]) throw new Error("Não foi possível criar o perfil de acesso.");
+  // Primeiro acesso de alguém: os administradores ficam sabendo (sem cadastro prévio, o morador entra com apartamento "A definir").
+  await notificarAdministradores(db, { condominioId: condominio.id, tipo: "novo_cadastro", titulo: "Primeiro acesso ao EcoCondo", mensagem: `${usuario.nome || usuario.email || "Uma pessoa"} entrou pela primeira vez como ${papel === "administrador" ? "administrador(a)" : "morador(a)"}${papel === "morador" && !pessoaPendente[0] ? ", sem cadastro prévio. Confira bloco e apartamento em Moradores" : ""}.` }, usuario.id);
   return { perfil: perfil[0], condominio, morador: morador[0] ?? null };
 }
 
