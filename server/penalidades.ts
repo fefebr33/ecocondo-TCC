@@ -50,7 +50,7 @@ export function descreverPeriodo(inicio: Date, fim: Date | null) {
 }
 
 /** Medidas pré-definidas do condomínio; cria as padrão na primeira consulta. */
-export async function modelosDoCondominio(db: any, condominioId: number, somenteAtivos = false) {
+export async function modelosDoCondominio(db: any, condominioId: number, somenteAtivos = false): Promise<Array<typeof modelosPenalidade.$inferSelect>> {
   const existentes = await db.select().from(modelosPenalidade).where(eq(modelosPenalidade.condominioId, condominioId)).orderBy(asc(modelosPenalidade.id));
   if (!existentes.length) {
     for (const modelo of MODELOS_PADRAO) {
@@ -146,7 +146,9 @@ export async function exigirSemSuspensao(db: any, moradorId: number, tipo: "susp
 }
 
 /** Histórico de medidas (do condomínio ou de um morador), com o nome de quem aplicou. */
-export async function historicoPenalidades(db: any, condominioId: number, moradorId?: number) {
+export type MedidaDoHistorico = typeof penalidades.$inferSelect & { aplicadaPor: string; morador: string | null; bloco: string | null; apartamento: string | null; vigente: boolean; periodo: string | null };
+
+export async function historicoPenalidades(db: any, condominioId: number, moradorId?: number): Promise<MedidaDoHistorico[]> {
   const condicoes = [eq(penalidades.condominioId, condominioId)];
   if (moradorId) condicoes.push(eq(penalidades.moradorId, moradorId));
   const linhas = await db.select({ penalidade: penalidades, aplicadaPor: usuarios.nome, morador: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento }).from(penalidades).leftJoin(usuarios, eq(usuarios.id, penalidades.aplicadaPorId)).leftJoin(moradores, eq(moradores.id, penalidades.moradorId)).where(and(...condicoes)).orderBy(desc(penalidades.criadoEm), desc(penalidades.id));

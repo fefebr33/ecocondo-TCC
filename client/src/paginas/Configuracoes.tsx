@@ -1,6 +1,10 @@
 import PageIntro from "@/components/PageIntro";
 import EstacoesPesagem from "@/components/EstacoesPesagem";
 import {
+  ConfiguracaoAnaliseIa,
+  MedidasAdministrativas,
+} from "@/components/ConfiguracoesIa";
+import {
   PreferenciasAvisos,
   RegrasDescarte,
   ZerarPontos,
@@ -261,6 +265,14 @@ export default function Settings() {
       </div>
       <div id="regras" className="mt-5 scroll-mt-24">
         <RegrasDescarte />
+      </div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+        <div id="ia" className="scroll-mt-24">
+          <ConfiguracaoAnaliseIa />
+        </div>
+        <div id="medidas" className="scroll-mt-24">
+          <MedidasAdministrativas />
+        </div>
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
         <div id="avisos" className="scroll-mt-24">

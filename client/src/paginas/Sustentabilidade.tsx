@@ -1,3 +1,10 @@
+import { useAncora } from "@/hooks/useAncora";
+import TratarOcorrencia from "@/components/TratarOcorrencia";
+import {
+  rotuloCategoriaOcorrencia,
+  rotuloConclusaoOcorrencia,
+  rotuloStatusOcorrencia,
+} from "@shared/rotulos";
 import PageIntro from "@/components/PageIntro";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,12 +68,15 @@ function formatDate(value: Date) {
   });
 }
 
+type CategoriaOcorrencia = keyof typeof rotuloCategoriaOcorrencia;
+
 export default function Sustainability() {
   const profile = trpc.perfil.meuPerfil.useQuery();
   const utils = trpc.useUtils();
   const isAdmin = profile.data?.role === "administrador";
   const goals = trpc.metas.listar.useQuery();
   const incidents = trpc.ocorrencias.listar.useQuery();
+  useAncora(!incidents.isLoading);
   const compliance = trpc.conformidade.visaoGeral.useQuery(undefined, {
     enabled: isAdmin,
   });
@@ -84,12 +94,16 @@ export default function Sustainability() {
     endDate: dateValue(30),
   });
   const [incident, setIncident] = useState<{
+    category: CategoriaOcorrencia;
+    reference: string;
     block: string;
     wasteType: WasteType;
     location: string;
     description: string;
     imageDataUrl: string;
   }>({
+    category: "ambiental",
+    reference: "",
     block: "A",
     wasteType: "reciclavel",
     location: "Área de descarte",
@@ -122,6 +136,8 @@ export default function Sustainability() {
       toast.success("Ocorrência registrada para acompanhamento.");
       refresh();
       setIncident({
+        category: "ambiental",
+        reference: "",
         block: "A",
         wasteType: "reciclavel",
         location: "Área de descarte",
@@ -233,6 +249,7 @@ export default function Sustainability() {
     event.preventDefault();
     createIncident.mutate({
       ...incident,
+      reference: incident.reference || null,
       imageDataUrl: incident.imageDataUrl || null,
     });
   };
@@ -430,14 +447,40 @@ export default function Sustainability() {
               <ImagePlus className="h-5 w-5" />
             </span>
             <div>
-              <p className="font-semibold">Registrar ocorrência</p>
+              <p className="font-semibold">Registrar ocorrência ou denúncia</p>
               <p className="text-sm text-muted-foreground">
-                Descreva um descarte inadequado e anexe evidência quando
-                necessário.
+                Descreva o problema e anexe evidência quando puder. A
+                administração é avisada; quem é denunciado não fica sabendo
+                quem denunciou. Denúncias falsas podem gerar medidas.
               </p>
             </div>
           </div>
           <form onSubmit={onIncidentSubmit} className="mt-5 grid gap-3">
+            <select
+              aria-label="Assunto da ocorrência"
+              value={incident.category}
+              onChange={event =>
+                setIncident({
+                  ...incident,
+                  category: event.target.value as CategoriaOcorrencia,
+                })
+              }
+              className="h-10 rounded-xl border border-input bg-[#fbfdfc] px-3 text-sm"
+            >
+              {Object.entries(rotuloCategoriaOcorrencia).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <Input
+              aria-label="Número do descarte ou código do adesivo (opcional)"
+              value={incident.reference}
+              onChange={event =>
+                setIncident({ ...incident, reference: event.target.value })
+              }
+              placeholder="Nº do descarte ou código do adesivo do saco (EC-XXXX-XXXX), se souber"
+            />
             <div className="grid grid-cols-2 gap-3">
               <Input
                 aria-label="Bloco da ocorrência"
@@ -448,7 +491,7 @@ export default function Sustainability() {
                 required
               />
               <select
-                aria-label="Categoria da ocorrência"
+                aria-label="Tipo de resíduo"
                 value={incident.wasteType}
                 onChange={event =>
                   setIncident({
@@ -503,7 +546,7 @@ export default function Sustainability() {
             </Button>
           </form>
         </article>
-        <article className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
+        <article id="ocorrencias" className="scroll-mt-24 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="font-semibold">Ocorrências registradas</p>
@@ -522,15 +565,21 @@ export default function Sustainability() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold">{item.local}</p>
+                      <p className="font-semibold">
+                        Nº {item.id} · {rotuloCategoriaOcorrencia[item.categoria]}
+                      </p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Bloco {item.bloco} · {wasteLabels[item.tipoResiduo]}
+                        {item.local} · Bloco {item.bloco} ·{" "}
+                        {wasteLabels[item.tipoResiduo]}
+                        {item.coletaId ? ` · descarte nº ${item.coletaId}` : ""}
                       </p>
                     </div>
                     <Badge
-                      className={`border-0 ${item.status === "resolvida" ? "bg-[#e8f4ed] text-[#0a7048]" : "bg-[#fff2e9] text-[#9a4a1c]"}`}
+                      className={`border-0 ${item.status === "resolvida" ? "bg-[#e8f4ed] text-[#0a7048]" : item.status === "em_auditoria" ? "bg-[#efe9fb] text-[#5b3aa6]" : "bg-[#fff2e9] text-[#9a4a1c]"}`}
                     >
-                      {item.status.replace("_", " ")}
+                      {item.conclusao
+                        ? rotuloConclusaoOcorrencia[item.conclusao]
+                        : rotuloStatusOcorrencia[item.status]}
                     </Badge>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -543,34 +592,13 @@ export default function Sustainability() {
                       className="mt-3 max-h-40 w-full rounded-xl border border-[#e2ebe5] object-cover"
                     />
                   )}
+                  {item.notaResolucao && (
+                    <p className="mt-2 rounded-xl bg-[#f6faf7] px-3 py-2 text-xs">
+                      <b>Conclusão:</b> {item.notaResolucao}
+                    </p>
+                  )}
                   {isAdmin && item.status !== "resolvida" && (
-                    <div className="mt-3 flex gap-2">
-                      <Input
-                        aria-label={`Providência para ocorrência ${item.id}`}
-                        value={resolution[item.id] ?? ""}
-                        onChange={event =>
-                          setResolution({
-                            ...resolution,
-                            [item.id]: event.target.value,
-                          })
-                        }
-                        placeholder="Providência adotada"
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          updateIncident.mutate({
-                            id: item.id,
-                            status: "resolvida",
-                            resolutionNote: resolution[item.id] || null,
-                          })
-                        }
-                        disabled={updateIncident.isPending}
-                        className="rounded-xl bg-[#0f7350] text-white"
-                      >
-                        Resolver
-                      </Button>
-                    </div>
+                    <TratarOcorrencia ocorrencia={item} onAlterado={refresh} />
                   )}
                 </div>
               ))

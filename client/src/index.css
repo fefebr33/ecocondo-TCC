@@ -108,5 +108,12 @@ button:active, [role="button"]:active { transform: scale(0.98); }
   .folha-qr ul { list-style: none; padding: 0; margin: 8mm auto 0; display: inline-grid; gap: 2.5mm; text-align: left; font-size: 11pt; }
   .folha-qr li { display: flex; align-items: center; gap: 3mm; }
   .folha-qr li span { width: 5mm; height: 5mm; border-radius: 50%; border: 1px solid #0003; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .folha-adesivos { color: #10241a; font-family: "Inter", "Segoe UI", sans-serif; }
+  .folha-adesivos-cabecalho { font-size: 9pt; color: #4b5d54; margin: 0 0 4mm; border-bottom: 1px dashed #9bb3a6; padding-bottom: 2mm; }
+  .folha-adesivos-grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; }
+  .adesivo-qr { border: 1px dashed #9bb3a6; border-radius: 3mm; padding: 2.5mm; text-align: center; break-inside: avoid; }
+  .adesivo-qr img { width: 30mm; height: 30mm; display: block; margin: 0 auto; }
+  .adesivo-qr b { display: block; font-family: "JetBrains Mono", monospace; font-size: 10pt; letter-spacing: .06em; margin-top: 1mm; }
+  .adesivo-qr span { display: block; font-size: 7pt; color: #0f563e; text-transform: uppercase; letter-spacing: .12em; }
   @page { size: A4; margin: 12mm; }
 }
