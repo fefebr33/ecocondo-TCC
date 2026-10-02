@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { CampoSenha } from "@/components/ui/campo-senha";
 import { trpc } from "@/lib/trpc";
 import { KeyRound, Leaf } from "lucide-react";
 import { FormEvent, useState } from "react";
@@ -71,9 +71,8 @@ export default function DefinirSenha() {
             </p>
             <label className="grid gap-1.5 text-xs font-semibold">
               Nova senha
-              <Input
+              <CampoSenha
                 required
-                type="password"
                 autoComplete="new-password"
                 minLength={8}
                 value={senha}
@@ -83,9 +82,8 @@ export default function DefinirSenha() {
             </label>
             <label className="grid gap-1.5 text-xs font-semibold">
               Repita a senha
-              <Input
+              <CampoSenha
                 required
-                type="password"
                 autoComplete="new-password"
                 minLength={8}
                 value={confirmacao}
