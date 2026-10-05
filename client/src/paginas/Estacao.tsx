@@ -52,6 +52,7 @@ type ResultadoIa = {
 };
 type Resultado = {
   id: number;
+  semPontos: string | null;
   pendingPoints: number;
   pointsAwarded: number;
   pendingApproval: boolean;
@@ -92,6 +93,7 @@ type Previa = {
   pesagemSimulada: boolean;
   pesoTotalKg: string;
   bloqueio: string | null;
+  semPontos: string | null;
   pontosPrevistos: number;
   itens: Array<{
     wasteType: WasteType;
@@ -598,6 +600,9 @@ function Registro({
             valor={`${resultado.weightKg} kg${resultado.simulated ? " (balança simulada)" : ""}`}
             destaque
           />
+          {resultado.semPontos && (
+            <Linha rotulo="Pontos" valor={resultado.semPontos} alerta />
+          )}
           {resultado.pointsAwarded > 0 && (
             <Linha
               rotulo="Pontos creditados agora"
@@ -698,6 +703,9 @@ function Registro({
             }
             alerta={Boolean(previa.bloqueio)}
           />
+          {previa.semPontos && !previa.bloqueio && (
+            <Linha rotulo="Pontos" valor={previa.semPontos} alerta />
+          )}
         </dl>
         {erro && (
           <p

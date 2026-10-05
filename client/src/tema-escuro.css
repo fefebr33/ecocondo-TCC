@@ -14,6 +14,7 @@
 .dark .bg-\[\#bee2ca\] { background-color: #374e3e; }
 .dark .bg-\[\#dce8e0\] { background-color: #333e37; }
 .dark .bg-\[\#ddefdf\]\/65 { background-color: rgb(44 62 46 / 0.65); }
+.dark .bg-\[\#e3e6e4\] { background-color: #353836; }
 .dark .bg-\[\#e5f6ec\] { background-color: #24382d; }
 .dark .bg-\[\#e7f5ec\] { background-color: #25362b; }
 .dark .bg-\[\#e8efeb\] { background-color: #2c3430; }
@@ -40,6 +41,7 @@
 .dark .bg-\[\#f1f8f4\] { background-color: #222e27; }
 .dark .bg-\[\#f1f9f4\] { background-color: #202f26; }
 .dark .bg-\[\#f2f1ef\] { background-color: #2e2c2a; }
+.dark .bg-\[\#f2f3f2\] { background-color: #292b29; }
 .dark .bg-\[\#f2f8f4\] { background-color: #222d26; }
 .dark .bg-\[\#f3ecfb\] { background-color: #281d35; }
 .dark .bg-\[\#f3f7f4\] { background-color: #242b26; }
@@ -82,6 +84,7 @@
 .dark .border-\[\#cfe2d5\] { border-color: #3c4940; }
 .dark .border-\[\#d5dcd8\] { border-color: #404542; }
 .dark .border-\[\#d8cdf1\] { border-color: #3a314e; }
+.dark .border-\[\#d9dedb\] { border-color: #3f4341; }
 .dark .border-\[\#dbe8e0\] { border-color: #39443e; }
 .dark .border-\[\#dce8e0\] { border-color: #39443d; }
 .dark .border-\[\#dce8e0\]\/90 { border-color: rgb(57 68 61 / 0.9); }
@@ -104,6 +107,7 @@
 .dark .border-\[\#f0dcb8\] { border-color: #554933; }
 .dark .border-\[\#f3c98a\] { border-color: #605039; }
 .dark .border-\[\#f3dca3\] { border-color: #5a4f36; }
+.dark .border-\[\#f3dcb0\] { border-color: #574b34; }
 .dark .border-\[\#f3dcb4\] { border-color: #564933; }
 .dark .divide-\[\#edf2ef\] > :not(:last-child) { border-color: #363d38; }
 .dark .focus\:ring-\[\#0f7350\]\/30:focus { --tw-ring-color: rgb(134 220 190 / 0.3); }
@@ -146,13 +150,18 @@
 .dark .text-\[\#1f4f82\] { color: #83aedb; }
 .dark .text-\[\#1f4f84\] { color: #83addb; }
 .dark .text-\[\#1f6fd1\] { color: #7aa4d8; }
+.dark .text-\[\#24453a\] { color: #9bcbbb; }
 .dark .text-\[\#2863a5\] { color: #7ea9d9; }
+.dark .text-\[\#3f4642\] { color: #d9ddda; }
 .dark .text-\[\#426558\] { color: #9dbfb3; }
 .dark .text-\[\#4a4a4a\] { color: #d8d8d8; }
+.dark .text-\[\#4d5551\] { color: #d4d8d6; }
 .dark .text-\[\#4d6157\] { color: #d0d9d5; }
 .dark .text-\[\#5b3aa6\] { color: #9a81d3; }
+.dark .text-\[\#5c3d0a\] { color: #ddbd8a; }
 .dark .text-\[\#637b20\] { color: #c4db83; }
 .dark .text-\[\#6b3fa0\] { color: #a785cf; }
+.dark .text-\[\#6b726e\] { color: #cccfcd; }
 .dark .text-\[\#7a4d0a\] { color: #dcb986; }
 .dark .text-\[\#7b5811\] { color: #dcbf85; }
 .dark .text-\[\#80614f\] { color: #bfa698; }

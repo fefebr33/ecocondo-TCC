@@ -5,9 +5,12 @@
  */
 export const POSICOES_PUBLICAS = 3;
 
-/** Nome mostrado no pódio: o morador pode pedir para aparecer só como "Morador(a) do bloco X". */
-export function nomePublico(morador: { nome: string; bloco: string; ocultarNomeNoPodio: boolean }) {
-  return morador.ocultarNomeNoPodio ? `Morador(a) do bloco ${morador.bloco}` : morador.nome;
+/**
+ * Nome mostrado no pódio: o morador pode pedir para aparecer só como "Morador(a) do bloco X". Durante uma suspensão da
+ * participação o nome fica oculto para os vizinhos de qualquer jeito (só ele e a administração veem), até acabar ou ser revogada.
+ */
+export function nomePublico(morador: { nome: string; bloco: string; ocultarNomeNoPodio: boolean }, suspenso = false) {
+  return morador.ocultarNomeNoPodio || suspenso ? `Morador(a) do bloco ${morador.bloco}` : morador.nome;
 }
 
 /** Posição com empate: quem tem a mesma pontuação divide a posição (1º, 2º, 2º, 4º). Só entra quem tem pontos. */

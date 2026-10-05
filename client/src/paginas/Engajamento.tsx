@@ -170,7 +170,7 @@ export default function Engagement() {
                       {resident.position}
                     </b>
                     <span>
-                      <span className="block text-sm font-semibold">
+                      <span className={`block text-sm font-semibold ${resident.suspensaoPeriodo ? "text-muted-foreground" : ""}`}>
                         {resident.nome}
                         {resident.voce ? " (você)" : ""}
                       </span>
@@ -178,6 +178,9 @@ export default function Engagement() {
                         Bloco {resident.bloco}
                         {resident.apartamento
                           ? ` · ${resident.apartamento}`
+                          : ""}
+                        {resident.suspensaoPeriodo
+                          ? ` · participação suspensa ${resident.suspensaoPeriodo}`
                           : ""}
                       </span>
                     </span>

@@ -6,6 +6,7 @@ import { rotuloResiduo, type TipoResiduo } from "@/lib/descarte";
 import { trpc } from "@/lib/trpc";
 import { formatarNumero } from "@/lib/utils";
 import {
+  gruposNotificacao,
   rotuloTipoNotificacao,
   type TipoNotificacao,
 } from "@shared/notificacoes";
@@ -281,56 +282,106 @@ export function PreferenciasAvisos() {
     onSuccess: () => utils.preferenciasNotificacao.listar.invalidate(),
     onError: issue => toast.error(issue.message),
   });
-  const perfis: { papel: EcoRole; titulo: string }[] = [
-    { papel: "morador", titulo: "Moradores recebem" },
-    { papel: "administrador", titulo: "Administradores recebem" },
-  ];
+  const [papel, setPapel] = useState<EcoRole>("morador");
+  const linhas = (lista.data ?? []).filter(linha => linha.papel === papel);
+  const nome = (tipo: string) => rotuloTipoNotificacao[tipo as TipoNotificacao];
+  const grupos = gruposNotificacao
+    .map(grupo => ({
+      ...grupo,
+      linhas: linhas.filter(linha =>
+        (grupo.tipos as readonly string[]).includes(linha.tipo)
+      ),
+    }))
+    .filter(grupo => grupo.linhas.length);
+  const configuraveis = linhas.filter(linha => !linha.obrigatoria);
+  const ligados = configuraveis.filter(linha => linha.ativo).length;
   return (
     <section className={cartao}>
       <Cabecalho
         icone={BellRing}
         titulo="Quem recebe cada aviso"
-        texto="Ligue ou desligue os avisos de cada perfil. Os marcados como obrigatórios mexem com pontos ou são casos graves."
+        texto="Escolha o perfil e ligue ou desligue os avisos por assunto. Os obrigatórios (pontos, auditoria e medidas) sempre chegam e não aparecem como interruptor."
       />
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        {perfis.map(({ papel, titulo }) => (
-          <div key={papel}>
-            <p className="text-xs font-bold uppercase tracking-[.12em] text-muted-foreground">
-              {titulo}
-            </p>
-            <ul className="mt-2 divide-y divide-[#edf2ef] rounded-2xl border border-[#e2ebe5]">
-              {(lista.data ?? [])
-                .filter(linha => linha.papel === papel)
-                .map(linha => (
-                  <li
-                    key={linha.tipo}
-                    className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm"
-                  >
-                    <span>
-                      {rotuloTipoNotificacao[linha.tipo as TipoNotificacao]}
-                      {linha.obrigatoria && (
-                        <span className="ml-2 text-[11px] text-muted-foreground">
-                          obrigatório
-                        </span>
-                      )}
-                    </span>
-                    <Switch
-                      checked={linha.ativo}
-                      disabled={linha.obrigatoria || salvar.isPending}
-                      onCheckedChange={ativo =>
-                        salvar.mutate({
-                          role: papel,
-                          type: linha.tipo as TipoNotificacao,
-                          active: ativo,
-                        })
-                      }
-                      aria-label={`${rotuloTipoNotificacao[linha.tipo as TipoNotificacao]} para ${papel === "morador" ? "moradores" : "administradores"}`}
-                    />
-                  </li>
-                ))}
-            </ul>
-          </div>
+      <div
+        className="mt-5 inline-flex rounded-xl border border-[#dce8e0] bg-[#f6faf7] p-1"
+        role="tablist"
+        aria-label="Perfil"
+      >
+        {(
+          [
+            ["morador", "Moradores"],
+            ["administrador", "Administradores"],
+          ] as const
+        ).map(([valor, rotulo]) => (
+          <button
+            key={valor}
+            type="button"
+            role="tab"
+            aria-selected={papel === valor}
+            onClick={() => setPapel(valor)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${papel === valor ? "bg-white text-[#0f7350] shadow-sm" : "text-muted-foreground"}`}
+          >
+            {rotulo}
+          </button>
         ))}
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        {ligados} de {configuraveis.length} avisos opcionais ligados para{" "}
+        {papel === "morador" ? "moradores" : "administradores"}.
+      </p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {grupos.map(grupo => {
+          const opcionais = grupo.linhas.filter(linha => !linha.obrigatoria);
+          const obrigatorias = grupo.linhas.filter(linha => linha.obrigatoria);
+          return (
+            <details
+              key={grupo.id}
+              className="group rounded-2xl border border-[#e2ebe5] bg-[#fbfdfc] px-4 py-3"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold">
+                {grupo.titulo}
+                <span className="text-[11px] font-normal text-muted-foreground">
+                  {opcionais.length
+                    ? `${opcionais.filter(linha => linha.ativo).length}/${opcionais.length} ligados`
+                    : "sempre chegam"}
+                  {opcionais.length && obrigatorias.length
+                    ? ` · ${obrigatorias.length} obrigatório(s)`
+                    : ""}
+                </span>
+              </summary>
+              {opcionais.length > 0 && (
+                <ul className="mt-3 divide-y divide-[#edf2ef]">
+                  {opcionais.map(linha => (
+                    <li
+                      key={linha.tipo}
+                      className="flex items-center justify-between gap-3 py-2 text-sm"
+                    >
+                      <span>{nome(linha.tipo)}</span>
+                      <Switch
+                        checked={linha.ativo}
+                        disabled={salvar.isPending}
+                        onCheckedChange={ativo =>
+                          salvar.mutate({
+                            role: papel,
+                            type: linha.tipo as TipoNotificacao,
+                            active: ativo,
+                          })
+                        }
+                        aria-label={`${nome(linha.tipo)} para ${papel === "morador" ? "moradores" : "administradores"}`}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {obrigatorias.length > 0 && (
+                <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+                  Sempre chegam:{" "}
+                  {obrigatorias.map(linha => nome(linha.tipo)).join(", ")}.
+                </p>
+              )}
+            </details>
+          );
+        })}
       </div>
     </section>
   );

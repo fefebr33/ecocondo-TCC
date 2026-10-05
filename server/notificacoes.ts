@@ -13,7 +13,7 @@ type DadosNotificacao = {
 };
 
 /** Tipos que sempre chegam, qualquer que seja a configuração (a pessoa precisa saber: afetam pontos ou são casos graves). */
-export const NOTIFICACOES_OBRIGATORIAS: TipoNotificacao[] = ["coleta_reprovada", "pontos_estornados", "auditoria_aberta", "auditoria_concluida", "pontos_zerados", "pontos_ajustados", "falha_operacional", "cadastro_alterado", "descarte_revertido", "penalidade_aplicada", "penalidade_encerrada", "aviso_geral"];
+export const NOTIFICACOES_OBRIGATORIAS: TipoNotificacao[] = ["coleta_reprovada", "pontos_estornados", "auditoria_aberta", "auditoria_concluida", "pontos_zerados", "pontos_ajustados", "falha_operacional", "cadastro_alterado", "descarte_revertido", "penalidade_aplicada", "penalidade_encerrada", "aviso_geral", "auditoria_pendente", "adesivo_cancelado"];
 
 /** O perfil do destinatário recebe este tipo de notificação neste condomínio? (O administrador configura em Configurações.) */
 async function perfilRecebe(db: any, destinatarioId: number, condominioId: number, tipo: TipoNotificacao) {

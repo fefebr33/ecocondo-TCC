@@ -50,8 +50,11 @@ const kg = (gramas: number) => (gramas / 1000).toLocaleString("pt-BR", { maximum
  * limite rígido é violado. Todo descarte vai para a aprovação do administrador; os alertas devolvidos (por item)
  * mostram o que merece mais atenção na conferência da foto e do peso.
  */
-export function avaliarDescarteEstacao(dados: { itens: ItemDescarte[]; registrosHoje: RegistroAnterior[]; agora: Date }) {
-  const { itens, registrosHoje, agora } = dados;
+export function avaliarDescarteEstacao(dados: { itens: ItemDescarte[]; registrosHoje: RegistroAnterior[]; agora: Date; modoDemonstracao?: boolean }) {
+  const { itens, agora } = dados;
+  // Na estação em modo demonstração (banca, testes) não há espera entre um descarte e outro nem limite do dia:
+  // dá para registrar vários seguidos com o mesmo morador. Fora dela, as regras continuam valendo.
+  const registrosHoje = dados.modoDemonstracao ? [] : dados.registrosHoje;
   if (!itens.length) throw new LimiteAntifraudeExcedidoError("Escolha pelo menos um tipo de descarte.");
   if (itens.length > MAXIMO_ITENS_POR_DESCARTE) throw new LimiteAntifraudeExcedidoError(`Registre no máximo ${MAXIMO_ITENS_POR_DESCARTE} tipos por descarte.`);
   for (const item of itens) {

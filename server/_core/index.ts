@@ -8,6 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../rotas";
 import { getDb, prepararBanco, urlDoBanco } from "../db";
 import { encerrarPenalidadesVencidas } from "../penalidades";
+import { lembrarAuditoriasParadas } from "../lembretesAuditoria";
 import { processarCampanhas } from "../campanhas";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -99,11 +100,12 @@ async function startServer() {
     runAnnualReport().catch(falhaDaRotina("Relatório anual"));
   }, DAY_MS);
 
-  // De hora em hora: encerra suspensões vencidas e cuida das campanhas (começo, fim da pausa, "faltam poucos dias", encerramento).
+  // De hora em hora: encerra suspensões vencidas, lembra auditorias paradas e cuida das campanhas (começo, fim da pausa, "faltam poucos dias", encerramento).
   const rotinaHoraria = async () => {
     const db = await getDb();
     await encerrarPenalidadesVencidas(db);
     await processarCampanhas(db);
+    await lembrarAuditoriasParadas(db);
   };
   rotinaHoraria().catch(falhaDaRotina("Campanhas e medidas"));
   setInterval(() => {

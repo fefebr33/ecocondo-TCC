@@ -217,17 +217,35 @@ describeComMysql("IA, adesivos QR, medidas, campanhas, ocorrências e avisos", (
     expect(registros.some((registro) => registro.motivo === "Saco aberto na lixeira")).toBe(true);
   });
 
-  it("medidas: modelos pré-definidos; suspensão bloqueia a estação e os resgates; revogar devolve os pontos", async () => {
+  it("medidas: modelos pré-definidos; suspensão deixa descartar sem pontos, esconde o nome no pódio; revogar devolve os pontos", async () => {
     const modelos = await admin.penalidades.modelos();
     expect(modelos.length).toBeGreaterThanOrEqual(6);
     const perda = modelos.find((modelo) => modelo.tipo === "perda_pontos")!;
     const suspensao = modelos.find((modelo) => modelo.tipo === "suspensao_participacao")!;
     const antes = await saldo(anaId);
+    const pontosNoPodio = async () => (await admin.podio.ranking({ periodo: "mensal" })).ranking.find((linha) => linha.moradorId === anaId)?.pontos ?? 0;
+    const podioAntes = await pontosNoPodio();
     const aplicada = await admin.penalidades.aplicar({ moradorId: anaId, modeloId: perda.id, motivo: "Teste de retirada de pontos" });
     expect(await saldo(anaId)).toBe(antes - perda.pontos!);
+    // A retirada de pontos também desconta do pódio, não só do saldo de engajamento.
+    if (podioAntes > perda.pontos!) expect(await pontosNoPodio()).toBe(podioAntes - perda.pontos!);
     const suspensa = await admin.penalidades.aplicar({ moradorId: anaId, modeloId: suspensao.id, motivo: "Tentativa de fraude confirmada" });
     expect(suspensa.fimEm).not.toBeNull();
-    await expect(ana.estacao.gerarCodigo()).rejects.toThrow(/suspensa/);
+    // Suspensa, a Ana continua descartando, mas a estação avisa que o descarte não vale pontos.
+    const { code: codigoSuspensa } = await ana.estacao.gerarCodigo();
+    const [adesivoSuspensa] = await codigosDisponiveis(ana);
+    const previaSuspensa = await tablet().estacao.previa({ code: codigoSuspensa, itens: [{ wasteType: "reciclavel", weightGrams: 3000, stickerCode: adesivoSuspensa }] });
+    expect(previaSuspensa.pontosPrevistos).toBe(0);
+    expect(previaSuspensa.semPontos).toMatch(/suspensa/);
+    // No pódio, os vizinhos não veem o nome dela enquanto durar a suspensão.
+    const podioBruno = await bruno.podio.ranking({ periodo: "mensal" });
+    const linhaAna = podioBruno.ranking.find((linha) => linha.suspensao);
+    if (linhaAna) expect(linhaAna.nome).not.toMatch(/Ana/);
+    // O descarte feito durante a suspensão é registrado, mas não rende pontos.
+    const saldoSuspensa = await saldo(anaId);
+    const registrado = await descartar(ana, { stickerCode: adesivoSuspensa });
+    expect(registrado.semPontos).toMatch(/suspensa/);
+    expect(await saldo(anaId)).toBe(saldoSuspensa);
     const historico = await ana.penalidades.listar();
     expect(historico.map((medida) => medida.nome)).toEqual(expect.arrayContaining([perda.nome, suspensao.nome]));
     expect(historico.find((medida) => medida.id === suspensa.id)).toMatchObject({ vigente: true, aplicadaPor: "ia-admin" });
@@ -237,11 +255,23 @@ describeComMysql("IA, adesivos QR, medidas, campanhas, ocorrências e avisos", (
 
     await admin.penalidades.revogar({ id: aplicada.id, motivo: "Aplicada por engano no teste" });
     expect(await saldo(anaId)).toBe(antes);
+    if (podioAntes > perda.pontos!) expect(await pontosNoPodio()).toBe(podioAntes);
+    expect((await ana.notificacoes.listar()).some((item) => item.tipo === "penalidade_encerrada" && /voltaram/.test(item.mensagem))).toBe(true);
     // A suspensão termina sozinha quando vence (rotina de hora em hora).
     await (await getDb()).update(penalidades).set({ fimEm: new Date(Date.now() - 1000) }).where(eq(penalidades.id, suspensa.id));
     expect(await encerrarPenalidadesVencidas(await getDb())).toBe(1);
     await expect(ana.estacao.gerarCodigo()).resolves.toHaveProperty("code");
     expect((await ana.notificacoes.listar()).some((item) => item.tipo === "penalidade_encerrada")).toBe(true);
+
+    // Excluir notificações: some só para quem excluiu.
+    const [primeira] = await ana.notificacoes.listar();
+    expect(await ana.notificacoes.excluir({ ids: [primeira.id] })).toEqual({ excluidas: 1 });
+    expect((await ana.notificacoes.listar()).some((item) => item.id === primeira.id)).toBe(false);
+    await ana.notificacoes.marcarTodasLidas();
+    expect((await ana.notificacoes.excluir({ somenteLidas: true })).excluidas).toBeGreaterThan(0);
+    expect(await ana.notificacoes.listar()).toEqual([]);
+    expect(await ana.notificacoes.contagemNaoLidas()).toEqual({ count: 0 });
+    await expect(ana.notificacoes.excluir({})).rejects.toThrow(/Escolha/);
   });
 
   it("auditoria: ao confirmar a irregularidade, o administrador escolhe as medidas pré-definidas", async () => {

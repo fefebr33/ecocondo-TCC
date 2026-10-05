@@ -1,10 +1,11 @@
-import { exigirSemSuspensao } from "../penalidades";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { exigirSemSuspensao, historicoPenalidades, suspensoesVigentesDoCondominio } from "../penalidades";
+import { gerarRelatorioPdf, type DadosRelatorioPdf } from "../relatorios/relatorioPdf";
+import { gerarRelatorioPlanilha } from "../relatorios/relatorioPlanilha";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { coletas, estacoesPesagem, guiasDescarte, logsAuditoria, movimentacoesPontos, notificacoesLidas, notificacoes, moradores, perfisAcesso, preferenciasNotificacao, ocorrencias, recompensas, resgates, relatoriosAnuais, tiposResiduo, usuarios } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { rotuloResiduo } from "@shared/rotulos";
+import { rotuloResiduo, rotuloTipoPenalidade } from "@shared/rotulos";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -15,7 +16,7 @@ import { pesoConfirmadoGramas } from "../dominio/antifraude";
 import { nomePublico, recortarRankingPublico } from "../dominio/privacidadeRanking";
 import { classificarPodio } from "../dominio/regrasPodio";
 import { origensDosRegistros } from "./operacoes";
-import { calcularIntervalo, classificacaoDoPeriodo, inicioDoCiclo, somarPorMorador } from "./podio";
+import { ajustesDePenalidade, calcularIntervalo, classificacaoDoPeriodo, descontarPenalidades, inicioDoCiclo, somarPorMorador } from "./podio";
 import { rotuloSituacao, situacaoDescarte, TIPOS_RESIDUO, type SituacaoDescarte } from "@shared/descarte";
 import { guiasDoCondominio } from "../guias";
 import { writeAuditLog } from "../audit";
@@ -58,7 +59,8 @@ async function pontosAcumulados(condominioId: number, periodo?: { startDate?: Da
   // Depois que o administrador zera os pontos, o ranking geral conta só o ciclo novo.
   const inicio = await inicioDoCiclo(condominioId, periodo?.startDate);
   const registros = await db.select().from(coletas).where(and(eq(coletas.condominioId, condominioId), eq(coletas.status, "concluida"), ...condicoesDataEm(coletas.concluidaEm, { startDate: inicio, endDate: periodo?.endDate })));
-  return somarPorMorador(registros);
+  // Pontos retirados por medidas administrativas também saem do ranking (não só do saldo).
+  return descontarPenalidades(somarPorMorador(registros), await ajustesDePenalidade(condominioId, inicio, periodo?.endDate));
 }
 
 /** Movimentações do extrato no período (entradas, estornos e resgates), do condomínio todo ou de um morador. */
@@ -213,6 +215,93 @@ async function notificacoesVisiveis(ctx: { user: { id: number }; eco: { condomin
   return or(eq(notificacoes.destinatarioId, ctx.user.id), and(sql`${notificacoes.destinatarioId} IS NULL`, tipos.length ? inArray(notificacoes.tipo, tipos) : sql`false`, publico));
 }
 
+/** Visão geral dos relatórios do administrador (tela, PDF e planilha usam os mesmos números). */
+export async function visaoGeralDoCondominio(condominioId: number, input?: { startDate?: Date; endDate?: Date; block?: string }) {
+  const db = await getDb();
+  const registros = await db.select().from(coletas).where(and(...condicoesCsv(condominioId, input))).orderBy(desc(coletas.agendadaPara));
+  const todosMoradores = await db.select().from(moradores).where(eq(moradores.condominioId, condominioId));
+  const comunidade = input?.block ? todosMoradores.filter((morador) => morador.bloco === input.block) : todosMoradores;
+  // Ranking pelos pontos ganhos no período (não pelo saldo, que cai quando o morador resgata uma recompensa).
+  const classificados = classificarPodio(descontarPenalidades(somarPorMorador(registros.filter((registro) => registro.status === "concluida")), await ajustesDePenalidade(condominioId, input?.startDate, input?.endDate)));
+  const ranking = classificados.slice(0, 10).map((linha) => {
+    const morador = todosMoradores.find((item) => item.id === linha.moradorId);
+    return { position: linha.posicao, id: linha.moradorId, name: morador?.nome ?? "Morador removido", block: morador?.bloco ?? "—", points: linha.pontos, weightKg: Number((linha.pesoGramas / 1000).toFixed(2)) };
+  });
+  const participantes = new Set(registros.filter((registro) => situacaoDescarte(registro) === "aprovado" && registro.moradorId !== null).map((registro) => registro.moradorId));
+  const resumo = resumir(registros);
+  const idsDoFiltro = input?.block ? new Set(comunidade.map((morador) => morador.id)) : null;
+  const movimentacoes = (await db.select({ tipo: movimentacoesPontos.tipo, pontos: movimentacoesPontos.pontos, moradorId: movimentacoesPontos.moradorId }).from(movimentacoesPontos).where(and(eq(movimentacoesPontos.condominioId, condominioId), ...condicoesDataEm(movimentacoesPontos.criadoEm, input)))).filter((linha) => !idsDoFiltro || idsDoFiltro.has(linha.moradorId));
+  const pontos = resumirPontos(movimentacoes);
+  const resgatesPeriodo = (await db.select({ status: resgates.status, pontosGastos: resgates.pontosGastos, recompensa: recompensas.titulo, moradorId: resgates.moradorId }).from(resgates).leftJoin(recompensas, eq(recompensas.id, resgates.recompensaId)).where(and(eq(resgates.condominioId, condominioId), ...condicoesDataEm(resgates.criadoEm, input)))).filter((linha) => !idsDoFiltro || idsDoFiltro.has(linha.moradorId));
+  const validos = resgatesPeriodo.filter((item) => item.status !== "cancelado");
+  const porRecompensa = Array.from(validos.reduce((mapa, item) => {
+    const chave = item.recompensa ?? "Recompensa removida";
+    const atual = mapa.get(chave) ?? { titulo: chave, quantidade: 0, pontos: 0 };
+    atual.quantidade += 1;
+    atual.pontos += item.pontosGastos;
+    return mapa.set(chave, atual);
+  }, new Map<string, { titulo: string; quantidade: number; pontos: number }>()).values()).sort((a, b) => b.quantidade - a.quantidade);
+  const incidentes = await db.select({ id: ocorrencias.id }).from(ocorrencias).where(and(eq(ocorrencias.condominioId, condominioId), ...condicoesDataEm(ocorrencias.criadoEm, input)));
+  const [auditoria] = await db.select({ total: sql<number>`count(*)` }).from(logsAuditoria).where(and(eq(logsAuditoria.condominioId, condominioId), ...condicoesDataEm(logsAuditoria.criadoEm, input)));
+  return {
+    ...resumo,
+    ranking,
+    participationRate: comunidade.length ? Number(((participantes.size / comunidade.length) * 100).toFixed(1)) : null,
+    residentsCount: comunidade.length,
+    participantsCount: participantes.size,
+    period: input ?? {},
+    equivalencias: calcularEquivalenciasAmbientais(resumo.recyclableKg),
+    pontos,
+    resgates: { total: validos.length, entregues: validos.filter((item) => item.status === "entregue").length, pendentes: validos.filter((item) => item.status === "solicitado" || item.status === "aprovado").length, cancelados: resgatesPeriodo.length - validos.length, porRecompensa },
+    environmentalIncidents: incidentes.length,
+    auditEvents: Number(auditoria?.total ?? 0),
+    // A comparação entre blocos mostra sempre todos os blocos do período; o bloco escolhido aparece destacado na tela.
+    porBloco: input?.block ? compararBlocos(await db.select().from(coletas).where(and(...condicoesPeriodo(condominioId, input))), todosMoradores) : compararBlocos(registros, todosMoradores),
+    porMes: kgPorMesETipo(registros, input?.endDate ?? new Date(), 6),
+    blocos: await blocosDoCondominio(condominioId),
+    gestao: await indicadoresGerais(db, condominioId, input),
+  };
+}
+
+/** Dados do PDF e da planilha: a visão geral do período e o top 3 com a mesma privacidade do pódio (o PDF pode circular). */
+export async function dadosDoRelatorio(condominioId: number, nomeCondominio: string, input?: { startDate?: Date; endDate?: Date; block?: string }): Promise<DadosRelatorioPdf> {
+  const db = await getDb();
+  const visao = await visaoGeralDoCondominio(condominioId, input);
+  const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, condominioId));
+  const suspensoes = await suspensoesVigentesDoCondominio(db, condominioId);
+  const registros = await db.select().from(coletas).where(and(...condicoesCsv(condominioId, input), eq(coletas.status, "concluida")));
+  const top3 = classificarPodio(descontarPenalidades(somarPorMorador(registros), await ajustesDePenalidade(condominioId, input?.startDate, input?.endDate))).filter((linha) => linha.noPodio).map((linha) => {
+    const morador = comunidade.find((item) => item.id === linha.moradorId);
+    return { posicao: linha.posicao, nome: morador ? nomePublico(morador, suspensoes.has(morador.id)) : "Morador removido", bloco: morador?.bloco ?? "-", pontos: linha.pontos, pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)) };
+  });
+  return {
+    condominio: nomeCondominio,
+    bloco: input?.block,
+    inicio: input?.startDate,
+    fim: input?.endDate,
+    geradoEm: new Date(),
+    totalKg: visao.totalKg,
+    recyclableKg: visao.recyclableKg,
+    recyclingRate: visao.recyclingRate,
+    co2EstimateKg: visao.co2EstimateKg,
+    completedCount: visao.completedCount,
+    porSituacao: visao.porSituacao,
+    byWasteType: visao.byWasteType,
+    participationRate: visao.participationRate,
+    residentsCount: visao.residentsCount,
+    participantsCount: visao.participantsCount,
+    equivalencias: visao.equivalencias,
+    pontos: visao.pontos,
+    resgates: visao.resgates,
+    environmentalIncidents: visao.environmentalIncidents,
+    auditEvents: visao.auditEvents,
+    porBloco: visao.porBloco,
+    porMes: visao.porMes,
+    top3,
+    gestao: visao.gestao,
+  };
+}
+
 export const analyticsRouter = router({
   dashboard: router({
     resumo: withProfile.query(async ({ ctx }) => {
@@ -235,9 +324,11 @@ export const analyticsRouter = router({
       const comunidade = await db.select({ id: moradores.id, nome: moradores.nome, bloco: moradores.bloco, ocultarNomeNoPodio: moradores.ocultarNomeNoPodio }).from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
       const porId = new Map(comunidade.map((morador) => [morador.id, morador]));
       const classificados = (await classificacaoDoPeriodo(ctx.eco.condominio.id, inicio, fim)).filter((linha) => porId.has(linha.moradorId));
+      const suspensoes = await suspensoesVigentesDoCondominio(db, ctx.eco.condominio.id);
       const top3 = classificados.filter((linha) => linha.noPodio).map((linha) => {
         const morador = porId.get(linha.moradorId)!;
-        return { position: linha.posicao, nome: ehMorador ? nomePublico(morador) : morador.nome, bloco: morador.bloco, pontos: linha.pontos, pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)), voce: linha.moradorId === ctx.eco.morador?.id };
+        const suspensao = suspensoes.get(linha.moradorId);
+        return { position: linha.posicao, suspenso: Boolean(suspensao), suspensaoPeriodo: suspensao?.periodo ?? null, nome: ehMorador && linha.moradorId !== ctx.eco.morador?.id ? nomePublico(morador, Boolean(suspensao)) : morador.nome, bloco: morador.bloco, pontos: linha.pontos, pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)), voce: linha.moradorId === ctx.eco.morador?.id };
       });
       const minhaPosicao = ehMorador ? classificados.find((linha) => linha.moradorId === ctx.eco.morador?.id)?.posicao ?? null : null;
 
@@ -273,103 +364,34 @@ export const analyticsRouter = router({
   relatorios: router({
     /** Blocos que aparecem nos cadastros e nos descartes, para o filtro dos relatórios. */
     blocos: administratorOnly.query(async ({ ctx }) => blocosDoCondominio(ctx.eco.condominio.id)),
-    visaoGeral: administratorOnly.input(periodInput).query(async ({ ctx, input }) => {
-      const db = await getDb();
-      const registros = await db.select().from(coletas).where(and(...condicoesCsv(ctx.eco.condominio.id, input))).orderBy(desc(coletas.agendadaPara));
-      const todosMoradores = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
-      const comunidade = input?.block ? todosMoradores.filter((morador) => morador.bloco === input.block) : todosMoradores;
-      // Ranking pelos pontos ganhos no período (não pelo saldo, que cai quando o morador resgata uma recompensa).
-      const classificados = classificarPodio(somarPorMorador(registros.filter((registro) => registro.status === "concluida")));
-      const ranking = classificados.slice(0, 10).map((linha) => {
-        const morador = todosMoradores.find((item) => item.id === linha.moradorId);
-        return { position: linha.posicao, id: linha.moradorId, name: morador?.nome ?? "Morador removido", block: morador?.bloco ?? "—", points: linha.pontos, weightKg: Number((linha.pesoGramas / 1000).toFixed(2)) };
-      });
-      const participantes = new Set(registros.filter((registro) => situacaoDescarte(registro) === "aprovado" && registro.moradorId !== null).map((registro) => registro.moradorId));
-      const resumo = resumir(registros);
-      const idsDoFiltro = input?.block ? new Set(comunidade.map((morador) => morador.id)) : null;
-      const movimentacoes = (await db.select({ tipo: movimentacoesPontos.tipo, pontos: movimentacoesPontos.pontos, moradorId: movimentacoesPontos.moradorId }).from(movimentacoesPontos).where(and(eq(movimentacoesPontos.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(movimentacoesPontos.criadoEm, input)))).filter((linha) => !idsDoFiltro || idsDoFiltro.has(linha.moradorId));
-      const pontos = resumirPontos(movimentacoes);
-      const resgatesPeriodo = (await db.select({ status: resgates.status, pontosGastos: resgates.pontosGastos, recompensa: recompensas.titulo, moradorId: resgates.moradorId }).from(resgates).leftJoin(recompensas, eq(recompensas.id, resgates.recompensaId)).where(and(eq(resgates.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(resgates.criadoEm, input)))).filter((linha) => !idsDoFiltro || idsDoFiltro.has(linha.moradorId));
-      const validos = resgatesPeriodo.filter((item) => item.status !== "cancelado");
-      const porRecompensa = Array.from(validos.reduce((mapa, item) => {
-        const chave = item.recompensa ?? "Recompensa removida";
-        const atual = mapa.get(chave) ?? { titulo: chave, quantidade: 0, pontos: 0 };
-        atual.quantidade += 1;
-        atual.pontos += item.pontosGastos;
-        return mapa.set(chave, atual);
-      }, new Map<string, { titulo: string; quantidade: number; pontos: number }>()).values()).sort((a, b) => b.quantidade - a.quantidade);
-      const incidentes = await db.select({ id: ocorrencias.id }).from(ocorrencias).where(and(eq(ocorrencias.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(ocorrencias.criadoEm, input)));
-      const [auditoria] = await db.select({ total: sql<number>`count(*)` }).from(logsAuditoria).where(and(eq(logsAuditoria.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(logsAuditoria.criadoEm, input)));
-      return {
-        ...resumo,
-        ranking,
-        participationRate: comunidade.length ? Number(((participantes.size / comunidade.length) * 100).toFixed(1)) : null,
-        residentsCount: comunidade.length,
-        participantsCount: participantes.size,
-        period: input ?? {},
-        equivalencias: calcularEquivalenciasAmbientais(resumo.recyclableKg),
-        pontos,
-        resgates: { total: validos.length, entregues: validos.filter((item) => item.status === "entregue").length, pendentes: validos.filter((item) => item.status === "solicitado" || item.status === "aprovado").length, cancelados: resgatesPeriodo.length - validos.length, porRecompensa },
-        environmentalIncidents: incidentes.length,
-        auditEvents: Number(auditoria?.total ?? 0),
-        // A comparação entre blocos mostra sempre todos os blocos do período; o bloco escolhido aparece destacado na tela.
-        porBloco: input?.block ? compararBlocos(await db.select().from(coletas).where(and(...condicoesPeriodo(ctx.eco.condominio.id, input))), todosMoradores) : compararBlocos(registros, todosMoradores),
-        porMes: kgPorMesETipo(registros, input?.endDate ?? new Date(), 6),
-        blocos: await blocosDoCondominio(ctx.eco.condominio.id),
-        gestao: await indicadoresGerais(db, ctx.eco.condominio.id, input),
-      };
-    }),
+    visaoGeral: administratorOnly.input(periodInput).query(async ({ ctx, input }) => visaoGeralDoCondominio(ctx.eco.condominio.id, input)),
     exportarPdf: administratorOnly.input(periodInput).mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      const registros = await db.select().from(coletas).where(and(...condicoesCsv(ctx.eco.condominio.id, input))).orderBy(desc(coletas.agendadaPara));
-      const relatorio = resumir(registros);
-      const todosMoradores = await db.select().from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
-      const comunidade = input?.block ? todosMoradores.filter((morador) => morador.bloco === input.block) : todosMoradores;
-      const blocos = compararBlocos(registros, todosMoradores, input?.block);
-      const participantes = new Set(registros.filter((registro) => registro.status === "concluida" && registro.moradorId !== null).map((registro) => registro.moradorId));
-      const pontos = resumirPontos(await movimentacoesDoPeriodo(ctx.eco.condominio.id, input));
-      const resgatesPeriodo = await db.select({ status: resgates.status }).from(resgates).where(and(eq(resgates.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(resgates.criadoEm, input)));
-      const [auditoria] = await db.select({ total: sql<number>`count(*)` }).from(logsAuditoria).where(and(eq(logsAuditoria.condominioId, ctx.eco.condominio.id), ...condicoesDataEm(logsAuditoria.criadoEm, input)));
-      // No PDF (que pode circular fora da administração) o ranking mostra só o top 3, com a mesma privacidade do pódio.
-      const top3 = classificarPodio(somarPorMorador(registros.filter((registro) => registro.status === "concluida"))).filter((linha) => linha.noPodio).map((linha) => {
-        const morador = comunidade.find((item) => item.id === linha.moradorId);
-        return `${linha.posicao}º ${morador ? nomePublico(morador) : "Morador removido"}: ${linha.pontos} pts, ${(linha.pesoGramas / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} kg`;
-      });
-      const pdf = await PDFDocument.create();
-      const pagina = pdf.addPage([595, 842]);
-      const fonte = await pdf.embedFont(StandardFonts.Helvetica);
-      const negrito = await pdf.embedFont(StandardFonts.HelveticaBold);
-      const desenhar = (texto: string, x: number, y: number, tamanho = 11, ehNegrito = false, cor = rgb(0.12, 0.18, 0.15)) => pagina.drawText(texto, { x, y, size: tamanho, font: ehNegrito ? negrito : fonte, color: cor });
-      desenhar("EcoCondo", 48, 790, 23, true, rgb(0.04, 0.39, 0.25));
-      desenhar("Relatório de descartes e reciclagem", 48, 765, 14, true);
-      desenhar(`Condomínio: ${ctx.eco.condominio.nome}${input?.block ? ` · Bloco ${input.block}` : " · Todos os blocos"}`, 48, 740);
-      desenhar(`Período: ${input?.startDate ? input.startDate.toLocaleDateString("pt-BR") : "início"} a ${input?.endDate ? input.endDate.toLocaleDateString("pt-BR") : "atual"}`, 48, 722);
-      const linhas = [
-        ["Peso total confirmado", `${relatorio.totalKg.toLocaleString("pt-BR")} kg`],
-        ["Recicláveis", `${relatorio.recyclableKg.toLocaleString("pt-BR")} kg`],
-        ["Taxa de reciclagem", relatorio.recyclingRate === null ? "Sem dados" : `${relatorio.recyclingRate.toLocaleString("pt-BR")}%`],
-        ["Descartes aprovados / pendentes", `${relatorio.porSituacao.aprovado} / ${relatorio.porSituacao.pendente}`],
-        ["Participação dos moradores", comunidade.length ? `${participantes.size} de ${comunidade.length} (${((participantes.size / comunidade.length) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%)` : "Sem moradores"],
-        ["Pontos distribuídos / estornados", `${pontos.distribuidos} / ${pontos.estornados}`],
-        ["Pontos gastos em resgates", `${pontos.resgatados} (${resgatesPeriodo.filter((item) => item.status !== "cancelado").length} resgate(s))`],
-        ["Reprovados / em auditoria", `${relatorio.porSituacao.reprovado} / ${relatorio.porSituacao.auditoria}`],
-        ["Eventos de auditoria", `${Number(auditoria?.total ?? 0)}`],
-        ["CO2 evitado (estimativa)", `${relatorio.co2EstimateKg.toLocaleString("pt-BR")} kg CO2e`],
-      ];
-      let y = 690;
-      linhas.forEach(([rotulo, valor]) => { desenhar(rotulo, 54, y, 10.5); desenhar(valor, 330, y, 10.5, true, rgb(0.04, 0.39, 0.25)); y -= 24; });
-      desenhar("Resíduos por categoria", 48, y - 10, 13, true); y -= 36;
-      relatorio.byWasteType.forEach((item) => { desenhar(`${rotuloResiduo[item.wasteType]}: ${item.kilograms.toLocaleString("pt-BR")} kg`, 54, y, 10.5); y -= 19; });
-      desenhar("Por bloco (kg aprovados · participação)", 48, y - 10, 13, true); y -= 36;
-      blocos.slice(0, 8).forEach((item) => { desenhar(`Bloco ${item.block}: ${item.kilograms.toLocaleString("pt-BR")} kg · ${item.participantes} de ${item.moradores} morador(es)${item.participationRate === null ? "" : ` (${item.participationRate.toLocaleString("pt-BR")}%)`}`, 54, y, 10.5); y -= 19; });
-      desenhar("Top 3 do período", 48, y - 10, 13, true); y -= 36;
-      (top3.length ? top3 : ["Ninguém pontuou no período."]).forEach((texto) => { desenhar(texto, 54, y, 10.5); y -= 19; });
-      desenhar("Nota metodológica", 48, 150, 11, true);
-      desenhar("Só descartes aprovados entram no total (pendentes, reprovados e em auditoria ficam de fora). CO2: 0,75 kg CO2e por kg reciclável.", 48, 132, 9);
-      desenhar("Os dados devem ser interpretados como estimativas de apoio à gestão e à prestação de contas.", 48, 118, 9);
-      desenhar(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 48, 72, 9);
-      const bytes = await pdf.save();
+      const dados = await dadosDoRelatorio(ctx.eco.condominio.id, ctx.eco.condominio.nome, input);
+      const bytes = await gerarRelatorioPdf(dados);
       return { filename: `relatorio-ecocondo${input?.block ? `-bloco-${input.block}` : ""}-${new Date().toISOString().slice(0, 10)}.pdf`, contentBase64: Buffer.from(bytes).toString("base64") };
+    }),
+    /** Planilha completa em Excel (.xlsx), com uma aba por assunto e as mesmas contas do PDF e da tela. */
+    exportarPlanilha: administratorOnly.input(periodInput).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      const condominioId = ctx.eco.condominio.id;
+      const base = await dadosDoRelatorio(condominioId, ctx.eco.condominio.nome, input);
+      const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, condominioId));
+      const nomeDoMorador = (id: number | null) => comunidade.find((morador) => morador.id === id)?.nome ?? "";
+      const idsDoFiltro = input?.block ? new Set(comunidade.filter((morador) => morador.bloco === input.block).map((morador) => morador.id)) : null;
+      const registros = await db.select().from(coletas).where(and(...condicoesCsv(condominioId, input))).orderBy(desc(coletas.agendadaPara));
+      const origens = await origensDosRegistros(condominioId, registros);
+      const extrato = (await db.select().from(movimentacoesPontos).where(and(eq(movimentacoesPontos.condominioId, condominioId), ...condicoesDataEm(movimentacoesPontos.criadoEm, input))).orderBy(desc(movimentacoesPontos.criadoEm))).filter((linha) => !idsDoFiltro || idsDoFiltro.has(linha.moradorId));
+      const listaResgates = (await db.select({ resgate: resgates, recompensa: recompensas.titulo }).from(resgates).leftJoin(recompensas, eq(recompensas.id, resgates.recompensaId)).where(and(eq(resgates.condominioId, condominioId), ...condicoesDataEm(resgates.criadoEm, input))).orderBy(desc(resgates.criadoEm))).filter(({ resgate }) => !idsDoFiltro || idsDoFiltro.has(resgate.moradorId));
+      const medidas = (await historicoPenalidades(db, condominioId)).filter((medida) => (!input?.startDate || medida.criadoEm >= input.startDate) && (!input?.endDate || medida.criadoEm <= input.endDate) && (!idsDoFiltro || idsDoFiltro.has(medida.moradorId)));
+      const conteudo = await gerarRelatorioPlanilha({
+        ...base,
+        ranking: (await visaoGeralDoCondominio(condominioId, input)).ranking,
+        descartes: registros.map((registro) => ({ id: registro.id, data: registro.concluidaEm ?? registro.agendadaPara, morador: nomeDoMorador(registro.moradorId), bloco: registro.bloco, tipo: rotuloResiduo[registro.tipoResiduo], pesoKg: registro.pesoGramas === null ? null : registro.pesoGramas / 1000, situacao: rotuloSituacao[situacaoDescarte(registro)], pontos: registro.pontosConcedidos, origem: origens(registro), observacoes: [registro.observacoes, registro.motivoDecisao ? `Decisão: ${registro.motivoDecisao}` : null].filter(Boolean).join(" ") })),
+        extrato: extrato.map((linha) => ({ data: linha.criadoEm, morador: nomeDoMorador(linha.moradorId), movimentacao: rotuloMovimentacao[linha.tipo], pontos: linha.pontos, saldo: linha.saldoApos, descricao: linha.descricao })),
+        resgates: { ...base.resgates, lista: listaResgates.map(({ resgate, recompensa }) => ({ data: resgate.criadoEm, morador: nomeDoMorador(resgate.moradorId), recompensa: recompensa ?? "Recompensa removida", pontos: resgate.pontosGastos, status: rotuloStatusResgate[resgate.status] })) },
+        medidas: medidas.map((medida) => ({ data: medida.criadoEm, morador: medida.morador ?? "", bloco: medida.bloco ?? "", tipo: rotuloTipoPenalidade[medida.tipo], nome: medida.nome, periodo: medida.periodo ?? "", situacao: medida.vigente ? "Valendo" : medida.status === "revogada" ? "Revogada" : "Encerrada", motivo: medida.motivo, aplicadaPor: medida.aplicadaPor })),
+      });
+      return { filename: `relatorio-ecocondo${input?.block ? `-bloco-${input.block}` : ""}-${new Date().toISOString().slice(0, 10)}.xlsx`, contentBase64: conteudo.toString("base64") };
     }),
     exportarCsv: administratorOnly.input(csvFiltersInput).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -419,12 +441,13 @@ export const analyticsRouter = router({
       const comunidade = await db.select({ moradorId: moradores.id, nome: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento, saldo: moradores.pontos, ocultarNomeNoPodio: moradores.ocultarNomeNoPodio }).from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
       const porId = new Map(comunidade.map((morador) => [morador.moradorId, morador]));
       const classificados = classificarPodio((await pontosAcumulados(ctx.eco.condominio.id)).filter((linha) => porId.has(linha.moradorId)));
+      const suspensoes = await suspensoesVigentesDoCondominio(db, ctx.eco.condominio.id);
       const saldo = ctx.eco.morador ? (await db.select({ pontos: moradores.pontos }).from(moradores).where(eq(moradores.id, ctx.eco.morador.id)).limit(1))[0]?.pontos ?? 0 : null;
       if (ctx.eco.perfil.papel === "administrador") {
         return {
           linhas: classificados.map((linha) => {
             const morador = porId.get(linha.moradorId)!;
-            return { position: linha.posicao, id: linha.moradorId, nome: morador.nome, bloco: morador.bloco, apartamento: morador.apartamento as string | null, pontos: linha.pontos, saldo: morador.saldo as number | null, pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)), voce: false };
+            return { position: linha.posicao, id: linha.moradorId, nome: morador.nome, bloco: morador.bloco, apartamento: morador.apartamento as string | null, pontos: linha.pontos, saldo: morador.saldo as number | null, pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)), voce: false, suspensaoPeriodo: suspensoes.get(linha.moradorId)?.periodo ?? null };
           }),
           minhaPosicao: null,
           totalParticipantes: classificados.length,
@@ -436,7 +459,9 @@ export const analyticsRouter = router({
       return {
         linhas: publicas.map((linha) => {
           const morador = porId.get(linha.moradorId)!;
-          return { position: linha.posicao, id: null as number | null, nome: nomePublico(morador), bloco: morador.bloco, apartamento: null as string | null, pontos: linha.pontos, saldo: null as number | null, pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)), voce: linha.moradorId === ctx.eco.morador?.id };
+          const voce = linha.moradorId === ctx.eco.morador?.id;
+          const suspensao = suspensoes.get(linha.moradorId);
+          return { position: linha.posicao, id: null as number | null, nome: voce ? morador.nome : nomePublico(morador, Boolean(suspensao)), bloco: morador.bloco, apartamento: null as string | null, pontos: linha.pontos, saldo: null as number | null, pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)), voce, suspensaoPeriodo: suspensao?.periodo ?? null };
         }),
         minhaPosicao: minha ? { position: minha.posicao, pontos: minha.pontos } : null,
         totalParticipantes: total,
@@ -568,7 +593,7 @@ export const analyticsRouter = router({
   notificacoes: router({
     listar: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx))).orderBy(desc(notificacoes.criadoEm), desc(notificacoes.id));
+      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx), isNull(notificacoesLidas.excluidaEm))).orderBy(desc(notificacoes.criadoEm), desc(notificacoes.id));
       return linhas.map(({ notificacao, leitura }) => ({ ...notificacao, lidaEm: leitura?.lidaEm ?? notificacao.lidaEm ?? null }));
     }),
     /** Abre uma notificação (só se for do usuário ou um comunicado geral) e a marca como lida. */
@@ -582,13 +607,13 @@ export const analyticsRouter = router({
     /** Não lidas mais novas que `afterId`, para o aviso que aparece na tela (pop-up) assim que uma notificação chega. */
     novas: withProfile.input(z.object({ afterId: z.number().int().min(0) })).query(async ({ ctx, input }) => {
       const db = await getDb();
-      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), gt(notificacoes.id, input.afterId), await notificacoesVisiveis(ctx))).orderBy(desc(notificacoes.id)).limit(20);
+      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), gt(notificacoes.id, input.afterId), await notificacoesVisiveis(ctx), isNull(notificacoesLidas.excluidaEm))).orderBy(desc(notificacoes.id)).limit(20);
       const [ultima] = await db.select({ id: sql<number>`max(${notificacoes.id})` }).from(notificacoes).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx)));
       return { ultimaId: Number(ultima?.id ?? 0), itens: linhas.filter(({ notificacao, leitura }) => !leitura && !notificacao.lidaEm).slice(0, 5).map(({ notificacao }) => notificacao) };
     }),
     contagemNaoLidas: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx)));
+      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx), isNull(notificacoesLidas.excluidaEm)));
       return { count: countUnreadNotifications(linhas.map((linha) => linha.notificacao.id), ctx.user.id, linhas.flatMap((linha) => (linha.leitura || linha.notificacao.lidaEm ? [{ notificationId: linha.notificacao.id, userId: ctx.user.id }] : []))) };
     }),
     marcarLida: withProfile.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -597,6 +622,23 @@ export const analyticsRouter = router({
       if (!visivel[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Notificação não encontrada." });
       await db.insert(notificacoesLidas).values({ notificacaoId: input.id, usuarioId: ctx.user.id }).onDuplicateKeyUpdate({ set: { lidaEm: new Date() } });
       return { success: true };
+    }),
+    /**
+     * Exclui notificações da lista de quem pediu (uma, várias ou todas as já lidas). Some só para essa pessoa: avisos gerais
+     * continuam para os outros, e a administração continua vendo quem visualizou.
+     */
+    excluir: withProfile.input(z.object({ ids: z.array(z.number().int().positive()).min(1).max(500).optional(), somenteLidas: z.boolean().optional() })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!input.ids?.length && !input.somenteLidas) throw new TRPCError({ code: "BAD_REQUEST", message: "Escolha quais notificações excluir." });
+      const condicoes = [eq(notificacoes.condominioId, ctx.eco.condominio.id), await notificacoesVisiveis(ctx), isNull(notificacoesLidas.excluidaEm)];
+      if (input.ids?.length) condicoes.push(inArray(notificacoes.id, input.ids));
+      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(...condicoes));
+      const alvo = input.somenteLidas ? linhas.filter(({ notificacao, leitura }) => leitura || notificacao.lidaEm) : linhas;
+      const agora = new Date();
+      for (const { notificacao } of alvo) {
+        await db.insert(notificacoesLidas).values({ notificacaoId: notificacao.id, usuarioId: ctx.user.id, lidaEm: agora, excluidaEm: agora }).onDuplicateKeyUpdate({ set: { excluidaEm: agora } });
+      }
+      return { excluidas: alvo.length };
     }),
     marcarTodasLidas: withProfile.mutation(async ({ ctx }) => {
       const db = await getDb();
@@ -651,7 +693,7 @@ export const analyticsRouter = router({
     /** Avisos importantes ainda não lidos, para o destaque no painel. */
     importantes: withProfile.query(async ({ ctx }) => {
       const db = await getDb();
-      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), eq(notificacoes.importante, true), await notificacoesVisiveis(ctx))).orderBy(desc(notificacoes.criadoEm)).limit(5);
+      const linhas = await db.select({ notificacao: notificacoes, leitura: notificacoesLidas }).from(notificacoes).leftJoin(notificacoesLidas, and(eq(notificacoesLidas.notificacaoId, notificacoes.id), eq(notificacoesLidas.usuarioId, ctx.user.id))).where(and(eq(notificacoes.condominioId, ctx.eco.condominio.id), eq(notificacoes.importante, true), await notificacoesVisiveis(ctx), isNull(notificacoesLidas.excluidaEm))).orderBy(desc(notificacoes.criadoEm)).limit(5);
       return linhas.filter((linha) => !linha.leitura).map((linha) => linha.notificacao);
     }),
   }),

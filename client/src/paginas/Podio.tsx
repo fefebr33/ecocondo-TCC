@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { formatarNumero } from "@/lib/utils";
 import {
+  Ban,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -224,11 +225,11 @@ export default function Podio() {
             {top3.map((linha, indice) => (
               <article
                 key={linha.moradorId ?? `pos-${indice}`}
-                className={`rounded-2xl border p-4 text-center ${linha.voce ? "border-[#0f7350]/40 bg-[#f1f8f4]" : "border-[#e0ebe4] bg-[#fbfdfc]"}`}
+                className={`rounded-2xl border p-4 text-center ${linha.suspensao ? "border-[#d9dedb] bg-[#f2f3f2] text-[#6b726e] grayscale" : linha.voce ? "border-[#0f7350]/40 bg-[#f1f8f4]" : "border-[#e0ebe4] bg-[#fbfdfc]"}`}
               >
                 <span
                   className="mx-auto grid h-11 w-11 place-items-center rounded-full text-white"
-                  style={{ backgroundColor: medalha[linha.position - 1] }}
+                  style={{ backgroundColor: linha.suspensao ? "#9aa29e" : medalha[linha.position - 1] }}
                 >
                   <Medal className="h-5 w-5" />
                 </span>
@@ -239,6 +240,12 @@ export default function Podio() {
                   {linha.nome}
                   {linha.voce ? " (você)" : ""}
                 </p>
+                {linha.suspensao && (
+                  <p className="mx-auto mt-1.5 inline-flex items-center gap-1 rounded-full bg-[#e3e6e4] px-2 py-0.5 text-[11px] font-semibold text-[#4d5551]">
+                    <Ban className="h-3 w-3" />
+                    Participação suspensa {linha.suspensao.periodo}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   Bloco {linha.bloco}
                   {linha.apartamento ? ` · ${linha.apartamento}` : ""}
@@ -251,10 +258,15 @@ export default function Podio() {
                 </p>
                 <p className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-[#fff8ec] px-2 py-1.5 text-[11px] font-semibold text-[#7a4d0a]">
                   <Gift className="h-3.5 w-3.5 shrink-0" />
-                  {linha.premio ? linha.premio.titulo : "Prêmio a definir"}
+                  {linha.suspensao
+                    ? "Sem prêmio enquanto durar a suspensão"
+                    : linha.premio
+                      ? linha.premio.titulo
+                      : "Prêmio a definir"}
                 </p>
                 {isAdmin &&
                   linha.moradorId !== null &&
+                  !linha.suspensao &&
                   (linha.premioEntregue ? (
                     <p className="mt-2 flex items-center justify-center gap-1.5 rounded-lg bg-[#e8f4ed] px-2 py-1.5 text-[11px] font-semibold text-[#0a7048]">
                       <CheckCircle2 className="h-3.5 w-3.5" />
@@ -340,8 +352,13 @@ export default function Podio() {
               <input
                 type="checkbox"
                 className="mt-1 h-4 w-4 accent-[#0f7350]"
-                checked={profile.data?.resident?.ocultarNomeNoPodio ?? false}
-                disabled={definirExibicao.isPending}
+                checked={
+                  Boolean(data?.minhaSuspensao) ||
+                  (profile.data?.resident?.ocultarNomeNoPodio ?? false)
+                }
+                disabled={
+                  definirExibicao.isPending || Boolean(data?.minhaSuspensao)
+                }
                 onChange={event =>
                   definirExibicao.mutate({ hideName: event.target.checked })
                 }
@@ -352,9 +369,9 @@ export default function Podio() {
                   Não mostrar meu nome no pódio
                 </span>
                 <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                  Se você ficar entre os três primeiros, aparece como
-                  "Morador(a) do bloco {profile.data?.resident?.bloco ?? "?"}".
-                  Você continua concorrendo ao prêmio.
+                  {data?.minhaSuspensao
+                    ? `Obrigatório enquanto durar a sua suspensão (${data.minhaSuspensao.periodo}): para os vizinhos você aparece como "Morador(a) do bloco ${profile.data?.resident?.bloco ?? "?"}". Só você e a administração veem o seu nome.`
+                    : `Se você ficar entre os três primeiros, aparece como "Morador(a) do bloco ${profile.data?.resident?.bloco ?? "?"}". Você continua concorrendo ao prêmio.`}
                 </span>
               </span>
             </label>
@@ -377,11 +394,14 @@ export default function Podio() {
                       {linha.position}
                     </b>
                     <span>
-                      <span className="block text-sm font-semibold">
+                      <span className={`block text-sm font-semibold ${linha.suspensao ? "text-muted-foreground" : ""}`}>
                         {linha.nome}
                       </span>
                       <span className="text-xs text-muted-foreground">
                         Bloco {linha.bloco} · {linha.apartamento}
+                        {linha.suspensao
+                          ? ` · suspenso(a) ${linha.suspensao.periodo}`
+                          : ""}
                       </span>
                     </span>
                   </span>

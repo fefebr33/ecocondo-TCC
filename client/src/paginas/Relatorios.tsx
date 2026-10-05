@@ -162,6 +162,28 @@ export default function Reports() {
     },
     onError: issue => toast.error(issue.message),
   });
+  const exportPlanilha = trpc.relatorios.exportarPlanilha.useMutation({
+    onSuccess: file => {
+      const binary = atob(file.contentBase64);
+      const bytes = Uint8Array.from(binary, character =>
+        character.charCodeAt(0)
+      );
+      const url = URL.createObjectURL(
+        new Blob([bytes], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        })
+      );
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = file.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success(
+        "Planilha do Excel pronta: uma aba por assunto (resumo, tipos, meses, blocos, ranking, descartes, pontos, resgates, medidas e gestão)."
+      );
+    },
+    onError: issue => toast.error(issue.message),
+  });
   const exportCsv = trpc.relatorios.exportarCsv.useMutation({
     onSuccess: file => {
       const url = URL.createObjectURL(
@@ -216,8 +238,23 @@ export default function Reports() {
       <PageIntro
         eyebrow="Análise ambiental"
         title="Relatórios"
-        description="Desempenho ambiental, participação, pontos, prêmios e auditoria, com gráficos por bloco, por mês e por tipo. Escolha o período e o bloco."
+        description="Desempenho ambiental, participação, pontos, prêmios e auditoria, com gráficos por bloco, por mês e por tipo. Escolha o período e o bloco. O PDF traz os mesmos gráficos e indicadores do painel; a planilha do Excel traz uma aba para cada assunto."
         action={
+          <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => exportPlanilha.mutate(period)}
+            title={
+              bloco === "todos"
+                ? "Planilha de todos os blocos"
+                : `Planilha só do bloco ${bloco}`
+            }
+            disabled={exportPlanilha.isPending}
+            className="h-10 rounded-xl border-[#c9ddd0] bg-white font-semibold text-[#0d6747]"
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            {exportPlanilha.isPending ? "Gerando..." : "Baixar planilha (Excel)"}
+          </Button>
           <Button
             onClick={() => exportPdf.mutate(period)}
             title={
@@ -231,6 +268,7 @@ export default function Reports() {
             <Download className="mr-2 h-4 w-4" />
             {exportPdf.isPending ? "Gerando PDF..." : "Exportar PDF"}
           </Button>
+          </div>
         }
       />
       <section className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">

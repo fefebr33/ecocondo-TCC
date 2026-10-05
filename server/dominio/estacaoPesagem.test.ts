@@ -43,6 +43,12 @@ describe("regras antifraude da estação de pesagem", () => {
     expect(() => avaliarDescarteEstacao({ itens: [item(1000)], registrosHoje: quatro, agora })).toThrow(/máximo por dia/);
   });
 
+  it("no modo demonstração não há espera entre descartes nem limite do dia; fora dele as regras continuam", () => {
+    const seguidos = [1, 2, 3, 4].map((minuto) => ({ pesoGramas: 9000, concluidaEm: minutosAntes(minuto), lote: `L${minuto}` }));
+    expect(() => avaliarDescarteEstacao({ itens: [item(2000)], registrosHoje: seguidos, agora, modoDemonstracao: true })).not.toThrow();
+    expect(() => avaliarDescarteEstacao({ itens: [item(2000)], registrosHoje: seguidos, agora })).toThrow(LimiteAntifraudeExcedidoError);
+  });
+
   it("aponta alertas para a conferência: peso alto e peso fora do histórico", () => {
     expect(avaliarDescarteEstacao({ itens: [item(12_000, { mediaHistoricaGramas: 11_000 })], registrosHoje: [], agora }).alertasPorItem).toEqual([["peso acima de 10 kg"]]);
     expect(avaliarDescarteEstacao({ itens: [item(7000, { mediaHistoricaGramas: 2000 })], registrosHoje: [], agora }).alertasPorItem).toEqual([["peso muito acima do histórico do morador"]]);

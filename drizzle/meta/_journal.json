@@ -43,6 +43,13 @@
       "when": 1790954602854,
       "tag": "0005_ia_adesivos_penalidades",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1791212043522,
+      "tag": "0006_melhorias_notificacoes_auditoria",
+      "breakpoints": true
     }
   ]
 }
