@@ -31,7 +31,7 @@ import {
 import { analisarItem, decidirAnalise, mesmaCor, simulacoesIa, type LeituraIa } from "../ia/analiseDescarte";
 import { idUsuarioSistemaIa } from "../ia/usuarioSistema";
 import { aprovarColeta } from "./operacoes";
-import { exigirSemSuspensao } from "../penalidades";
+import { suspensaoVigente } from "../penalidades";
 import { LIMITE_ADESIVOS_ACABANDO, normalizarCodigoAdesivo } from "@shared/adesivos";
 
 /** Cabeçalho enviado pelo tablet pareado com o código de pareamento guardado nele. */
@@ -128,11 +128,19 @@ async function avaliarDescarte(estacao: EstacaoPesagem, morador: Morador, itens:
     const pesos = historico.map((registro) => registro.pesoGramas ?? 0);
     itensAvaliados.push({ rotulo: rotuloResiduo[item.wasteType], pesoGramas: item.weightGrams, pesoMinimoGramas: regras[item.wasteType].pesoMinimoGramas, pesoMaximoGramas: regras[item.wasteType].pesoMaximoGramas, mediaHistoricaGramas: pesos.length ? pesos.reduce((soma, peso) => soma + peso, 0) / pesos.length : 0 });
   }
-  const { alertasPorItem } = avaliarDescarteEstacao({ itens: itensAvaliados, registrosHoje, agora });
+  const { alertasPorItem } = avaliarDescarteEstacao({ itens: itensAvaliados, registrosHoje, agora, modoDemonstracao: estacao.modoDemonstracao });
+  // Suspensão da participação: o descarte é registrado normalmente, mas não vale pontos até a suspensão acabar ou ser revogada.
+  const suspensao = await suspensaoVigente(db, morador.id);
   return itens.map((item, indice) => {
-    const milesimos = milesimosDoDescarte(item.weightGrams, regras[item.wasteType].pontosPorKg);
-    return { ...item, alertas: alertasPorItem[indice], milesimos, pontosPrevistos: milesimos / 1000, regra: regras[item.wasteType] };
+    const milesimos = suspensao ? 0 : milesimosDoDescarte(item.weightGrams, regras[item.wasteType].pontosPorKg);
+    return { ...item, alertas: alertasPorItem[indice], milesimos, pontosPrevistos: milesimos / 1000, regra: regras[item.wasteType], suspensao };
   });
+}
+
+/** Aviso mostrado no tablet e na notificação quando o morador está suspenso: o descarte vale, os pontos não. */
+function textoSemPontos(suspensao: { fimEm: Date | null }) {
+  const ate = suspensao.fimEm ? ` até ${suspensao.fimEm.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : "";
+  return `Sua participação está suspensa${ate}: o descarte é registrado e conferido normalmente, mas não vale pontos enquanto durar a suspensão.`;
 }
 
 /** Configurações do condomínio que valem na estação (adesivo obrigatório e aprovação automática da IA). */
@@ -247,7 +255,6 @@ export const estacoesRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Apenas moradores ativos registram descartes na estação." });
       }
       const db = await getDb();
-      await exigirSemSuspensao(db, ctx.eco.morador.id, "suspensao_participacao", "registrar descartes na estação");
       const expiraEm = new Date(Date.now() + VALIDADE_CODIGO_ESTACAO_MINUTOS * 60_000);
       // Repete em caso (raro) de colisão com o código ativo de outro morador do mesmo condomínio.
       for (let tentativa = 0; tentativa < 5; tentativa += 1) {
@@ -304,9 +311,10 @@ export const estacoesRouter = router({
       const resumo = { estacao: ctx.estacao.nome, morador: morador.nome.split(" ")[0], bloco: morador.bloco, unidade: "kg", pesagemSimulada: ctx.estacao.modoDemonstracao, pesoTotalKg: formatarKg(Math.max(0, input.itens.reduce((soma, item) => soma + item.weightGrams, 0))) };
       try {
         const avaliados = await avaliarDescarte(ctx.estacao, morador, input.itens, new Date());
-        return { ...resumo, bloqueio: null as string | null, itens: avaliados.map((item, indice) => ({ ...itensResumo[indice], pontosPrevistos: item.pontosPrevistos, alertas: item.alertas })), pontosPrevistos: avaliados.reduce((soma, item) => soma + item.milesimos, 0) / 1000 };
+        const suspensao = avaliados[0]?.suspensao ?? null;
+        return { ...resumo, bloqueio: null as string | null, semPontos: suspensao ? textoSemPontos(suspensao) : null, itens: avaliados.map((item, indice) => ({ ...itensResumo[indice], pontosPrevistos: item.pontosPrevistos, alertas: item.alertas })), pontosPrevistos: avaliados.reduce((soma, item) => soma + item.milesimos, 0) / 1000 };
       } catch (error) {
-        if (error instanceof LimiteAntifraudeExcedidoError) return { ...resumo, bloqueio: error.message, itens: itensResumo.map((item) => ({ ...item, pontosPrevistos: 0, alertas: [] as string[] })), pontosPrevistos: 0 };
+        if (error instanceof LimiteAntifraudeExcedidoError) return { ...resumo, bloqueio: error.message, semPontos: null as string | null, itens: itensResumo.map((item) => ({ ...item, pontosPrevistos: 0, alertas: [] as string[] })), pontosPrevistos: 0 };
         throw error;
       }
     }),
@@ -323,7 +331,6 @@ export const estacoesRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Tire a foto de cada saco na balança, com o visor aparecendo, para registrar." });
       }
       const morador = await moradorPorCodigo(estacao, input.code);
-      await exigirSemSuspensao(db, morador.id, "suspensao_participacao", "registrar descartes");
       const configuracoes = await configuracoesDaEstacao(estacao.condominioId);
       const adesivosItens = await adesivosDoDescarte(estacao, morador, input.itens, configuracoes.adesivoObrigatorio);
       const agora = new Date();
@@ -429,7 +436,7 @@ export const estacoesRouter = router({
           tipoEntidade: "coleta",
           entidadeId: ids[indice],
           acao: "registro_estacao",
-          resumo: `Descarte de ${kg} kg de ${residuoNaFrase[item.wasteType]} na estação "${estacao.nome}"${adesivo ? ` com o adesivo ${adesivo.codigo}` : ""}${simulada ? " (balança simulada)" : ""}; análise da IA: ${rotuloResultadoIa(analise.resultado)}${analise.motivos.length ? ` (${analise.motivos.join(" ")})` : ""}.`,
+          resumo: `Descarte de ${kg} kg de ${residuoNaFrase[item.wasteType]} na estação "${estacao.nome}"${adesivo ? ` com o adesivo ${adesivo.codigo}` : ""}${simulada ? " (balança simulada)" : ""}; análise da IA: ${rotuloResultadoIa(analise.resultado)}${analise.motivos.length ? ` (${analise.motivos.join(" ")})` : ""}${item.suspensao ? "; sem pontos: participação do morador suspensa" : ""}.`,
           estadoNovo: { estacaoId: estacao.id, moradorId: morador.id, lote, tipoResiduo: item.wasteType, pesoGramas: item.weightGrams, adesivo: adesivo?.codigo ?? null, situacao: "pendente", pontosPrevistos: item.pontosPrevistos, alertas: item.alertas, pesagemSimulada: simulada, analiseIa: { modo: analise.leitura.modo, resultado: analise.resultado, confianca: analise.leitura.confianca } },
         });
       }
@@ -479,7 +486,7 @@ export const estacoesRouter = router({
         ...base,
         tipo: pendentes.length ? "pesagem_registrada" : "descarte_aprovado_ia",
         titulo: pendentes.length ? (aprovados.length ? "Descarte registrado: parte aprovada, parte em conferência" : "Descarte registrado, aguardando avaliação") : pontosCreditados ? `Descarte aprovado: +${pontosCreditados} ponto(s)` : "Descarte aprovado",
-        mensagem: `A estação "${estacao.nome}" registrou ${listaItens} (${numeros})${simulada ? ", em modo demonstração" : ""}. ${partes}`,
+        mensagem: `A estação "${estacao.nome}" registrou ${listaItens} (${numeros})${simulada ? ", em modo demonstração" : ""}. ${partes}${avaliados[0]?.suspensao ? ` ${textoSemPontos(avaliados[0].suspensao)}` : ""}`,
       });
       // Aviso de adesivos acabando (quando chega ao limite e quando zera), para o morador pedir mais pelo sistema.
       if (adesivosItens.some(Boolean)) {
@@ -500,6 +507,7 @@ export const estacoesRouter = router({
         pendingApproval: pendentes.length > 0,
         pointsAwarded: pontosCreditados,
         pendingPoints: pontosPendentes,
+        semPontos: avaliados[0]?.suspensao ? textoSemPontos(avaliados[0].suspensao) : null,
         modoIa: analises[0]?.leitura.modo ?? "simulacao",
         itens: avaliados.map((item, indice) => ({
           id: ids[indice],

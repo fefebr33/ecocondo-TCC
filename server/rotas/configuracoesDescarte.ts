@@ -9,7 +9,7 @@ import { getDb } from "../db";
 import { router } from "../_core/trpc";
 import { writeAuditLog } from "../audit";
 import { movimentarPontos } from "../pontos";
-import { NOTIFICACOES_OBRIGATORIAS, notificarUsuario } from "../notificacoes";
+import { NOTIFICACOES_OBRIGATORIAS, notificarAdministradores, notificarUsuario } from "../notificacoes";
 import { regrasDoCondominio } from "../regrasResiduo";
 import { administratorOnly, withProfile } from "./nucleo";
 
@@ -79,6 +79,7 @@ export const configuracoesDescarteRouter = router({
       if (saldo === null) throw new TRPCError({ code: "CONFLICT", message: "O saldo mudou enquanto você ajustava. Tente de novo." });
       await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pontos", entidadeId: morador.id, acao: "pontos_ajustados", resumo: `${input.points > 0 ? "+" : ""}${input.points} ponto(s) para ${morador.nome}.`, motivo: input.reason, estadoAnterior: { saldo: morador.pontos }, estadoNovo: { saldo } });
       await notificarUsuario(db, morador.usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "pontos_ajustados", titulo: "Ajuste nos seus pontos", mensagem: `A administração ${input.points > 0 ? "creditou" : "debitou"} ${Math.abs(input.points)} ponto(s). Motivo: ${input.reason}. Saldo atual: ${saldo}.` });
+      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "pontos_ajustados", titulo: "Ajuste de pontos", mensagem: `${morador.nome} (bloco ${morador.bloco}) recebeu ${input.points > 0 ? "+" : ""}${input.points} ponto(s). Motivo: ${input.reason}. Saldo atual: ${saldo}.` }, ctx.user.id);
       return { saldo };
     }),
   }),

@@ -300,6 +300,7 @@ export const operationsRouter = router({
       if (input.resultado === "regular") {
         const resultado = await aprovarColeta(ctx, coleta, `Auditoria concluída sem irregularidade: ${input.parecer}`, true);
         await notificarUsuario(db, usuarioMorador, { ...base, tipo: "auditoria_concluida", titulo: "Auditoria concluída: tudo certo", mensagem: `A auditoria do descarte nº ${coleta.id} terminou sem irregularidade. ${input.parecer}` });
+        await notificarAdministradores(db, { ...base, tipo: "auditoria_concluida", titulo: `Auditoria concluída: nº ${coleta.id} regular`, mensagem: `A auditoria do descarte nº ${coleta.id} (bloco ${coleta.bloco}) terminou sem irregularidade e o descarte foi aprovado. Parecer: ${input.parecer}` });
         return { ...resultado, penalty: 0, medidasAplicadas: [] as string[] };
       }
       const resultado = await reprovarColeta(ctx, coleta, `Irregularidade confirmada na auditoria: ${input.parecer}`);
@@ -317,6 +318,7 @@ export const operationsRouter = router({
           aplicadas.push(aplicada.nome);
         }
       }
+      await notificarAdministradores(db, { ...base, tipo: "auditoria_concluida", titulo: `Auditoria concluída: nº ${coleta.id} irregular`, mensagem: `A auditoria do descarte nº ${coleta.id} (bloco ${coleta.bloco}) confirmou a irregularidade: descarte reprovado${aplicadas.length ? `; medidas aplicadas: ${aplicadas.join("; ")}` : "; nenhuma medida aplicada"}. Parecer: ${input.parecer}` });
       await notificarUsuario(db, usuarioMorador, { ...base, tipo: "auditoria_concluida", titulo: "Auditoria concluída: irregularidade confirmada", mensagem: `A auditoria do descarte nº ${coleta.id} confirmou a irregularidade e o descarte foi reprovado. ${input.parecer}${aplicadas.length ? ` Medidas aplicadas: ${aplicadas.join("; ")}.` : ""}` });
       return { ...resultado, penalty: penalidade, medidasAplicadas: aplicadas };
     }),
@@ -523,7 +525,8 @@ export async function abrirAuditoriaColeta(ctx: ContextoAdministrador, coleta: C
   });
   const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
   await notificarUsuario(db, await usuarioDoMorador(coleta.moradorId), { ...base, tipo: "auditoria_aberta", titulo: "Seu descarte está em auditoria", mensagem: `A administração abriu uma auditoria no descarte nº ${coleta.id} por algo que pareceu suspeito: ${motivo} Pode ser só um mal-entendido; se quiser, procure a administração para explicar. Se a irregularidade for confirmada, o descarte é reprovado e pode haver medidas administrativas (perda de pontos ou suspensão).` });
-  await notificarAdministradores(db, { ...base, tipo: "auditoria_aberta", titulo: "Auditoria aberta", mensagem: `O descarte nº ${coleta.id} (bloco ${coleta.bloco}) foi para auditoria: ${motivo}` }, ctx.user.id);
+  // Para todos os administradores (inclusive quem abriu): é uma tarefa em aberto até alguém dar o parecer.
+  await notificarAdministradores(db, { ...base, tipo: "auditoria_aberta", titulo: `Auditoria aberta: descarte nº ${coleta.id}`, mensagem: `O descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}, bloco ${coleta.bloco}) foi para auditoria. Motivo: ${motivo.replace(/[.!\s]+$/, "")}. O que fazer: confira a foto, o peso, o adesivo e o histórico do morador e conclua em Descartes > Em auditoria, como regular (aprova) ou irregular (reprova e, se quiser, aplica medidas).` });
   return { success: true, destino: "auditoria" as const, pointsReversed: 0 };
 }
 

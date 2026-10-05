@@ -190,6 +190,10 @@ export const adesivosRouter = router({
       if (!alteracao.affectedRows) throw new TRPCError({ code: "BAD_REQUEST", message: "Adesivo não encontrado ou já usado." });
       const [adesivo] = await db.select().from(adesivos).where(eq(adesivos.codigo, codigo)).limit(1);
       await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "adesivo", entidadeId: adesivo.id, acao: "adesivo_cancelado", resumo: `Adesivo ${codigo} cancelado.`, estadoAnterior: { status: "disponivel" }, estadoNovo: { status: "cancelado" }, motivo: input.motivo });
+      const [dono] = await db.select({ usuarioId: moradores.usuarioId }).from(moradores).where(eq(moradores.id, adesivo.moradorId)).limit(1);
+      const [restantes] = await db.select({ total: count() }).from(adesivos).where(and(eq(adesivos.moradorId, adesivo.moradorId), eq(adesivos.status, "disponivel")));
+      const sobra = Number(restantes?.total ?? 0);
+      await notificarUsuario(db, dono?.usuarioId ?? null, { condominioId: ctx.eco.condominio.id, tipo: "adesivo_cancelado", titulo: "Adesivo cancelado", mensagem: `A administração cancelou o seu adesivo ${codigo}: ele não vale mais na estação. Motivo: ${input.motivo.replace(/[.!\s]+$/, "")}. ${sobra ? `Você ainda tem ${sobra} adesivo(s) disponível(is).` : "Você ficou sem adesivos disponíveis: peça mais em Meus adesivos."}` });
       return { success: true };
     }),
     /**

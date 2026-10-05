@@ -100,7 +100,7 @@ const navigation: NavItem[] = [
   },
   {
     href: "/auditoria",
-    label: "Auditoria",
+    label: "Histórico de auditoria",
     icon: History,
     roles: ["administrador"],
   },
@@ -332,8 +332,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               </p>
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
                 {role === "administrador"
-                  ? "Aprove os descartes no mesmo dia: os pontos dos moradores só entram depois da sua conferência."
-                  : "Gere o código em Descartes e registre na estação. Os pontos entram depois que a administração aprova."}
+                  ? "Confira os descartes pendentes no mesmo dia: o que a análise automática não aprovou só rende pontos depois da sua conferência."
+                  : "Gere o código em Descartes e registre na estação. Os pontos entram quando o descarte é aprovado."}
               </p>
             </div>
           </div>
