@@ -92,7 +92,9 @@ export default function EstacoesPesagem() {
               a própria reciclagem. Só tablets pareados aqui conseguem
               registrar. Sem balança de verdade (por exemplo, na apresentação),
               ligue o modo demonstração: o peso é digitado como se viesse da
-              balança e a tela avisa que é uma simulação.
+              balança, a tela avisa que é uma simulação e não há espera de 10
+              minutos nem limite de descartes por dia (dá para registrar vários
+              seguidos).
             </p>
           </div>
         </div>

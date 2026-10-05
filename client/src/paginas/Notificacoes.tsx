@@ -16,6 +16,8 @@ import {
   ShieldAlert,
   UserRound,
   Eye,
+  Trash2,
+  ListChecks,
 } from "lucide-react";
 import { destinoDaNotificacao } from "@shared/notificacoes";
 import type { EcoRole } from "@shared/permissions";
@@ -123,6 +125,8 @@ const categoriaDoTipo: Record<string, keyof typeof categorias> = {
   adesivos_solicitados: "cadastro",
   adesivos_entregues: "cadastro",
   adesivos_acabando: "alerta",
+  adesivo_cancelado: "alerta",
+  auditoria_pendente: "auditoria",
   certificado_disponivel: "sistema",
   relatorio_anual: "sistema",
   sistema: "sistema",
@@ -162,6 +166,27 @@ export default function Notifications() {
     const destino = destinoDaNotificacao(item, papel);
     if (destino) navigate(destino.href);
     else setAberta(atual => (atual === item.id ? null : item.id));
+  }
+  const [selecionando, setSelecionando] = useState(false);
+  const [selecionadas, setSelecionadas] = useState<number[]>([]);
+  const excluir = trpc.notificacoes.excluir.useMutation({
+    onSuccess: resultado => {
+      refreshNotifications();
+      setSelecionadas([]);
+      setSelecionando(false);
+      toast.success(
+        resultado.excluidas
+          ? `${resultado.excluidas} notificação(ões) excluída(s).`
+          : "Nenhuma notificação para excluir."
+      );
+    },
+    onError: issue => toast.error(issue.message),
+  });
+  const totalLidas = (items ?? []).filter(item => item.lidaEm).length;
+  function alternarSelecao(id: number) {
+    setSelecionadas(lista =>
+      lista.includes(id) ? lista.filter(item => item !== id) : [...lista, id]
+    );
   }
   const markAllRead = trpc.notificacoes.marcarTodasLidas.useMutation({
     onSuccess: () => {
@@ -218,7 +243,7 @@ export default function Notifications() {
       <PageIntro
         eyebrow="Comunicação"
         title="Notificações"
-        description={`${unread.data?.count ?? 0} notificação(ões) não lida(s) para você. Toque em uma notificação para ir direto ao que ela fala.`}
+        description={`${unread.data?.count ?? 0} notificação(ões) não lida(s) para você. Toque em uma notificação para ir direto ao que ela fala. Use a lixeira para excluir as que não precisa mais (ou "Excluir lidas" para limpar a lista).`}
         action={notificationAction}
       />
       <section className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
@@ -301,8 +326,9 @@ export default function Notifications() {
             </div>
           </form>
         )}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div
-          className="mb-4 flex gap-2"
+          className="flex gap-2"
           role="group"
           aria-label="Filtrar notificações"
         >
@@ -320,6 +346,86 @@ export default function Notifications() {
                 : `Não lidas (${unread.data?.count ?? 0})`}
             </Button>
           ))}
+        </div>
+        <div className="flex flex-wrap gap-2" aria-label="Limpar notificações">
+          {selecionando ? (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setSelecionadas(
+                    selecionadas.length === visiveis.length
+                      ? []
+                      : visiveis.map(item => item.id)
+                  )
+                }
+                className="h-8 rounded-lg px-3 text-xs"
+              >
+                {selecionadas.length === visiveis.length && visiveis.length
+                  ? "Desmarcar todas"
+                  : "Marcar todas"}
+              </Button>
+              <Button
+                size="sm"
+                disabled={!selecionadas.length || excluir.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Excluir ${selecionadas.length} notificação(ões)? Elas somem só da sua lista.`
+                    )
+                  )
+                    excluir.mutate({ ids: selecionadas });
+                }}
+                className="h-8 rounded-lg bg-[#b3382c] px-3 text-xs text-white hover:bg-[#962e24]"
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Excluir selecionadas ({selecionadas.length})
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSelecionando(false);
+                  setSelecionadas([]);
+                }}
+                className="h-8 rounded-lg px-3 text-xs"
+              >
+                Cancelar
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!visiveis.length}
+                onClick={() => setSelecionando(true)}
+                className="h-8 rounded-lg bg-white px-3 text-xs"
+              >
+                <ListChecks className="mr-1.5 h-3.5 w-3.5" />
+                Selecionar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!totalLidas || excluir.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Excluir as ${totalLidas} notificação(ões) já lidas? As não lidas continuam.`
+                    )
+                  )
+                    excluir.mutate({ somenteLidas: true });
+                }}
+                className="h-8 rounded-lg border-[#f0c9c4] bg-white px-3 text-xs text-[#b3382c] hover:bg-[#fbeceb] hover:text-[#b3382c]"
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Excluir lidas ({totalLidas})
+              </Button>
+            </>
+          )}
+        </div>
         </div>
         {isLoading ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
@@ -349,6 +455,15 @@ export default function Notifications() {
               const expandida = aberta === item.id;
               return (
                 <li key={item.id} className="flex gap-3 py-4 sm:gap-4">
+                  {selecionando && (
+                    <input
+                      type="checkbox"
+                      checked={selecionadas.includes(item.id)}
+                      onChange={() => alternarSelecao(item.id)}
+                      aria-label={`Selecionar: ${item.titulo}`}
+                      className="mt-3 h-4 w-4 shrink-0 accent-[#0f7350]"
+                    />
+                  )}
                   <span
                     className={`mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl ${categoria.cor}`}
                   >
@@ -395,17 +510,33 @@ export default function Notifications() {
                       </span>
                     )}
                   </div>
-                  {!item.lidaEm && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => markRead.mutate({ id: item.id })}
-                      className="h-8 w-8 shrink-0 rounded-lg text-[#0f7350] hover:bg-[#edf7f1]"
-                      aria-label="Marcar como lida"
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <div className="flex shrink-0 flex-col gap-1">
+                    {!item.lidaEm && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => markRead.mutate({ id: item.id })}
+                        className="h-8 w-8 rounded-lg text-[#0f7350] hover:bg-[#edf7f1]"
+                        aria-label="Marcar como lida"
+                        title="Marcar como lida"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {!selecionando && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        disabled={excluir.isPending}
+                        onClick={() => excluir.mutate({ ids: [item.id] })}
+                        className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-[#fbeceb] hover:text-[#b3382c]"
+                        aria-label={`Excluir: ${item.titulo}`}
+                        title="Excluir notificação"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </li>
               );
             })}

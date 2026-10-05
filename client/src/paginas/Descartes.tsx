@@ -1238,6 +1238,31 @@ function DialogoConcluirAuditoria({
     },
     onError: issue => toast.error(issue.message),
   });
+  const escolhidas = (modelos.data ?? []).filter(modelo =>
+    medidas.includes(modelo.id)
+  );
+  const retirada = Number(penalidade) || 0;
+  const pontosDasMedidas = escolhidas.reduce(
+    (soma, modelo) =>
+      soma + (modelo.tipo === "perda_pontos" ? modelo.pontos ?? 0 : 0),
+    0
+  );
+  const consequencias =
+    resultado === "regular"
+      ? [
+          "O descarte é aprovado e os pontos entram (ou continuam) no saldo.",
+          "O morador recebe o parecer como notificação.",
+        ]
+      : [
+          "O descarte é reprovado e os pontos dele saem do saldo.",
+          pontosDasMedidas + retirada > 0
+            ? `Mais ${pontosDasMedidas + retirada} ponto(s) retirados do saldo e da pontuação do pódio.`
+            : null,
+          ...escolhidas
+            .filter(modelo => modelo.tipo !== "perda_pontos")
+            .map(modelo => `Medida: ${modelo.nome}.`),
+          "O morador recebe o parecer e as medidas como notificação.",
+        ].filter((linha): linha is string => Boolean(linha));
   return (
     <Dialog
       open={alvo !== null}
@@ -1248,12 +1273,11 @@ function DialogoConcluirAuditoria({
         }
       }}
     >
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <DialogHeader className="border-b border-[#e6eee9] px-5 py-4">
           <DialogTitle>Concluir auditoria nº {alvo?.id}</DialogTitle>
-          <DialogDescription>
-            {alvo?.resumo}. O parecer vai para o morador e fica registrado na
-            auditoria.
+          <DialogDescription className="line-clamp-2">
+            {alvo?.resumo}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -1264,102 +1288,132 @@ function DialogoConcluirAuditoria({
                 id: alvo.id,
                 resultado,
                 parecer,
-                penalidadePontos:
-                  resultado === "irregular" ? Number(penalidade) || 0 : 0,
+                penalidadePontos: resultado === "irregular" ? retirada : 0,
                 medidas: resultado === "irregular" ? medidas : [],
               });
           }}
-          className="grid gap-3"
+          className="flex min-h-0 flex-1 flex-col"
         >
-          <div className="grid grid-cols-2 gap-2">
-            {(["regular", "irregular"] as const).map(opcao => (
-              <button
-                key={opcao}
-                type="button"
-                onClick={() => setResultado(opcao)}
-                className={`rounded-xl border p-3 text-left text-sm ${resultado === opcao ? (opcao === "regular" ? "border-[#0f7350] bg-[#edf7f1]" : "border-[#b3382c] bg-[#fbeceb]") : "border-[#dce8e0] bg-white"}`}
-              >
-                <b>{opcao === "regular" ? "Regular" : "Irregular"}</b>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {opcao === "regular"
-                    ? "Mal-entendido: aprova e libera os pontos."
-                    : "Fraude confirmada: reprova o descarte."}
-                </span>
-              </button>
-            ))}
-          </div>
-          <label className="grid gap-1.5 text-xs font-semibold">
-            Parecer (obrigatório)
-            <textarea
-              required
-              minLength={10}
-              maxLength={800}
-              value={parecer}
-              onChange={event => setParecer(event.target.value)}
-              className="min-h-24 rounded-xl border border-[#dce8e0] bg-white p-3 text-sm"
-            />
-          </label>
-          {resultado === "irregular" && (
-            <fieldset className="grid gap-1.5 text-xs">
-              <legend className="mb-1 font-semibold">
-                Medidas a aplicar (pré-definidas em Configurações)
+          <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-5 py-4">
+            <fieldset className="grid gap-2">
+              <legend className="mb-1.5 text-xs font-semibold">
+                1. Resultado
               </legend>
-              {(modelos.data ?? []).map(modelo => (
-                <label
-                  key={modelo.id}
-                  className="flex items-start gap-2 rounded-lg border border-[#e6eee9] p-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={medidas.includes(modelo.id)}
-                    onChange={event =>
-                      setMedidas(lista =>
-                        event.target.checked
-                          ? [...lista, modelo.id]
-                          : lista.filter(item => item !== modelo.id)
-                      )
-                    }
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <b>{modelo.nome}</b>
-                    {modelo.descricao ? (
-                      <span className="block text-muted-foreground">
-                        {modelo.descricao}
-                      </span>
-                    ) : null}
-                  </span>
-                </label>
-              ))}
-              <span className="text-muted-foreground">
-                Cada medida fica no histórico do morador com o período e o seu
-                nome, e o morador é avisado.
-              </span>
+              <div className="grid grid-cols-2 gap-2">
+                {(["regular", "irregular"] as const).map(opcao => (
+                  <button
+                    key={opcao}
+                    type="button"
+                    aria-pressed={resultado === opcao}
+                    onClick={() => setResultado(opcao)}
+                    className={`rounded-xl border px-3 py-2 text-left text-sm ${resultado === opcao ? (opcao === "regular" ? "border-[#0f7350] bg-[#edf7f1]" : "border-[#b3382c] bg-[#fbeceb]") : "border-[#dce8e0] bg-white"}`}
+                  >
+                    <b>{opcao === "regular" ? "Regular" : "Irregular"}</b>
+                    <span className="block text-xs text-muted-foreground">
+                      {opcao === "regular"
+                        ? "Era um mal-entendido"
+                        : "Fraude confirmada"}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </fieldset>
-          )}
-          {resultado === "irregular" && (
             <label className="grid gap-1.5 text-xs font-semibold">
-              Retirada avulsa de pontos (opcional)
-              <Input
-                type="number"
-                min={0}
-                max={1000}
-                value={penalidade}
-                onChange={event => setPenalidade(event.target.value)}
-                className="h-10 rounded-xl"
+              2. Parecer (vai para o morador)
+              <textarea
+                required
+                minLength={10}
+                maxLength={800}
+                rows={3}
+                value={parecer}
+                onChange={event => setParecer(event.target.value)}
+                placeholder={
+                  resultado === "regular"
+                    ? "Ex.: conferimos as fotos e o peso bate com o saco; não houve irregularidade."
+                    : "Ex.: o mesmo saco aparece em duas pesagens seguidas, com 10 minutos de diferença."
+                }
+                className="rounded-xl border border-[#dce8e0] bg-white p-3 text-sm font-normal"
               />
-              <span className="font-normal text-muted-foreground">
-                Descontados do saldo, além do estorno do descarte.
+              <span className="text-right font-normal text-muted-foreground">
+                {parecer.trim().length < 10
+                  ? `Faltam ${10 - parecer.trim().length} letra(s)`
+                  : `${parecer.length}/800`}
               </span>
             </label>
-          )}
-          <DialogFooter>
+            {resultado === "irregular" && (
+              <fieldset className="grid gap-2 text-xs">
+                <legend className="mb-1.5 font-semibold">
+                  3. Medidas (opcional, pré-definidas em Configurações)
+                </legend>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {(modelos.data ?? []).map(modelo => (
+                    <label
+                      key={modelo.id}
+                      title={modelo.descricao ?? undefined}
+                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 ${medidas.includes(modelo.id) ? "border-[#b3382c] bg-[#fdf6f5]" : "border-[#e6eee9] bg-white"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={medidas.includes(modelo.id)}
+                        onChange={event =>
+                          setMedidas(lista =>
+                            event.target.checked
+                              ? [...lista, modelo.id]
+                              : lista.filter(item => item !== modelo.id)
+                          )
+                        }
+                      />
+                      <span className="leading-4">{modelo.nome}</span>
+                    </label>
+                  ))}
+                </div>
+                <label className="mt-1 flex flex-wrap items-center gap-2 font-semibold">
+                  Retirar mais pontos (avulso):
+                  <Input
+                    type="number"
+                    min={0}
+                    max={1000}
+                    value={penalidade}
+                    onChange={event => setPenalidade(event.target.value)}
+                    className="h-8 w-24 rounded-lg"
+                  />
+                </label>
+              </fieldset>
+            )}
+            <div
+              className={`rounded-xl border p-3 text-xs leading-5 ${resultado === "regular" ? "border-[#cfe1d7] bg-[#f7fbf8]" : "border-[#f0c9c4] bg-[#fdf6f5]"}`}
+              aria-live="polite"
+            >
+              <b>O que vai acontecer</b>
+              <ul className="mt-1 list-disc pl-4">
+                {consequencias.map(linha => (
+                  <li key={linha}>{linha}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <DialogFooter className="border-t border-[#e6eee9] px-5 py-3">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                onClose();
+                limpar();
+              }}
+              className="h-10 rounded-xl"
+            >
+              Cancelar
+            </Button>
             <Button
               type="submit"
               disabled={concluir.isPending || parecer.trim().length < 10}
-              className="h-10 rounded-xl bg-[#5b3aa6] text-white hover:bg-[#4a2f89]"
+              className={`h-10 rounded-xl text-white ${resultado === "regular" ? "bg-[#0f7350] hover:bg-[#0a6243]" : "bg-[#b3382c] hover:bg-[#962e24]"}`}
             >
-              {concluir.isPending ? "Concluindo..." : "Concluir auditoria"}
+              {concluir.isPending
+                ? "Concluindo..."
+                : resultado === "regular"
+                  ? "Concluir: aprovar descarte"
+                  : "Concluir: reprovar descarte"}
             </Button>
           </DialogFooter>
         </form>

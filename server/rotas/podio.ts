@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte, or } from "drizzle-orm";
 import { z } from "zod";
-import { coletas, condominios, entregasPremioPodio, moradores, notificacoes, periodosPodio, premiosPodio } from "../../drizzle/schema";
+import { coletas, condominios, entregasPremioPodio, moradores, movimentacoesPontos, notificacoes, periodosPodio, premiosPodio } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { administratorOnly, withProfile } from "./nucleo";
 import { router } from "../_core/trpc";
@@ -9,6 +9,7 @@ import { writeAuditLog } from "../audit";
 import { pesoConfirmadoGramas } from "../dominio/antifraude";
 import { classificarPodio } from "../dominio/regrasPodio";
 import { nomePublico, recortarRankingPublico } from "../dominio/privacidadeRanking";
+import { suspensoesVigentesDoCondominio } from "../penalidades";
 
 const periodos = periodosPodio;
 export type Periodo = (typeof periodos)[number];
@@ -58,6 +59,34 @@ export async function inicioDoCiclo(condominioId: number, inicio?: Date) {
   return !inicio || zeradoEm > inicio ? zeradoEm : inicio;
 }
 
+/**
+ * Pontos retirados por medidas administrativas (e devolvidos quando a medida é revogada) em cada morador no período.
+ * Assim a retirada de pontos de uma auditoria ou ocorrência vale para o saldo e também para o pódio e o ranking.
+ */
+export async function ajustesDePenalidade(condominioId: number, inicio?: Date, fim?: Date) {
+  const db = await getDb();
+  const condicoes = [
+    eq(movimentacoesPontos.condominioId, condominioId),
+    or(eq(movimentacoesPontos.tipo, "penalidade"), and(eq(movimentacoesPontos.tipo, "ajuste"), isNotNull(movimentacoesPontos.penalidadeId))),
+  ];
+  if (inicio) condicoes.push(gte(movimentacoesPontos.criadoEm, inicio));
+  if (fim) condicoes.push(lte(movimentacoesPontos.criadoEm, fim));
+  const linhas = await db.select({ moradorId: movimentacoesPontos.moradorId, pontos: movimentacoesPontos.pontos }).from(movimentacoesPontos).where(and(...condicoes));
+  const mapa = new Map<number, number>();
+  for (const linha of linhas) mapa.set(linha.moradorId, (mapa.get(linha.moradorId) ?? 0) + linha.pontos);
+  return mapa;
+}
+
+/** Soma os ajustes de penalidade aos totais dos descartes (quem só tem retirada fica negativo e sai da classificação). */
+export function descontarPenalidades<T extends { moradorId: number; pontos: number; pesoGramas: number }>(totais: T[], ajustes: Map<number, number>) {
+  const porMorador = new Map(totais.map((linha) => [linha.moradorId, { ...linha }]));
+  ajustes.forEach((pontos, moradorId) => {
+    const atual = porMorador.get(moradorId);
+    if (atual) atual.pontos += pontos;
+  });
+  return Array.from(porMorador.values());
+}
+
 export async function classificacaoDoPeriodo(condominioId: number, inicioPeriodo: Date, fim: Date) {
   const db = await getDb();
   const inicio = (await inicioDoCiclo(condominioId, inicioPeriodo))!;
@@ -67,7 +96,7 @@ export async function classificacaoDoPeriodo(condominioId: number, inicioPeriodo
     gte(coletas.concluidaEm, inicio),
     lte(coletas.concluidaEm, fim),
   ));
-  return classificarPodio(somarPorMorador(registros));
+  return classificarPodio(descontarPenalidades(somarPorMorador(registros), await ajustesDePenalidade(condominioId, inicio, fim)));
 }
 
 export const podioRouter = router({
@@ -96,21 +125,26 @@ export const podioRouter = router({
         : [];
       const { publicas, minha, total } = recortarRankingPublico(classificados, ctx.eco.morador?.id ?? null);
       const linhasVisiveis = ehAdministrador ? classificados : publicas;
+      const suspensoes = await suspensoesVigentesDoCondominio(db, ctx.eco.condominio.id);
 
       const ranking = linhasVisiveis.map((linha) => {
         const morador = moradoresPorId.get(linha.moradorId)!;
         const entrega = entregas.find((item) => item.moradorId === linha.moradorId);
+        const voce = linha.moradorId === ctx.eco.morador?.id;
+        const suspensao = suspensoes.get(linha.moradorId) ?? null;
         return {
           position: linha.posicao,
           empatado: linha.empatado,
           moradorId: ehAdministrador ? linha.moradorId : null,
-          nome: ehAdministrador ? morador.nome : nomePublico(morador),
+          // Suspenso: para os vizinhos o nome fica oculto até a suspensão acabar ou ser revogada (só ele e a administração veem).
+          nome: ehAdministrador || voce ? morador.nome : nomePublico(morador, Boolean(suspensao)),
+          suspensao: suspensao ? { periodo: suspensao.periodo, inicioEm: suspensao.inicioEm, fimEm: suspensao.fimEm } : null,
           bloco: morador.bloco,
           apartamento: ehAdministrador ? morador.apartamento : null,
           pontos: linha.pontos,
           pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)),
           noPodio: linha.noPodio,
-          voce: linha.moradorId === ctx.eco.morador?.id,
+          voce,
           premio: linha.noPodio ? premioDaPosicao(linha.posicao) : null,
           premioEntregue: entrega ? { premio: entrega.premio, entregueEm: entrega.entregueEm, observacao: entrega.observacao } : null,
         };
@@ -122,6 +156,7 @@ export const podioRouter = router({
         ranking,
         premios,
         minhaPosicao: minha ? { position: minha.posicao, pontos: minha.pontos, pesoKg: Number((minha.pesoGramas / 1000).toFixed(2)) } : null,
+        minhaSuspensao: ctx.eco.morador && suspensoes.get(ctx.eco.morador.id) ? { periodo: suspensoes.get(ctx.eco.morador.id)!.periodo, fimEm: suspensoes.get(ctx.eco.morador.id)!.fimEm } : null,
         totalParticipantes: total,
       };
     }),
@@ -185,6 +220,8 @@ export const podioRouter = router({
 
       const morador = await db.select().from(moradores).where(and(eq(moradores.id, input.moradorId), eq(moradores.condominioId, ctx.eco.condominio.id))).limit(1);
       if (!morador[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Morador não encontrado." });
+      const suspensao = (await suspensoesVigentesDoCondominio(db, ctx.eco.condominio.id)).get(input.moradorId);
+      if (suspensao) throw new TRPCError({ code: "BAD_REQUEST", message: `${morador[0].nome} está com a participação suspensa (${suspensao.periodo}) e não pode receber prêmios até a suspensão acabar ou ser revogada.` });
 
       const existente = await db.select().from(entregasPremioPodio).where(and(
         eq(entregasPremioPodio.moradorId, input.moradorId),

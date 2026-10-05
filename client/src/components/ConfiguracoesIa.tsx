@@ -254,7 +254,7 @@ export function MedidasAdministrativas() {
         <p className="text-sm font-semibold sm:col-span-2">
           {form.id ? "Editar medida" : "Nova medida"}
         </p>
-        <label className="grid gap-1 text-xs font-semibold">
+        <label className="grid min-w-0 gap-1 text-xs font-semibold">
           Nome
           <Input
             required
@@ -264,14 +264,14 @@ export function MedidasAdministrativas() {
             className="h-10 rounded-xl bg-white"
           />
         </label>
-        <label className="grid gap-1 text-xs font-semibold">
+        <label className="grid min-w-0 gap-1 text-xs font-semibold">
           Tipo
           <select
             value={form.tipo}
             onChange={event =>
               setForm({ ...form, tipo: event.target.value as TipoPenalidade })
             }
-            className="h-10 rounded-xl border border-[#dce8e0] bg-white px-3 text-sm font-normal"
+            className="h-10 w-full min-w-0 rounded-xl border border-[#dce8e0] bg-white px-3 text-sm font-normal"
           >
             {(Object.keys(rotuloTipoPenalidade) as TipoPenalidade[]).map(tipo => (
               <option key={tipo} value={tipo}>
@@ -281,7 +281,7 @@ export function MedidasAdministrativas() {
           </select>
         </label>
         {comPontos && (
-          <label className="grid gap-1 text-xs font-semibold">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold">
             Pontos retirados
             <Input
               required
@@ -294,7 +294,7 @@ export function MedidasAdministrativas() {
           </label>
         )}
         {comPeriodo && (
-          <label className="grid gap-1 text-xs font-semibold">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold">
             Duração
             <span className="flex gap-2">
               <Input
@@ -315,7 +315,7 @@ export function MedidasAdministrativas() {
                     duracaoUnidade: event.target.value as "dias" | "meses",
                   })
                 }
-                className="h-10 rounded-xl border border-[#dce8e0] bg-white px-3 text-sm font-normal"
+                className="h-10 w-full min-w-0 rounded-xl border border-[#dce8e0] bg-white px-3 text-sm font-normal"
               >
                 <option value="dias">dias</option>
                 <option value="meses">meses</option>

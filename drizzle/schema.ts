@@ -94,6 +94,7 @@ export const tiposNotificacao = [
   "nova_campanha", "campanha_participacao", "campanha_atualizada", "campanha_pausada", "campanha_encerrando", "campanha_encerrada",
   "nova_ocorrencia", "ocorrencia_atualizada", "novo_feedback", "feedback_respondido",
   "adesivos_solicitados", "adesivos_entregues", "adesivos_acabando", "aviso_geral",
+  "adesivo_cancelado", "auditoria_pendente",
 ] as const;
 /** "desconto_podio" fica só para os registros antigos, de quando o pódio dava desconto na taxa condominial. */
 export const tiposEntidadeAuditoria = ["coleta", "ocorrencia", "desconto_podio", "premio_podio", "estacao", "resgate", "recompensa", "pessoa", "morador", "comunicado", "pontos", "configuracao", "usuario", "adesivo", "penalidade", "campanha", "avaliacao"] as const;
@@ -282,6 +283,8 @@ export const notificacoesLidas = mysqlTable("notificacoes_lidas", {
   notificacaoId: int("notificacao_id").notNull(),
   usuarioId: int("usuario_id").notNull(),
   lidaEm: dataHora("lida_em").default(agora).notNull(),
+  /** A pessoa excluiu a notificação da própria lista (some só para ela; avisos gerais continuam para os outros). */
+  excluidaEm: dataHora("excluida_em"),
 }, (table) => [
   uniqueIndex("notificacoes_lidas_notificacao_usuario_unique").on(table.notificacaoId, table.usuarioId),
   index("notificacoes_lidas_usuario_idx").on(table.usuarioId),

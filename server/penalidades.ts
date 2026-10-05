@@ -15,7 +15,7 @@ export const MODELOS_PADRAO: Array<{ nome: string; tipo: TipoPenalidade; pontos?
   { nome: "Retirada de 10 pontos", tipo: "perda_pontos", pontos: 10, descricao: "Para irregularidades leves (saco trocado, foto ruim de propósito)." },
   { nome: "Retirada de 30 pontos", tipo: "perda_pontos", pontos: 30, descricao: "Para tentativa de fraude confirmada (peso forjado, saco pesado duas vezes)." },
   { nome: "Suspensão das campanhas por 30 dias", tipo: "suspensao_campanhas", duracaoValor: 30, duracaoUnidade: "dias", descricao: "Não pode entrar nem pontuar em campanhas durante o período." },
-  { nome: "Suspensão da participação por 15 dias", tipo: "suspensao_participacao", duracaoValor: 15, duracaoUnidade: "dias", descricao: "Não registra descartes na estação nem resgata prêmios durante o período." },
+  { nome: "Suspensão da participação por 15 dias", tipo: "suspensao_participacao", duracaoValor: 15, duracaoUnidade: "dias", descricao: "Pode descartar, mas os descartes não valem pontos; fica sem campanhas e sem resgatar prêmios, e o nome fica oculto no pódio para os vizinhos." },
   { nome: "Suspensão da participação por 3 meses", tipo: "suspensao_participacao", duracaoValor: 3, duracaoUnidade: "meses", descricao: "Para reincidência ou denúncias falsas repetidas." },
 ];
 
@@ -114,7 +114,7 @@ export async function aplicarPenalidade(db: any, dados: MedidaInformada & {
   const periodo = fim ? descreverPeriodo(inicio, fim) : null;
   const efeito = medida.tipo === "perda_pontos" ? `-${medida.pontos} ponto(s)`
     : medida.tipo === "suspensao_campanhas" ? `sem campanhas ${periodo}`
-    : medida.tipo === "suspensao_participacao" ? `sem registrar descartes nem resgatar prêmios ${periodo}`
+    : medida.tipo === "suspensao_participacao" ? `sem campanhas, sem resgatar prêmios e sem pontos nos descartes ${periodo}`
     : periodo ? `vale ${periodo}` : "registrada no histórico";
   await writeAuditLog(db, {
     condominioId: dados.condominioId, autorId: dados.autorId, tipoEntidade: "penalidade", entidadeId: penalidadeId, acao: "penalidade_aplicada",
@@ -123,7 +123,7 @@ export async function aplicarPenalidade(db: any, dados: MedidaInformada & {
     motivo: dados.motivo,
   });
   const base = { condominioId: dados.condominioId, coletaId: dados.coletaId ?? null };
-  await notificarUsuario(db, morador.usuarioId, { ...base, tipo: "penalidade_aplicada", titulo: `Medida administrativa: ${medida.nome}`, mensagem: `A administração aplicou uma medida na sua conta: ${medida.nome} (${efeito}). Motivo: ${dados.motivo.replace(/[.!\s]+$/, "")}. Se discordar, procure a administração.` });
+  await notificarUsuario(db, morador.usuarioId, { ...base, tipo: "penalidade_aplicada", titulo: `Medida administrativa: ${medida.nome}`, mensagem: `A administração aplicou uma medida na sua conta: ${medida.nome} (${efeito}). Motivo: ${dados.motivo.replace(/[.!\s]+$/, "")}.${medida.tipo === "suspensao_participacao" ? " Você pode continuar levando o lixo à estação normalmente, mas os descartes não valem pontos até o fim da suspensão; no pódio, o seu nome fica oculto para os vizinhos." : ""} Se discordar, procure a administração.` });
   await notificarAdministradores(db, { ...base, tipo: "penalidade_aplicada", titulo: "Penalidade aplicada", mensagem: `${morador.nome} (bloco ${morador.bloco}) recebeu: ${medida.nome} (${efeito}).` }, dados.autorId);
   return { id: penalidadeId, tipo: medida.tipo, nome: medida.nome, fimEm: fim };
 }
@@ -145,6 +145,27 @@ export async function exigirSemSuspensao(db: any, moradorId: number, tipo: "susp
   throw new TRPCError({ code: "FORBIDDEN", message: `Sua participação está suspensa${ate} (${vigente.nome}), por isso não é possível ${acao}. Procure a administração se tiver dúvidas.` });
 }
 
+/** Suspensão da participação que está valendo agora (a mais longa), ou null. */
+export async function suspensaoVigente(db: any, moradorId: number): Promise<typeof penalidades.$inferSelect | null> {
+  const [vigente] = await penalidadesVigentes(db, moradorId, ["suspensao_participacao"]);
+  return vigente ?? null;
+}
+
+export type SuspensaoResumo = { nome: string; inicioEm: Date; fimEm: Date | null; periodo: string };
+
+/** Moradores do condomínio com a participação suspensa agora (para o pódio e os rankings). */
+export async function suspensoesVigentesDoCondominio(db: any, condominioId: number, agora = new Date()): Promise<Map<number, SuspensaoResumo>> {
+  const linhas: Array<typeof penalidades.$inferSelect> = await db.select().from(penalidades).where(and(eq(penalidades.condominioId, condominioId), eq(penalidades.tipo, "suspensao_participacao"), eq(penalidades.status, "ativa"), or(isNull(penalidades.fimEm), gt(penalidades.fimEm, agora))));
+  const mapa = new Map<number, SuspensaoResumo>();
+  for (const linha of linhas) {
+    const atual = mapa.get(linha.moradorId);
+    // Se houver mais de uma, vale a que termina por último (sem prazo conta como a mais longa).
+    if (atual && (atual.fimEm === null || (linha.fimEm !== null && linha.fimEm <= atual.fimEm))) continue;
+    mapa.set(linha.moradorId, { nome: linha.nome, inicioEm: linha.inicioEm, fimEm: linha.fimEm, periodo: descreverPeriodo(linha.inicioEm, linha.fimEm) });
+  }
+  return mapa;
+}
+
 /** Histórico de medidas (do condomínio ou de um morador), com o nome de quem aplicou. */
 export type MedidaDoHistorico = typeof penalidades.$inferSelect & { aplicadaPor: string; morador: string | null; bloco: string | null; apartamento: string | null; vigente: boolean; periodo: string | null };
 
@@ -158,11 +179,12 @@ export async function historicoPenalidades(db: any, condominioId: number, morado
 
 /** Rotina: encerra as suspensões vencidas e avisa o morador de que pode voltar a participar. */
 export async function encerrarPenalidadesVencidas(db: any, agora = new Date()) {
-  const vencidas = await db.select({ penalidade: penalidades, usuarioId: moradores.usuarioId }).from(penalidades).leftJoin(moradores, eq(moradores.id, penalidades.moradorId)).where(and(eq(penalidades.status, "ativa"), lte(penalidades.fimEm, agora)));
-  for (const { penalidade, usuarioId } of vencidas as Array<{ penalidade: typeof penalidades.$inferSelect; usuarioId: number | null }>) {
+  const vencidas = await db.select({ penalidade: penalidades, usuarioId: moradores.usuarioId, nome: moradores.nome, bloco: moradores.bloco }).from(penalidades).leftJoin(moradores, eq(moradores.id, penalidades.moradorId)).where(and(eq(penalidades.status, "ativa"), lte(penalidades.fimEm, agora)));
+  for (const { penalidade, usuarioId, nome, bloco } of vencidas as Array<{ penalidade: typeof penalidades.$inferSelect; usuarioId: number | null; nome: string | null; bloco: string | null }>) {
     const [alteracao] = await db.update(penalidades).set({ status: "encerrada", avisoEncerramentoEm: agora }).where(and(eq(penalidades.id, penalidade.id), eq(penalidades.status, "ativa")));
     if (!alteracao.affectedRows) continue;
-    await notificarUsuario(db, usuarioId, { condominioId: penalidade.condominioId, tipo: "penalidade_encerrada", titulo: "Medida encerrada", mensagem: `Terminou o prazo da medida "${penalidade.nome}". Você já pode voltar a participar normalmente.` });
+    await notificarUsuario(db, usuarioId, { condominioId: penalidade.condominioId, tipo: "penalidade_encerrada", titulo: "Medida encerrada", mensagem: `Terminou o prazo da medida "${penalidade.nome}". Você já pode voltar a participar normalmente: campanhas, resgates e pontos dos descartes voltam ao normal, e o seu nome volta a aparecer no pódio conforme a sua escolha.` });
+    await notificarAdministradores(db, { condominioId: penalidade.condominioId, tipo: "penalidade_encerrada", titulo: "Fim de medida administrativa", mensagem: `Terminou o prazo da medida "${penalidade.nome}" de ${nome ?? "um morador"}${bloco ? ` (bloco ${bloco})` : ""}. A participação dele(a) voltou ao normal.` });
   }
   return vencidas.length;
 }

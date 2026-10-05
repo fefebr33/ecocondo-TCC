@@ -11,7 +11,6 @@ import { trpc } from "@/lib/trpc";
 import {
   AlertTriangle,
   History,
-  Search,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
@@ -19,6 +18,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import PageIntro from "@/components/PageIntro";
+import MudancasAuditoria from "@/components/MudancasAuditoria";
 
 const entityLabels = {
   coleta: "Descarte",
@@ -52,6 +52,73 @@ const acoesDeAlerta = new Set([
   "denuncia_falsa",
 ]);
 type EntityFilter = "todas" | keyof typeof entityLabels;
+
+/** Nome legível de cada operação (no lugar do código interno). */
+const nomesAcoes: Record<string, string> = {
+  registro_estacao: "Descarte registrado na estação",
+  descarte_aprovado: "Descarte aprovado",
+  descarte_aprovado_ia: "Aprovado pela IA",
+  coleta_reprovada: "Descarte reprovado",
+  coleta_atualizada: "Descarte alterado",
+  coleta_sinalizada_suspeita: "Descarte sinalizado",
+  auditoria_aberta: "Auditoria aberta",
+  auditoria_concluida_regular: "Auditoria concluída (regular)",
+  aprovacao_revertida: "Aprovação revertida",
+  peso_suspeito_rejeitado: "Peso suspeito recusado",
+  penalidade_aplicada: "Medida aplicada",
+  penalidade_revogada: "Medida revogada",
+  modelo_penalidade_criado: "Medida pré-definida criada",
+  modelo_penalidade_alterado: "Medida pré-definida alterada",
+  pontos_ajustados: "Ajuste de pontos",
+  pontos_zerados: "Pontos zerados",
+  punicao_aplicada: "Punição aplicada",
+  resgate_solicitado: "Resgate pedido",
+  resgate_aprovado: "Resgate aprovado",
+  resgate_entregue: "Resgate entregue",
+  resgate_cancelado: "Resgate cancelado",
+  recompensa_criada: "Recompensa criada",
+  recompensa_atualizada: "Recompensa alterada",
+  premios_podio_configurados: "Prêmios do pódio alterados",
+  premio_podio_entregue: "Prêmio do pódio entregue",
+  regra_descarte_alterada: "Regra de descarte alterada",
+  regra_descarte_padrao: "Regra de descarte restaurada",
+  guia_descarte_alterado: "Guia de descarte alterado",
+  preferencia_notificacao: "Aviso ligado/desligado",
+  configuracao_ia_alterada: "Análise automática alterada",
+  pessoa_cadastrada: "Pessoa cadastrada",
+  perfil_alterado: "Perfil alterado",
+  morador_cadastrado: "Morador cadastrado",
+  morador_atualizado: "Cadastro alterado",
+  link_senha_gerado: "Link de senha gerado",
+  estacao_cadastrada: "Estação cadastrada",
+  estacao_novo_codigo: "Novo código da estação",
+  comunicado_publicado: "Aviso geral enviado",
+  ocorrencia_criada: "Ocorrência registrada",
+  ocorrencia_atualizada: "Ocorrência atualizada",
+  ocorrencia_encaminhada: "Ocorrência encaminhada",
+  denuncia_falsa: "Denúncia falsa",
+  denuncia_falsa_reincidente: "Denúncias falsas repetidas",
+  feedback_enviado: "Feedback enviado",
+  feedback_respondido: "Feedback respondido",
+  campanha_criada: "Campanha criada",
+  campanha_alterada: "Campanha alterada",
+  campanha_pausada: "Campanha pausada",
+  campanha_retomada: "Campanha retomada",
+  campanha_encerrada_prazo: "Campanha encerrada no prazo",
+  campanha_encerrada_manual: "Campanha encerrada antes do prazo",
+  campanha_excluida: "Campanha excluída",
+  adesivos_solicitados: "Adesivos pedidos",
+  adesivos_entregues: "Adesivos entregues",
+  adesivo_cancelado: "Adesivo cancelado",
+  adesivo_consultado: "QR do adesivo consultado",
+  pedido_adesivos_recusado: "Pedido de adesivos recusado",
+};
+
+function nomeDaAcao(acao: string) {
+  if (nomesAcoes[acao]) return nomesAcoes[acao];
+  const texto = acao.replace(/_/g, " ");
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
 
 function formatDate(value: Date) {
   return new Date(value).toLocaleString("pt-BR", {
@@ -94,7 +161,7 @@ export default function Audit() {
       <PageIntro
         eyebrow="Governança operacional"
         title="Histórico de auditoria"
-        description="Cada operação crítica guarda quem fez, quando, o que fez, em qual registro, o valor anterior e o novo e o motivo informado: descartes (aprovações, reprovações, auditorias e punições), estação de pesagem, regras de cada tipo, ajustes e zeragem de pontos, resgates, catálogo de recompensas, prêmios do pódio, cadastros e perfis."
+        description="Cada operação importante guarda quem fez, quando, o que fez, em qual registro, o que mudou (antes e depois, em palavras) e o motivo informado: descartes (aprovações, reprovações, auditorias e medidas), estação de pesagem, regras de cada tipo, ajustes e zeragem de pontos, resgates, recompensas, prêmios do pódio, cadastros e perfis."
         action={
           <Button
             variant="outline"
@@ -136,6 +203,12 @@ export default function Audit() {
                   <SelectItem value="todas">Todas</SelectItem>
                   <SelectItem value="coleta">Descartes</SelectItem>
                   <SelectItem value="ocorrencia">Ocorrências</SelectItem>
+                  <SelectItem value="penalidade">
+                    Medidas administrativas
+                  </SelectItem>
+                  <SelectItem value="adesivo">Adesivos QR</SelectItem>
+                  <SelectItem value="campanha">Campanhas</SelectItem>
+                  <SelectItem value="avaliacao">Feedback</SelectItem>
                   <SelectItem value="estacao">Estações de pesagem</SelectItem>
                   <SelectItem value="premio_podio">Prêmios do pódio</SelectItem>
                   <SelectItem value="resgate">Resgates</SelectItem>
@@ -220,11 +293,8 @@ export default function Audit() {
                         </div>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                           <UserRound className="h-3.5 w-3.5" />
-                          {entry.actorName} · {formatDate(entry.criadoEm)} ·
-                          operação{" "}
-                          <code className="rounded bg-[#eef3f0] px-1">
-                            {entry.acao}
-                          </code>
+                          {entry.actorName} · {formatDate(entry.criadoEm)} ·{" "}
+                          {nomeDaAcao(entry.acao)}
                         </p>
                         {entry.motivo && (
                           <p className="mt-1.5 text-xs">
@@ -240,28 +310,10 @@ export default function Audit() {
                       {entityLabels[entry.tipoEntidade]} #{entry.entidadeId}
                     </span>
                   </div>
-                  {(entry.beforeState || entry.afterState) && (
-                    <details className="mt-4 rounded-xl border border-[#e5eee8] bg-white px-3 py-2.5 text-xs">
-                      <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold text-[#0f7350]">
-                        <Search className="h-3.5 w-3.5" />
-                        Ver valor anterior e novo
-                      </summary>
-                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                        <pre className="overflow-auto rounded-lg bg-[#f6faf7] p-3 text-[11px] leading-5 text-foreground">
-                          <b>Valor anterior</b>
-                          {"\n"}
-                          {JSON.stringify(entry.beforeState, null, 2) ||
-                            "Sem estado anterior."}
-                        </pre>
-                        <pre className="overflow-auto rounded-lg bg-[#f6faf7] p-3 text-[11px] leading-5 text-foreground">
-                          <b>Valor novo</b>
-                          {"\n"}
-                          {JSON.stringify(entry.afterState, null, 2) ||
-                            "Sem estado posterior."}
-                        </pre>
-                      </div>
-                    </details>
-                  )}
+                  <MudancasAuditoria
+                    anterior={entry.beforeState}
+                    novo={entry.afterState}
+                  />
                 </li>
               );
             })}

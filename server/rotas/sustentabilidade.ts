@@ -353,6 +353,8 @@ export const sustainabilityRouter = router({
       if (jaParticipa) return { success: true };
       await db.insert(participantesCampanha).values({ campanhaId: input.campaignId, moradorId: ctx.eco.morador.id }).onDuplicateKeyUpdate({ set: { entrouEm: new Date() } });
       await notificarUsuario(db, ctx.user.id, { condominioId: ctx.eco.condominio.id, tipo: "campanha_participacao", titulo: `Você entrou na campanha "${campanha.titulo}"`, mensagem: `Sua participação foi registrada. Meta: ${campanha.descricaoMeta}. Vai até ${campanha.dataFim.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}.` });
+      const [{ total }] = await db.select({ total: count() }).from(participantesCampanha).where(eq(participantesCampanha.campanhaId, campanha.id));
+      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "campanha_participacao", titulo: `Nova participação: ${campanha.titulo}`, mensagem: `${ctx.eco.morador.nome} (bloco ${ctx.eco.morador.bloco}) entrou na campanha "${campanha.titulo}". Agora são ${Number(total)} participante(s).` });
       return { success: true };
     }),
   }),

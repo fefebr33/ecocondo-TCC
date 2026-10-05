@@ -10,22 +10,16 @@ import {
   ZerarPontos,
 } from "@/components/ConfiguracoesDescarte";
 import { useAncora } from "@/hooks/useAncora";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { ShieldCheck, UserRoundPlus, UsersRound } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "wouter";
 import { toast } from "sonner";
-
-type PersonRole = "administrador" | "morador";
 
 export default function Settings() {
   const utils = trpc.useUtils();
   const condominium = trpc.condominio.atual.useQuery();
-  const directory = trpc.pessoas.diretorio.useQuery();
   const updateCondominium = trpc.condominio.atualizar.useMutation({
     onSuccess: () => {
       utils.condominio.atual.invalidate();
@@ -34,27 +28,7 @@ export default function Settings() {
     },
     onError: issue => toast.error(issue.message),
   });
-  const setRole = trpc.pessoas.definirPapel.useMutation({
-    onSuccess: () => {
-      utils.pessoas.diretorio.invalidate();
-      toast.success("Perfil atualizado.");
-    },
-    onError: issue => toast.error(issue.message),
-  });
-  const { user } = useAuth();
   useAncora(!condominium.isLoading);
-  function changeRole(id: number, name: string, role: PersonRole) {
-    const labels: Record<PersonRole, string> = {
-      administrador: "Administrador",
-      morador: "Morador",
-    };
-    if (
-      window.confirm(
-        `Alterar o perfil de ${name} para ${labels[role]}? As permissões passam a valer imediatamente.`
-      )
-    )
-      setRole.mutate({ id, role });
-  }
   const [form, setForm] = useState({
     name: "",
     address: "",
@@ -86,9 +60,9 @@ export default function Settings() {
       <PageIntro
         eyebrow="Administração"
         title="Configurações"
-        description="Dados do condomínio, regras de cada tipo de descarte, cores dos sacos, avisos por perfil, ciclo de pontos e estações de pesagem."
+        description="Dados do condomínio, regras de cada tipo de descarte, análise automática, medidas administrativas, avisos por perfil, ciclo de pontos e estações de pesagem. Pessoas e perfis de acesso ficam em Pessoas e acessos."
       />
-      <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
+      <div className="grid gap-5 xl:grid-cols-2">
         <section className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]">
@@ -168,100 +142,9 @@ export default function Settings() {
             </Button>
           </form>
         </section>
-        <section className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]">
-                <UsersRound className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="font-semibold">Perfis de acesso</p>
-                <p className="text-sm text-muted-foreground">
-                  Cadastre a pessoa uma vez e defina sua responsabilidade antes
-                  do primeiro login.
-                </p>
-              </div>
-            </div>
-            <Link
-              href="/pessoas"
-              className="inline-flex h-9 items-center justify-center rounded-xl bg-[#0f7350] px-3 text-xs font-semibold text-white hover:bg-[#0a6243]"
-            >
-              <UserRoundPlus className="mr-1.5 h-3.5 w-3.5" />
-              Cadastrar pessoa
-            </Link>
-          </div>
-          {directory.isLoading ? (
-            <p className="mt-6 text-sm text-muted-foreground">
-              Carregando acessos...
-            </p>
-          ) : !directory.data?.length ? (
-            <p className="mt-6 text-sm text-muted-foreground">
-              Nenhuma pessoa foi cadastrada ainda. Use o botão acima para
-              adicionar moradores ou administradores.
-            </p>
-          ) : (
-            <div className="mt-5 divide-y divide-[#edf2ef]">
-              {directory.data.map(({ pessoa, usuario, morador }) => (
-                <article
-                  key={pessoa.id}
-                  className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <p className="text-sm font-semibold">{pessoa.nome}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {pessoa.email}
-                      {morador
-                        ? ` · ${morador.bloco} · ${morador.apartamento}`
-                        : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      className={
-                        pessoa.statusAcesso === "ativo"
-                          ? "border-0 bg-[#e7f5ec] text-[#0a7048]"
-                          : "border-0 bg-[#fff4dd] text-[#7a4d0a]"
-                      }
-                    >
-                      {pessoa.statusAcesso === "ativo"
-                        ? "Acesso ativo"
-                        : "Aguardando login"}
-                    </Badge>
-                    <select
-                      aria-label={`Perfil de ${pessoa.nome}`}
-                      title={
-                        usuario?.id === user?.id
-                          ? "Você não pode alterar o seu próprio perfil"
-                          : undefined
-                      }
-                      value={pessoa.papel}
-                      onChange={event =>
-                        changeRole(
-                          pessoa.id,
-                          pessoa.nome,
-                          event.target.value as PersonRole
-                        )
-                      }
-                      disabled={
-                        setRole.isPending ||
-                        (usuario !== null && usuario?.id === user?.id)
-                      }
-                      className="h-9 rounded-lg border border-[#dce8e0] bg-white px-2 text-xs font-semibold"
-                    >
-                      <option value="administrador">Administrador</option>
-                      <option value="morador">Morador</option>
-                    </select>
-                    {usuario && (
-                      <span className="text-xs font-medium text-[#0a7048]">
-                        Vinculado
-                      </span>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+        <div id="pontos" className="scroll-mt-24">
+          <ZerarPontos />
+        </div>
       </div>
       <div id="regras" className="mt-5 scroll-mt-24">
         <RegrasDescarte />
@@ -274,13 +157,8 @@ export default function Settings() {
           <MedidasAdministrativas />
         </div>
       </div>
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
-        <div id="avisos" className="scroll-mt-24">
-          <PreferenciasAvisos />
-        </div>
-        <div id="pontos" className="scroll-mt-24">
-          <ZerarPontos />
-        </div>
+      <div id="avisos" className="mt-5 scroll-mt-24">
+        <PreferenciasAvisos />
       </div>
       <div id="estacoes" className="scroll-mt-24">
         <EstacoesPesagem />

@@ -143,7 +143,7 @@ export default function Dashboard() {
         <PageIntro
           eyebrow="Meu painel"
           title={`Olá, ${profile.data.resident?.nome.split(" ")[0] ?? "morador"}!`}
-          description="Quanto você descartou, de que tipos, quando e a situação de cada descarte. Os pontos entram depois que a administração aprova."
+          description="Quanto você descartou, de que tipos, quando e a situação de cada descarte. Os pontos entram quando o descarte é aprovado (pela análise automática ou pela administração)."
           action={
             <Button
               asChild
@@ -156,6 +156,24 @@ export default function Dashboard() {
           }
         />
         <AvisosImportantes />
+        {data?.pessoal?.medidas
+          .filter(
+            medida => medida.vigente && medida.tipo === "suspensao_participacao"
+          )
+          .slice(0, 1)
+          .map(medida => (
+            <div
+              key={medida.id}
+              role="status"
+              className="mb-5 rounded-2xl border border-[#d9dedb] bg-[#f2f3f2] p-4 text-sm leading-6 text-[#3f4642]"
+            >
+              <b>Participação suspensa {medida.periodo ?? ""}</b> ({medida.nome}).
+              Você pode continuar levando o lixo à estação, mas os descartes não
+              valem pontos, não dá para entrar em campanhas nem resgatar prêmios,
+              e o seu nome fica oculto no pódio para os vizinhos. Tudo volta ao
+              normal quando a suspensão acabar ou a administração revogar.
+            </div>
+          ))}
         <PainelPessoal />
         <article className={`mt-5 ${cartao}`}>
           <div className="flex items-center justify-between gap-3">
@@ -175,11 +193,12 @@ export default function Dashboard() {
               {data.top3.map((linha, indice) => (
                 <li
                   key={`${linha.position}-${indice}`}
-                  className={`rounded-2xl border p-3 text-center ${linha.voce ? "border-[#0f7350]/40 bg-[#f1f8f4]" : "border-[#e0ebe4] bg-[#fbfdfc]"}`}
+                  className={`rounded-2xl border p-3 text-center ${linha.suspenso ? "border-[#d9dedb] bg-[#f2f3f2] text-[#6b726e]" : linha.voce ? "border-[#0f7350]/40 bg-[#f1f8f4]" : "border-[#e0ebe4] bg-[#fbfdfc]"}`}
+                  title={linha.suspensaoPeriodo ? `Participação suspensa ${linha.suspensaoPeriodo}` : undefined}
                 >
                   <span
                     className="mx-auto grid h-8 w-8 place-items-center rounded-full text-xs font-bold text-white"
-                    style={{ backgroundColor: medalha[linha.position - 1] }}
+                    style={{ backgroundColor: linha.suspenso ? "#9aa29e" : medalha[linha.position - 1] }}
                   >
                     {linha.position}º
                   </span>
@@ -187,6 +206,11 @@ export default function Dashboard() {
                     {linha.nome}
                     {linha.voce ? " (você)" : ""}
                   </p>
+                  {linha.suspensaoPeriodo && (
+                    <p className="text-[11px] font-semibold text-[#4d5551]">
+                      Suspenso(a) {linha.suspensaoPeriodo}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Bloco {linha.bloco} · {linha.pontos} pts
                   </p>
@@ -647,11 +671,12 @@ export default function Dashboard() {
               {data.top3.map((linha, indice) => (
                 <li
                   key={`${linha.position}-${indice}`}
-                  className={`rounded-2xl border p-3 text-center ${linha.voce ? "border-[#0f7350]/40 bg-[#f1f8f4]" : "border-[#e0ebe4] bg-[#fbfdfc]"}`}
+                  className={`rounded-2xl border p-3 text-center ${linha.suspenso ? "border-[#d9dedb] bg-[#f2f3f2] text-[#6b726e]" : linha.voce ? "border-[#0f7350]/40 bg-[#f1f8f4]" : "border-[#e0ebe4] bg-[#fbfdfc]"}`}
+                  title={linha.suspensaoPeriodo ? `Participação suspensa ${linha.suspensaoPeriodo}` : undefined}
                 >
                   <span
                     className="mx-auto grid h-8 w-8 place-items-center rounded-full text-xs font-bold text-white"
-                    style={{ backgroundColor: medalha[linha.position - 1] }}
+                    style={{ backgroundColor: linha.suspenso ? "#9aa29e" : medalha[linha.position - 1] }}
                   >
                     {linha.position}º
                   </span>
@@ -659,6 +684,11 @@ export default function Dashboard() {
                     {linha.nome}
                     {linha.voce ? " (você)" : ""}
                   </p>
+                  {linha.suspensaoPeriodo && (
+                    <p className="text-[11px] font-semibold text-[#4d5551]">
+                      Suspenso(a) {linha.suspensaoPeriodo}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Bloco {linha.bloco} · {linha.pontos} pts ·{" "}
                     {formatarNumero(linha.pesoKg)} kg
