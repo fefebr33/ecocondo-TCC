@@ -8,12 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import {
-  AlertTriangle,
-  History,
-  ShieldCheck,
-  UserRound,
-} from "lucide-react";
+import { AlertTriangle, History, ShieldCheck, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";

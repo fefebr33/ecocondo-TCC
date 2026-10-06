@@ -238,8 +238,9 @@ export default function PainelPessoal({
                 {rotuloResiduo[item.wasteType]}
               </span>
               <span className="text-muted-foreground">
-                {formatarNumero(item.kilograms)} kg · {plural(item.descartes, "descarte", "descartes")} ·{" "}
-                  {plural(item.pontos, "pt", "pts")}
+                {formatarNumero(item.kilograms)} kg ·{" "}
+                {plural(item.descartes, "descarte", "descartes")} ·{" "}
+                {plural(item.pontos, "pt", "pts")}
               </span>
             </li>
           ))}

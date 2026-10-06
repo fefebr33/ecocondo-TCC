@@ -140,7 +140,9 @@ export default function Community() {
       endDate: new Date(item.dataFim).toISOString().slice(0, 10),
       status: item.status === "pausada" ? "ativa" : item.status,
     });
-    document.getElementById("campanhas")?.scrollIntoView({ behavior: "smooth" });
+    document
+      .getElementById("campanhas")
+      ?.scrollIntoView({ behavior: "smooth" });
   }
   const contagem = (status: string) =>
     campaigns.data?.filter(item => item.status === status).length ?? 0;
@@ -325,26 +327,28 @@ export default function Community() {
                 />
               </div>
               {!editandoId && (
-              <select
-                aria-label="Status da campanha"
-                value={campaign.status}
-                onChange={event =>
-                  setCampaign({
-                    ...campaign,
-                    status: event.target.value as typeof campaign.status,
-                  })
-                }
-                className="h-10 rounded-xl border border-input bg-white px-3 text-sm"
-              >
-                <option value="planejada">Planejada</option>
-                <option value="ativa">Ativa</option>
-                <option value="encerrada">Encerrada</option>
-              </select>
+                <select
+                  aria-label="Status da campanha"
+                  value={campaign.status}
+                  onChange={event =>
+                    setCampaign({
+                      ...campaign,
+                      status: event.target.value as typeof campaign.status,
+                    })
+                  }
+                  className="h-10 rounded-xl border border-input bg-white px-3 text-sm"
+                >
+                  <option value="planejada">Planejada</option>
+                  <option value="ativa">Ativa</option>
+                  <option value="encerrada">Encerrada</option>
+                </select>
               )}
               <div className="flex gap-2">
                 <Button
                   type="submit"
-                  disabled={createCampaign.isPending || updateCampaign.isPending}
+                  disabled={
+                    createCampaign.isPending || updateCampaign.isPending
+                  }
                   className="flex-1 rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]"
                 >
                   {editandoId ? "Salvar alterações" : "Criar campanha"}
@@ -384,7 +388,10 @@ export default function Community() {
             )}
           </div>
         </article>
-        <article id="feedback" className="scroll-mt-24 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
+        <article
+          id="feedback"
+          className="scroll-mt-24 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6"
+        >
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f4ed] text-[#0f7350]">
               <MessageSquareText className="h-5 w-5" />
@@ -617,7 +624,10 @@ function CartaoCampanha({
         </p>
       )}
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-        <Indicador rotulo="Participantes" valor={`${indicadores.participantes} (${indicadores.adesao}%)`} />
+        <Indicador
+          rotulo="Participantes"
+          valor={`${indicadores.participantes} (${indicadores.adesao}%)`}
+        />
         <Indicador
           rotulo="Tempo restante"
           valor={
@@ -626,7 +636,10 @@ function CartaoCampanha({
               : plural(indicadores.diasRestantes, "dia", "dias")
           }
         />
-        <Indicador rotulo="Reciclado" valor={`${indicadores.kgReciclados.toLocaleString("pt-BR")} kg`} />
+        <Indicador
+          rotulo="Reciclado"
+          valor={`${indicadores.kgReciclados.toLocaleString("pt-BR")} kg`}
+        />
         <Indicador rotulo="Descartes" valor={String(indicadores.descartes)} />
       </div>
       <div
@@ -662,7 +675,11 @@ function CartaoCampanha({
               </Button>
             )}
             {item.status === "ativa" && (
-              <Button size="sm" variant="outline" onClick={() => setAcao("pausar")}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setAcao("pausar")}
+              >
                 Pausar
               </Button>
             )}
@@ -682,7 +699,11 @@ function CartaoCampanha({
                 variant="outline"
                 disabled={encerrar.isPending}
                 onClick={() => {
-                  if (window.confirm(`Encerrar agora a campanha "${item.titulo}"?`))
+                  if (
+                    window.confirm(
+                      `Encerrar agora a campanha "${item.titulo}"?`
+                    )
+                  )
                     encerrar.mutate({ id: item.id });
                 }}
               >
@@ -744,7 +765,12 @@ function CartaoCampanha({
             >
               {acao === "pausar" ? "Pausar" : "Excluir"}
             </Button>
-            <Button size="sm" type="button" variant="ghost" onClick={() => setAcao(null)}>
+            <Button
+              size="sm"
+              type="button"
+              variant="ghost"
+              onClick={() => setAcao(null)}
+            >
               Cancelar
             </Button>
           </span>

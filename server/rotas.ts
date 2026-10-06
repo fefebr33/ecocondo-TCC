@@ -24,7 +24,17 @@ export const appRouter = router({
     logout: publicProcedure.mutation(async ({ ctx }) => {
       // Sair encerra esta sessão no servidor: o cookie copiado ou esquecido neste aparelho deixa de valer.
       const sessao = await sdk.verifySession(sdk.tokenDaRequisicao(ctx.req));
-      if (ctx.user && sessao) await encerrarSessao(await getDb(), { sessaoId: sessao.sessaoId, usuarioId: ctx.user.id, expiraEm: sessao.expiraEm }).catch((error) => console.warn("[Sessão] Não foi possível encerrar a sessão no servidor:", error));
+      if (ctx.user && sessao)
+        await encerrarSessao(await getDb(), {
+          sessaoId: sessao.sessaoId,
+          usuarioId: ctx.user.id,
+          expiraEm: sessao.expiraEm,
+        }).catch(error =>
+          console.warn(
+            "[Sessão] Não foi possível encerrar a sessão no servidor:",
+            error
+          )
+        );
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return {

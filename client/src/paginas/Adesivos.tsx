@@ -143,8 +143,7 @@ function MeusAdesivos() {
               "adesivo",
               "adesivos"
             )}{" "}
-            em{" "}
-            {formatarData(dados.pedidoAberto.criadoEm)}. A administração vai
+            em {formatarData(dados.pedidoAberto.criadoEm)}. A administração vai
             entregar e você recebe um aviso.
           </p>
         ) : (
@@ -204,8 +203,12 @@ function MeusAdesivos() {
                 <span className="flex items-center gap-2">
                   {pedido.status === "entregue" && (
                     <span className="text-xs text-muted-foreground">
-                      {plural(pedido.quantidadeEntregue ?? 0, "entregue", "entregues")} em{" "}
-                      {formatarData(pedido.entregueEm)}
+                      {plural(
+                        pedido.quantidadeEntregue ?? 0,
+                        "entregue",
+                        "entregues"
+                      )}{" "}
+                      em {formatarData(pedido.entregueEm)}
                     </span>
                   )}
                   <Badge className={estiloStatusPedido[pedido.status]}>
@@ -327,8 +330,10 @@ function AdesivosAdministracao() {
       codigos: dados.adesivos.map(adesivo => adesivo.codigo),
     });
   }
-  const abertos = pedidos.data?.filter(pedido => pedido.status === "solicitado") ?? [];
-  const historico = pedidos.data?.filter(pedido => pedido.status !== "solicitado") ?? [];
+  const abertos =
+    pedidos.data?.filter(pedido => pedido.status === "solicitado") ?? [];
+  const historico =
+    pedidos.data?.filter(pedido => pedido.status !== "solicitado") ?? [];
   const moradoresFiltrados = useMemo(
     () =>
       (porMorador.data ?? []).filter(morador =>
@@ -496,9 +501,14 @@ function AdesivosAdministracao() {
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={entregar.isPending || morador.status !== "ativo"}
+                      disabled={
+                        entregar.isPending || morador.status !== "ativo"
+                      }
                       onClick={() =>
-                        entregar.mutate({ moradorId: morador.id, quantidade: 20 })
+                        entregar.mutate({
+                          moradorId: morador.id,
+                          quantidade: 20,
+                        })
                       }
                       className="rounded-lg"
                     >
@@ -575,7 +585,10 @@ function AdesivosAdministracao() {
             minLength={5}
             value={cancelamento.motivo}
             onChange={event =>
-              setCancelamento(atual => ({ ...atual, motivo: event.target.value }))
+              setCancelamento(atual => ({
+                ...atual,
+                motivo: event.target.value,
+              }))
             }
             placeholder="Motivo (fica na auditoria)"
             className="h-11 rounded-xl"
@@ -638,10 +651,9 @@ function FolhaAdesivos({
             Folha de adesivos · pedido nº {folha.pedidoId}
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {plural(folha.codigos.length, "adesivo", "adesivos")} para {folha.morador}{" "}
-            (bloco{" "}
-            {folha.bloco}, apto {folha.apartamento}). Os adesivos levam só o QR
-            e o código.
+            {plural(folha.codigos.length, "adesivo", "adesivos")} para{" "}
+            {folha.morador} (bloco {folha.bloco}, apto {folha.apartamento}). Os
+            adesivos levam só o QR e o código.
           </p>
         </div>
         <div className="flex gap-2">
@@ -652,7 +664,11 @@ function FolhaAdesivos({
             <Printer className="mr-2 h-4 w-4" />
             Imprimir
           </Button>
-          <Button variant="ghost" onClick={onFechar} className="h-10 rounded-xl">
+          <Button
+            variant="ghost"
+            onClick={onFechar}
+            className="h-10 rounded-xl"
+          >
             Fechar
           </Button>
         </div>
@@ -664,7 +680,11 @@ function FolhaAdesivos({
             className="rounded-xl border border-dashed border-[#9bb3a6] bg-white p-2 text-center"
           >
             {imagens[codigo] && (
-              <img src={imagens[codigo]} alt={`QR do adesivo ${codigo}`} className="mx-auto w-full max-w-[90px]" />
+              <img
+                src={imagens[codigo]}
+                alt={`QR do adesivo ${codigo}`}
+                className="mx-auto w-full max-w-[90px]"
+              />
             )}
             <p className="mt-1 font-mono text-[10px] tracking-[.04em]">
               {codigo}
@@ -681,8 +701,8 @@ function FolhaAdesivos({
         <div className="so-impressao" aria-hidden="true">
           <div className="folha-adesivos">
             <p className="folha-adesivos-cabecalho">
-              EcoCondo · {condominio} · pedido nº {folha.pedidoId} · entregar
-              a: bloco {folha.bloco}, apto {folha.apartamento} (recorte os
+              EcoCondo · {condominio} · pedido nº {folha.pedidoId} · entregar a:
+              bloco {folha.bloco}, apto {folha.apartamento} (recorte os
               adesivos; esta linha não vai no saco)
             </p>
             <div className="folha-adesivos-grade">{adesivos}</div>

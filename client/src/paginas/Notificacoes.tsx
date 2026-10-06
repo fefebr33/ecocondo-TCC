@@ -23,7 +23,11 @@ import { destinoDaNotificacao } from "@shared/notificacoes";
 import type { EcoRole } from "@shared/permissions";
 import { FormEvent, useState } from "react";
 import { useLocation } from "wouter";
-import { categoriasAviso, rotuloCategoriaAviso, rotuloPublicoAviso } from "@shared/notificacoes";
+import {
+  categoriasAviso,
+  rotuloCategoriaAviso,
+  rotuloPublicoAviso,
+} from "@shared/notificacoes";
 import { toast } from "sonner";
 import { palavra, plural } from "@shared/plural";
 
@@ -210,12 +214,21 @@ export default function Notifications() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [publico, setPublico] = useState<"todos" | "moradores" | "administradores">("todos");
-  const [categoriaAviso, setCategoriaAviso] = useState<(typeof categoriasAviso)[number]>("geral");
+  const [publico, setPublico] = useState<
+    "todos" | "moradores" | "administradores"
+  >("todos");
+  const [categoriaAviso, setCategoriaAviso] =
+    useState<(typeof categoriasAviso)[number]>("geral");
   const [importante, setImportante] = useState(false);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    createCommunication.mutate({ title, message, publico, categoria: categoriaAviso, importante });
+    createCommunication.mutate({
+      title,
+      message,
+      publico,
+      categoria: categoriaAviso,
+      importante,
+    });
   }
   const isAdmin = profile.data?.role === "administrador";
   const notificationAction = (
@@ -276,7 +289,9 @@ export default function Notifications() {
                 Para quem
                 <select
                   value={publico}
-                  onChange={event => setPublico(event.target.value as typeof publico)}
+                  onChange={event =>
+                    setPublico(event.target.value as typeof publico)
+                  }
                   className="h-10 rounded-xl border border-[#dce8e0] bg-white px-3 text-sm font-normal"
                 >
                   {Object.entries(rotuloPublicoAviso).map(([valor, rotulo]) => (
@@ -290,7 +305,11 @@ export default function Notifications() {
                 Assunto
                 <select
                   value={categoriaAviso}
-                  onChange={event => setCategoriaAviso(event.target.value as typeof categoriaAviso)}
+                  onChange={event =>
+                    setCategoriaAviso(
+                      event.target.value as typeof categoriaAviso
+                    )
+                  }
                   className="h-10 rounded-xl border border-[#dce8e0] bg-white px-3 text-sm font-normal"
                 >
                   {categoriasAviso.map(valor => (
@@ -328,105 +347,108 @@ export default function Notifications() {
           </form>
         )}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div
-          className="flex gap-2"
-          role="group"
-          aria-label="Filtrar notificações"
-        >
-          {(["todas", "nao_lidas"] as const).map(opcao => (
-            <Button
-              key={opcao}
-              size="sm"
-              variant="ghost"
-              aria-pressed={filtro === opcao}
-              onClick={() => setFiltro(opcao)}
-              className={`h-8 rounded-lg px-3 text-xs font-semibold ${filtro === opcao ? "bg-[#0f7350] text-white hover:bg-[#0a6243] hover:text-white" : "text-muted-foreground"}`}
-            >
-              {opcao === "todas"
-                ? "Todas"
-                : `Não lidas (${unread.data?.count ?? 0})`}
-            </Button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2" aria-label="Limpar notificações">
-          {selecionando ? (
-            <>
+          <div
+            className="flex gap-2"
+            role="group"
+            aria-label="Filtrar notificações"
+          >
+            {(["todas", "nao_lidas"] as const).map(opcao => (
               <Button
+                key={opcao}
                 size="sm"
                 variant="ghost"
-                onClick={() =>
-                  setSelecionadas(
-                    selecionadas.length === visiveis.length
-                      ? []
-                      : visiveis.map(item => item.id)
-                  )
-                }
-                className="h-8 rounded-lg px-3 text-xs"
+                aria-pressed={filtro === opcao}
+                onClick={() => setFiltro(opcao)}
+                className={`h-8 rounded-lg px-3 text-xs font-semibold ${filtro === opcao ? "bg-[#0f7350] text-white hover:bg-[#0a6243] hover:text-white" : "text-muted-foreground"}`}
               >
-                {selecionadas.length === visiveis.length && visiveis.length
-                  ? "Desmarcar todas"
-                  : "Marcar todas"}
+                {opcao === "todas"
+                  ? "Todas"
+                  : `Não lidas (${unread.data?.count ?? 0})`}
               </Button>
-              <Button
-                size="sm"
-                disabled={!selecionadas.length || excluir.isPending}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Excluir ${plural(selecionadas.length, "notificação", "notificações")}? ${palavra(selecionadas.length, "Ela some", "Elas somem")} só da sua lista.`
+            ))}
+          </div>
+          <div
+            className="flex flex-wrap gap-2"
+            aria-label="Limpar notificações"
+          >
+            {selecionando ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setSelecionadas(
+                      selecionadas.length === visiveis.length
+                        ? []
+                        : visiveis.map(item => item.id)
                     )
-                  )
-                    excluir.mutate({ ids: selecionadas });
-                }}
-                className="h-8 rounded-lg bg-[#b3382c] px-3 text-xs text-white hover:bg-[#962e24]"
-              >
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                Excluir selecionadas ({selecionadas.length})
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setSelecionando(false);
-                  setSelecionadas([]);
-                }}
-                className="h-8 rounded-lg px-3 text-xs"
-              >
-                Cancelar
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!visiveis.length}
-                onClick={() => setSelecionando(true)}
-                className="h-8 rounded-lg bg-white px-3 text-xs"
-              >
-                <ListChecks className="mr-1.5 h-3.5 w-3.5" />
-                Selecionar
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!totalLidas || excluir.isPending}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Excluir ${totalLidas === 1 ? "a notificação já lida" : `as ${totalLidas} notificações já lidas`}? As não lidas continuam.`
+                  }
+                  className="h-8 rounded-lg px-3 text-xs"
+                >
+                  {selecionadas.length === visiveis.length && visiveis.length
+                    ? "Desmarcar todas"
+                    : "Marcar todas"}
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!selecionadas.length || excluir.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Excluir ${plural(selecionadas.length, "notificação", "notificações")}? ${palavra(selecionadas.length, "Ela some", "Elas somem")} só da sua lista.`
+                      )
                     )
-                  )
-                    excluir.mutate({ somenteLidas: true });
-                }}
-                className="h-8 rounded-lg border-[#f0c9c4] bg-white px-3 text-xs text-[#b3382c] hover:bg-[#fbeceb] hover:text-[#b3382c]"
-              >
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                Excluir lidas ({totalLidas})
-              </Button>
-            </>
-          )}
-        </div>
+                      excluir.mutate({ ids: selecionadas });
+                  }}
+                  className="h-8 rounded-lg bg-[#b3382c] px-3 text-xs text-white hover:bg-[#962e24]"
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Excluir selecionadas ({selecionadas.length})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setSelecionando(false);
+                    setSelecionadas([]);
+                  }}
+                  className="h-8 rounded-lg px-3 text-xs"
+                >
+                  Cancelar
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!visiveis.length}
+                  onClick={() => setSelecionando(true)}
+                  className="h-8 rounded-lg bg-white px-3 text-xs"
+                >
+                  <ListChecks className="mr-1.5 h-3.5 w-3.5" />
+                  Selecionar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!totalLidas || excluir.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Excluir ${totalLidas === 1 ? "a notificação já lida" : `as ${totalLidas} notificações já lidas`}? As não lidas continuam.`
+                      )
+                    )
+                      excluir.mutate({ somenteLidas: true });
+                  }}
+                  className="h-8 rounded-lg border-[#f0c9c4] bg-white px-3 text-xs text-[#b3382c] hover:bg-[#fbeceb] hover:text-[#b3382c]"
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Excluir lidas ({totalLidas})
+                </Button>
+              </>
+            )}
+          </div>
         </div>
         {isLoading ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
@@ -573,9 +595,19 @@ function AvisosEnviados() {
                 {aviso.importante ? " · importante" : ""}
                 <span className="block text-xs text-muted-foreground">
                   {aviso.autor} ·{" "}
-                  {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(aviso.criadoEm)}{" "}
-                  · {rotuloPublicoAviso[aviso.publico as keyof typeof rotuloPublicoAviso]}
-                  {aviso.categoria ? ` · ${rotuloCategoriaAviso[aviso.categoria as keyof typeof rotuloCategoriaAviso] ?? aviso.categoria}` : ""}
+                  {new Intl.DateTimeFormat("pt-BR", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  }).format(aviso.criadoEm)}{" "}
+                  ·{" "}
+                  {
+                    rotuloPublicoAviso[
+                      aviso.publico as keyof typeof rotuloPublicoAviso
+                    ]
+                  }
+                  {aviso.categoria
+                    ? ` · ${rotuloCategoriaAviso[aviso.categoria as keyof typeof rotuloCategoriaAviso] ?? aviso.categoria}`
+                    : ""}
                 </span>
               </span>
               <Button
@@ -590,14 +622,26 @@ function AvisosEnviados() {
             {aberto === aviso.id && (
               <ul className="mt-2 grid gap-1 rounded-xl bg-[#f6faf7] p-3 text-xs sm:grid-cols-2">
                 {quem.data?.map(pessoa => (
-                  <li key={`${pessoa.nome}-${pessoa.bloco}-${pessoa.apartamento}`} className="flex justify-between gap-2">
+                  <li
+                    key={`${pessoa.nome}-${pessoa.bloco}-${pessoa.apartamento}`}
+                    className="flex justify-between gap-2"
+                  >
                     <span>
                       {pessoa.nome}
                       {pessoa.bloco ? ` (bloco ${pessoa.bloco})` : ""}
                     </span>
-                    <span className={pessoa.lidaEm ? "text-[#0a7048]" : "text-muted-foreground"}>
+                    <span
+                      className={
+                        pessoa.lidaEm
+                          ? "text-[#0a7048]"
+                          : "text-muted-foreground"
+                      }
+                    >
                       {pessoa.lidaEm
-                        ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(pessoa.lidaEm)
+                        ? new Intl.DateTimeFormat("pt-BR", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          }).format(pessoa.lidaEm)
                         : "não viu"}
                     </span>
                   </li>

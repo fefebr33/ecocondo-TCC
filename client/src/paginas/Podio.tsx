@@ -230,7 +230,11 @@ export default function Podio() {
               >
                 <span
                   className="mx-auto grid h-11 w-11 place-items-center rounded-full text-white"
-                  style={{ backgroundColor: linha.suspensao ? "#9aa29e" : medalha[linha.position - 1] }}
+                  style={{
+                    backgroundColor: linha.suspensao
+                      ? "#9aa29e"
+                      : medalha[linha.position - 1],
+                  }}
                 >
                   <Medal className="h-5 w-5" />
                 </span>
@@ -346,10 +350,10 @@ export default function Podio() {
                   {data?.minhaSuspensao && !data?.minhaPosicao
                     ? `Sua participação está suspensa ${data.minhaSuspensao.periodo}. Enquanto isso você não aparece no pódio nem no ranking; os vizinhos não veem a suspensão. Quando ela acabar, você volta a concorrer.`
                     : data?.minhaPosicao
-                    ? `${plural(data.minhaPosicao.pontos, "ponto", "pontos")} · ${formatarNumero(data.minhaPosicao.pesoKg)} kg de peso confirmado. Só você vê a sua posição.`
-                    : periodoAtual
-                      ? "Registre sua reciclagem na estação de pesagem para entrar na disputa."
-                      : "Nenhum descarte seu foi aprovado neste período."}
+                      ? `${plural(data.minhaPosicao.pontos, "ponto", "pontos")} · ${formatarNumero(data.minhaPosicao.pesoKg)} kg de peso confirmado. Só você vê a sua posição.`
+                      : periodoAtual
+                        ? "Registre sua reciclagem na estação de pesagem para entrar na disputa."
+                        : "Nenhum descarte seu foi aprovado neste período."}
                 </p>
               </div>
             </div>
@@ -392,7 +396,9 @@ export default function Podio() {
                       {linha.position}
                     </b>
                     <span>
-                      <span className={`block text-sm font-semibold ${linha.suspensao ? "text-muted-foreground" : ""}`}>
+                      <span
+                        className={`block text-sm font-semibold ${linha.suspensao ? "text-muted-foreground" : ""}`}
+                      >
                         {linha.nome}
                       </span>
                       <span className="text-xs text-muted-foreground">

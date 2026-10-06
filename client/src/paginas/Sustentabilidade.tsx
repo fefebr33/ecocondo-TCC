@@ -451,8 +451,8 @@ export default function Sustainability() {
               <p className="font-semibold">Registrar ocorrência ou denúncia</p>
               <p className="text-sm text-muted-foreground">
                 Descreva o problema e anexe evidência quando puder. A
-                administração é avisada; quem é denunciado não fica sabendo
-                quem denunciou. Denúncias falsas podem gerar medidas.
+                administração é avisada; quem é denunciado não fica sabendo quem
+                denunciou. Denúncias falsas podem gerar medidas.
               </p>
             </div>
           </div>
@@ -468,11 +468,13 @@ export default function Sustainability() {
               }
               className="h-10 rounded-xl border border-input bg-[#fbfdfc] px-3 text-sm"
             >
-              {Object.entries(rotuloCategoriaOcorrencia).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+              {Object.entries(rotuloCategoriaOcorrencia).map(
+                ([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                )
+              )}
             </select>
             <Input
               aria-label="Número do descarte ou código do adesivo (opcional)"
@@ -547,7 +549,10 @@ export default function Sustainability() {
             </Button>
           </form>
         </article>
-        <article id="ocorrencias" className="scroll-mt-24 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
+        <article
+          id="ocorrencias"
+          className="scroll-mt-24 rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="font-semibold">Ocorrências registradas</p>
@@ -567,7 +572,8 @@ export default function Sustainability() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold">
-                        Nº {item.id} · {rotuloCategoriaOcorrencia[item.categoria]}
+                        Nº {item.id} ·{" "}
+                        {rotuloCategoriaOcorrencia[item.categoria]}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {item.local} · Bloco {item.bloco} ·{" "}
@@ -809,7 +815,9 @@ export default function Sustainability() {
             </b>
             <span className="text-sm text-[#c6e4d1]">
               {palavra(
-                Math.round((summary.data?.equivalencias.arvoresPoupadas ?? 0) * 10) / 10,
+                Math.round(
+                  (summary.data?.equivalencias.arvoresPoupadas ?? 0) * 10
+                ) / 10,
                 "árvore poupada",
                 "árvores poupadas"
               )}
@@ -941,7 +949,8 @@ export default function Sustainability() {
                       {item.atingida ? " · Meta atingida! 🎉" : ""} · equivale a{" "}
                       {formatarNumero(item.equivalencias.arvoresPoupadas, 1)}{" "}
                       {palavra(
-                        Math.round(item.equivalencias.arvoresPoupadas * 10) / 10,
+                        Math.round(item.equivalencias.arvoresPoupadas * 10) /
+                          10,
                         "árvore poupada",
                         "árvores poupadas"
                       )}

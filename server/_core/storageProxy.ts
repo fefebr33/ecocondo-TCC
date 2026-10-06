@@ -14,7 +14,9 @@ export function registerStorageProxy(app: Express) {
     async (req, res, next) => {
       const acesso = await autenticarComPerfil(req, res);
       if (!acesso) return;
-      const condominioDoArquivo = Number(req.path.split("/").filter(Boolean)[1]);
+      const condominioDoArquivo = Number(
+        req.path.split("/").filter(Boolean)[1]
+      );
       if (condominioDoArquivo !== acesso.condominio.id) {
         res.status(404).end();
         return;
@@ -29,6 +31,6 @@ export function registerStorageProxy(app: Express) {
         next(error);
       }
     },
-    express.static(UPLOADS_DIR, { fallthrough: false, maxAge: "1h" }),
+    express.static(UPLOADS_DIR, { fallthrough: false, maxAge: "1h" })
   );
 }

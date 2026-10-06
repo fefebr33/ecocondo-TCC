@@ -13,7 +13,10 @@ describe("lerCertificado (DATABASE_SSL_CA)", () => {
   });
 
   it("lê o certificado de um arquivo quando recebe um caminho", () => {
-    const arquivo = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "ca-")), "ca.pem");
+    const arquivo = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "ca-")),
+      "ca.pem"
+    );
     fs.writeFileSync(arquivo, PEM);
     expect(lerCertificado(arquivo)).toBe(PEM);
   });

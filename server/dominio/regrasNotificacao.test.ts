@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { countUnreadNotifications, isNotificationReadByUser } from "./regrasNotificacao";
+import {
+  countUnreadNotifications,
+  isNotificationReadByUser,
+} from "./regrasNotificacao";
 
 describe("leituras pessoais de notificações", () => {
   const reads = [{ notificationId: 10, userId: 1 }];

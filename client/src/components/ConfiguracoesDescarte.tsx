@@ -85,8 +85,8 @@ export function RegrasDescarte() {
         morador se somam e viram ponto inteiro no saldo. Mudar a regra não
         altera os descartes já registrados: vale o que o tablet mostrou ao
         morador. Coloque 0 para um tipo que não dá pontos (ele continua contando
-        nos indicadores). Resíduo perigoso vale por entrega, e não por kg,
-        para não premiar quem traz mais pilhas, remédios ou lâmpadas.
+        nos indicadores). Resíduo perigoso vale por entrega, e não por kg, para
+        não premiar quem traz mais pilhas, remédios ou lâmpadas.
       </p>
     </section>
   );
@@ -220,7 +220,9 @@ function LinhaRegra({
         />
       </label>
       <label className="grid gap-1 text-[11px] font-semibold">
-        {pontuaPorEntrega(regra.tipoResiduo) ? "Pontos por entrega" : "Pontos por kg"}
+        {pontuaPorEntrega(regra.tipoResiduo)
+          ? "Pontos por entrega"
+          : "Pontos por kg"}
         <Input
           required
           inputMode="decimal"

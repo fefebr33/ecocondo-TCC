@@ -6,14 +6,35 @@ import type { tiposResiduo } from "../drizzle/schema";
  */
 export type TipoResiduo = (typeof tiposResiduo)[number];
 
-export const TIPOS_RESIDUO: TipoResiduo[] = ["reciclavel", "organico", "rejeito", "eletronico", "perigoso"];
+export const TIPOS_RESIDUO: TipoResiduo[] = [
+  "reciclavel",
+  "organico",
+  "rejeito",
+  "eletronico",
+  "perigoso",
+];
 
 /** Regra padrão de cada tipo (o administrador pode mudar em Configurações > Regras de descarte). */
-export const REGRAS_PADRAO: Record<TipoResiduo, { pesoMinimoGramas: number; pesoMaximoGramas: number; pontosPorKg: number }> = {
-  reciclavel: { pesoMinimoGramas: 100, pesoMaximoGramas: 30_000, pontosPorKg: 1 },
-  organico: { pesoMinimoGramas: 100, pesoMaximoGramas: 15_000, pontosPorKg: 0.5 },
+export const REGRAS_PADRAO: Record<
+  TipoResiduo,
+  { pesoMinimoGramas: number; pesoMaximoGramas: number; pontosPorKg: number }
+> = {
+  reciclavel: {
+    pesoMinimoGramas: 100,
+    pesoMaximoGramas: 30_000,
+    pontosPorKg: 1,
+  },
+  organico: {
+    pesoMinimoGramas: 100,
+    pesoMaximoGramas: 15_000,
+    pontosPorKg: 0.5,
+  },
   rejeito: { pesoMinimoGramas: 100, pesoMaximoGramas: 15_000, pontosPorKg: 0 },
-  eletronico: { pesoMinimoGramas: 50, pesoMaximoGramas: 20_000, pontosPorKg: 2 },
+  eletronico: {
+    pesoMinimoGramas: 50,
+    pesoMaximoGramas: 20_000,
+    pontosPorKg: 2,
+  },
   // Perigoso (pilhas, remédios, lâmpadas) vale por entrega, não por kg: pontuar por peso premiaria quem traz MAIS resíduo perigoso.
   perigoso: { pesoMinimoGramas: 10, pesoMaximoGramas: 5_000, pontosPorKg: 1 },
 };
@@ -38,16 +59,21 @@ export const PESO_MAXIMO_CONFIGURAVEL_GRAMAS = 50_000;
 export const PONTOS_POR_KG_MAXIMO = 20;
 
 /** Cor padrão do saco de lixo de cada tipo (baseada na Resolução CONAMA 275/2001), fornecido pelo condomínio. */
-export const CORES_PADRAO: Record<TipoResiduo, { cor: string; nome: string }> = {
-  reciclavel: { cor: "#1f6fd1", nome: "Azul" },
-  organico: { cor: "#7a4a26", nome: "Marrom" },
-  rejeito: { cor: "#7d8580", nome: "Cinza" },
-  eletronico: { cor: "#2b2b2b", nome: "Preto" },
-  perigoso: { cor: "#e8761f", nome: "Laranja" },
-};
+export const CORES_PADRAO: Record<TipoResiduo, { cor: string; nome: string }> =
+  {
+    reciclavel: { cor: "#1f6fd1", nome: "Azul" },
+    organico: { cor: "#7a4a26", nome: "Marrom" },
+    rejeito: { cor: "#7d8580", nome: "Cinza" },
+    eletronico: { cor: "#2b2b2b", nome: "Preto" },
+    perigoso: { cor: "#e8761f", nome: "Laranja" },
+  };
 
 /** Pontos de um descarte: kg × pontos por kg do tipo (ou o valor fixo, nos tipos por entrega), arredondado para baixo. */
-export function pontosDoDescarte(pesoGramas: number | null | undefined, pontosPorKg: number, tipo?: TipoResiduo | null) {
+export function pontosDoDescarte(
+  pesoGramas: number | null | undefined,
+  pontosPorKg: number,
+  tipo?: TipoResiduo | null
+) {
   if (!pesoGramas || pesoGramas <= 0 || pontosPorKg <= 0) return 0;
   if (pontuaPorEntrega(tipo)) return Math.floor(pontosPorKg + 1e-9);
   return Math.floor((pesoGramas / 1000) * pontosPorKg + 1e-9);
@@ -57,7 +83,11 @@ export function pontosDoDescarte(pesoGramas: number | null | undefined, pontosPo
  * Valor exato de um descarte em milésimos de ponto (kg × pontos por kg × 1000; 1 kg de reciclável = 1000).
  * O descarte vale a fração exata; as frações de cada morador se somam e viram ponto inteiro no saldo (ver creditarComResto).
  */
-export function milesimosDoDescarte(pesoGramas: number | null | undefined, pontosPorKg: number, tipo?: TipoResiduo | null) {
+export function milesimosDoDescarte(
+  pesoGramas: number | null | undefined,
+  pontosPorKg: number,
+  tipo?: TipoResiduo | null
+) {
   if (!pesoGramas || pesoGramas <= 0 || pontosPorKg <= 0) return 0;
   if (pontuaPorEntrega(tipo)) return Math.round(pontosPorKg * 1000);
   return Math.round(pesoGramas * pontosPorKg);
@@ -72,7 +102,10 @@ export function formatarPontos(pontos: number) {
  * Credita um descarte aprovado somando a fração que sobrou dos anteriores: 0,99 + 0,95 = 1,94 → entra 1 ponto no saldo e sobram 0,94.
  * Assim nenhum descarte "vale zero" só porque o saco pesou menos de 1 kg.
  */
-export function creditarComResto(restoMilesimos: number, exatoMilesimos: number) {
+export function creditarComResto(
+  restoMilesimos: number,
+  exatoMilesimos: number
+) {
   const acumulado = Math.max(0, restoMilesimos) + Math.max(0, exatoMilesimos);
   return { pontos: Math.floor(acumulado / 1000), resto: acumulado % 1000 };
 }
@@ -81,7 +114,11 @@ export function creditarComResto(restoMilesimos: number, exatoMilesimos: number)
  * Desfaz um descarte já creditado (reprovação depois de aprovado): tira do saldo os pontos inteiros que ele gerou e da fração
  * guardada o que sobrou dele, de modo que saldo + fração diminuam exatamente o valor do descarte.
  */
-export function estornarComResto(restoMilesimos: number, exatoMilesimos: number, pontosCreditados: number) {
+export function estornarComResto(
+  restoMilesimos: number,
+  exatoMilesimos: number,
+  pontosCreditados: number
+) {
   let resto = restoMilesimos - (exatoMilesimos - pontosCreditados * 1000);
   let pontos = pontosCreditados;
   if (resto < 0) {
@@ -97,7 +134,12 @@ export function estornarComResto(restoMilesimos: number, exatoMilesimos: number,
 }
 
 /** Situação que as telas mostram para um descarte. */
-export type SituacaoDescarte = "pendente" | "aprovado" | "reprovado" | "auditoria" | "cancelado";
+export type SituacaoDescarte =
+  | "pendente"
+  | "aprovado"
+  | "reprovado"
+  | "auditoria"
+  | "cancelado";
 
 export const rotuloSituacao: Record<SituacaoDescarte, string> = {
   pendente: "Pendente de aprovação",
@@ -111,10 +153,18 @@ export const rotuloSituacao: Record<SituacaoDescarte, string> = {
  * Concluído na estação → pendente de aprovação → aprovado ou reprovado pelo administrador; casos graves vão para auditoria.
  * Registros antigos concluídos sem decisão registrada (antes da aprovação obrigatória) contam como aprovados.
  */
-export function situacaoDescarte(registro: { status: string; pendenteAprovacaoPeso: boolean; aprovacaoPesoStatus: string | null }): SituacaoDescarte {
+export function situacaoDescarte(registro: {
+  status: string;
+  pendenteAprovacaoPeso: boolean;
+  aprovacaoPesoStatus: string | null;
+}): SituacaoDescarte {
   if (registro.aprovacaoPesoStatus === "auditoria") return "auditoria";
   if (registro.aprovacaoPesoStatus === "rejeitado") return "reprovado";
   if (registro.status !== "concluida") return "cancelado";
-  if (registro.pendenteAprovacaoPeso || registro.aprovacaoPesoStatus === "pendente") return "pendente";
+  if (
+    registro.pendenteAprovacaoPeso ||
+    registro.aprovacaoPesoStatus === "pendente"
+  )
+    return "pendente";
   return "aprovado";
 }

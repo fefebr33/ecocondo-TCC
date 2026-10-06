@@ -703,7 +703,11 @@ function Registro({
                 </span>
                 <span className="block text-xs text-muted-foreground">
                   {formatarPontos(item.pontosPrevistos)}{" "}
-                  {palavra(item.pontosPrevistos, "ponto previsto", "pontos previstos")}
+                  {palavra(
+                    item.pontosPrevistos,
+                    "ponto previsto",
+                    "pontos previstos"
+                  )}
                 </span>
               </p>
             </div>
@@ -965,8 +969,8 @@ function Registro({
               />
             </label>
             <p className="text-xs text-muted-foreground">
-              Cole um adesivo do seu kit no saco e leia o QR (ou digite o
-              código impresso embaixo dele). Cada adesivo vale para um saco só.
+              Cole um adesivo do seu kit no saco e leia o QR (ou digite o código
+              impresso embaixo dele). Cada adesivo vale para um saco só.
               {morador
                 ? ` Você ainda tem ${plural(Math.max(0, morador.adesivosDisponiveis - itens.slice(0, atual).filter(anterior => anterior.adesivo.trim()).length), "adesivo disponível", "adesivos disponíveis")}.`
                 : ""}

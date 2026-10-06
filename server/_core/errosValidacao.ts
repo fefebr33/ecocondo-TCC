@@ -37,7 +37,8 @@ const ROTULOS: Record<string, string> = {
 function formatarLimite(campo: string, limite: number | bigint) {
   const valor = Number(limite);
   // O peso trafega em gramas, mas é digitado em quilos.
-  if (campo === "weightGrams") return `${(valor / 1000).toLocaleString("pt-BR")} kg`;
+  if (campo === "weightGrams")
+    return `${(valor / 1000).toLocaleString("pt-BR")} kg`;
   return valor.toLocaleString("pt-BR");
 }
 
@@ -57,7 +58,9 @@ export function mensagemDeValidacao(problema: Problema) {
           : `${rotulo}: use pelo menos ${formatarLimite(campo, problema.minimum)} caracteres.`
         : `${rotulo}: o valor mínimo é ${formatarLimite(campo, problema.minimum)}.`;
     case "invalid_format":
-      return problema.format === "email" ? `${rotulo}: informe um e-mail válido.` : `${rotulo}: formato inválido.`;
+      return problema.format === "email"
+        ? `${rotulo}: informe um e-mail válido.`
+        : `${rotulo}: formato inválido.`;
     case "invalid_type":
       return `${rotulo}: valor ausente ou inválido.`;
     case "invalid_value":

@@ -35,17 +35,23 @@ class SDKServer {
    */
   async createSessionToken(
     openId: string,
-    options: { expiresInMs?: number; name?: string; versao?: number } = {},
+    options: { expiresInMs?: number; name?: string; versao?: number } = {}
   ): Promise<string> {
     return this.signSession(
-      { openId, appId: ENV.appId, name: options.name || "", versao: options.versao ?? 0, sessaoId: randomBytes(16).toString("hex") },
-      options,
+      {
+        openId,
+        appId: ENV.appId,
+        name: options.name || "",
+        versao: options.versao ?? 0,
+        sessaoId: randomBytes(16).toString("hex"),
+      },
+      options
     );
   }
 
   async signSession(
     payload: SessionPayload,
-    options: { expiresInMs?: number } = {},
+    options: { expiresInMs?: number } = {}
   ): Promise<string> {
     const issuedAt = Date.now();
     const expiresInMs = options.expiresInMs ?? SESSAO_MS;
@@ -64,21 +70,39 @@ class SDKServer {
   }
 
   async verifySession(
-    cookieValue: string | undefined | null,
+    cookieValue: string | undefined | null
   ): Promise<(SessionPayload & { expiraEm: Date | null }) | null> {
     if (!cookieValue) return null;
 
     try {
-      const { payload } = await jwtVerify(cookieValue, this.getSessionSecret(), {
-        algorithms: ["HS256"],
-      });
-      const { openId, appId, name, v, sid, exp } = payload as Record<string, unknown>;
+      const { payload } = await jwtVerify(
+        cookieValue,
+        this.getSessionSecret(),
+        {
+          algorithms: ["HS256"],
+        }
+      );
+      const { openId, appId, name, v, sid, exp } = payload as Record<
+        string,
+        unknown
+      >;
 
-      if (!isNonEmptyString(openId) || !isNonEmptyString(appId) || !isNonEmptyString(name)) {
+      if (
+        !isNonEmptyString(openId) ||
+        !isNonEmptyString(appId) ||
+        !isNonEmptyString(name)
+      ) {
         return null;
       }
 
-      return { openId, appId, name, versao: typeof v === "number" ? v : 0, sessaoId: typeof sid === "string" ? sid : "", expiraEm: typeof exp === "number" ? new Date(exp * 1000) : null };
+      return {
+        openId,
+        appId,
+        name,
+        versao: typeof v === "number" ? v : 0,
+        sessaoId: typeof sid === "string" ? sid : "",
+        expiraEm: typeof exp === "number" ? new Date(exp * 1000) : null,
+      };
     } catch {
       return null;
     }
@@ -90,7 +114,9 @@ class SDKServer {
     const sessionToken = cookies.get("app_session_id");
     if (sessionToken) return sessionToken;
     const authHeader = req.headers?.authorization;
-    return typeof authHeader === "string" && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+    return typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : undefined;
   }
 
   async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
@@ -101,11 +127,19 @@ class SDKServer {
     const user = await db.getUserByOpenId(session.openId);
     if (!user) throw ForbiddenError("Usuário não encontrado.");
     // Saiu do sistema, trocou a senha ou teve o acesso desativado depois que este token foi emitido: a sessão não vale mais.
-    if (session.versao !== user.versaoSessao) throw ForbiddenError("Sessão encerrada. Entre de novo.");
-    if (await sessaoEncerrada(session.sessaoId)) throw ForbiddenError("Sessão encerrada. Entre de novo.");
-    if (await acessoDesativado(user.id)) throw ForbiddenError("Seu acesso ao EcoCondo foi desativado pela administração.");
+    if (session.versao !== user.versaoSessao)
+      throw ForbiddenError("Sessão encerrada. Entre de novo.");
+    if (await sessaoEncerrada(session.sessaoId))
+      throw ForbiddenError("Sessão encerrada. Entre de novo.");
+    if (await acessoDesativado(user.id))
+      throw ForbiddenError(
+        "Seu acesso ao EcoCondo foi desativado pela administração."
+      );
 
-    await db.upsertUser({ idExterno: user.idExterno, ultimoAcesso: new Date() });
+    await db.upsertUser({
+      idExterno: user.idExterno,
+      ultimoAcesso: new Date(),
+    });
 
     return user;
   }

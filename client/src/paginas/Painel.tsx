@@ -1,6 +1,8 @@
 import PageIntro from "@/components/PageIntro";
 import PainelPessoal from "@/components/PainelPessoal";
-import IndicadoresGestao, { AvisosImportantes } from "@/components/IndicadoresGestao";
+import IndicadoresGestao, {
+  AvisosImportantes,
+} from "@/components/IndicadoresGestao";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
@@ -85,7 +87,11 @@ export default function Dashboard() {
       label: "Total descartado",
       value: data?.totalKg ? `${formatarNumero(data.totalKg)} kg` : "—",
       helper: data?.porSituacao.aprovado
-        ? plural(data.porSituacao.aprovado, "descarte aprovado", "descartes aprovados")
+        ? plural(
+            data.porSituacao.aprovado,
+            "descarte aprovado",
+            "descartes aprovados"
+          )
         : "Aguardando descartes aprovados",
       icon: Recycle,
       tone: "emerald",
@@ -168,12 +174,12 @@ export default function Dashboard() {
               role="status"
               className="mb-5 rounded-2xl border border-[#d9dedb] bg-[#f2f3f2] p-4 text-sm leading-6 text-[#3f4642]"
             >
-              <b>Participação suspensa {medida.periodo ?? ""}</b> ({medida.nome}).
-              Você pode continuar levando o lixo à estação, mas os descartes não
-              valem pontos, não dá para entrar em campanhas nem resgatar prêmios,
-              e você fica fora do pódio e do ranking (os vizinhos não veem a
-              suspensão). Tudo volta ao normal quando a suspensão acabar ou a
-              administração revogar.
+              <b>Participação suspensa {medida.periodo ?? ""}</b> ({medida.nome}
+              ). Você pode continuar levando o lixo à estação, mas os descartes
+              não valem pontos, não dá para entrar em campanhas nem resgatar
+              prêmios, e você fica fora do pódio e do ranking (os vizinhos não
+              veem a suspensão). Tudo volta ao normal quando a suspensão acabar
+              ou a administração revogar.
             </div>
           ))}
         <article className={`mb-5 ${cartao}`}>
@@ -195,11 +201,19 @@ export default function Dashboard() {
                 <li
                   key={`${linha.position}-${indice}`}
                   className={`rounded-2xl border p-3 text-center ${linha.suspenso ? "border-[#d9dedb] bg-[#f2f3f2] text-[#6b726e]" : linha.voce ? "border-[#0f7350]/40 bg-[#f1f8f4]" : "border-[#e0ebe4] bg-[#fbfdfc]"}`}
-                  title={linha.suspensaoPeriodo ? `Participação suspensa ${linha.suspensaoPeriodo}` : undefined}
+                  title={
+                    linha.suspensaoPeriodo
+                      ? `Participação suspensa ${linha.suspensaoPeriodo}`
+                      : undefined
+                  }
                 >
                   <span
                     className="mx-auto grid h-8 w-8 place-items-center rounded-full text-xs font-bold text-white"
-                    style={{ backgroundColor: linha.suspenso ? "#9aa29e" : medalha[linha.position - 1] }}
+                    style={{
+                      backgroundColor: linha.suspenso
+                        ? "#9aa29e"
+                        : medalha[linha.position - 1],
+                    }}
                   >
                     {linha.position}º
                   </span>
@@ -674,11 +688,19 @@ export default function Dashboard() {
                 <li
                   key={`${linha.position}-${indice}`}
                   className={`rounded-2xl border p-3 text-center ${linha.suspenso ? "border-[#d9dedb] bg-[#f2f3f2] text-[#6b726e]" : linha.voce ? "border-[#0f7350]/40 bg-[#f1f8f4]" : "border-[#e0ebe4] bg-[#fbfdfc]"}`}
-                  title={linha.suspensaoPeriodo ? `Participação suspensa ${linha.suspensaoPeriodo}` : undefined}
+                  title={
+                    linha.suspensaoPeriodo
+                      ? `Participação suspensa ${linha.suspensaoPeriodo}`
+                      : undefined
+                  }
                 >
                   <span
                     className="mx-auto grid h-8 w-8 place-items-center rounded-full text-xs font-bold text-white"
-                    style={{ backgroundColor: linha.suspenso ? "#9aa29e" : medalha[linha.position - 1] }}
+                    style={{
+                      backgroundColor: linha.suspenso
+                        ? "#9aa29e"
+                        : medalha[linha.position - 1],
+                    }}
                   >
                     {linha.position}º
                   </span>

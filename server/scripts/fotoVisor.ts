@@ -8,11 +8,26 @@ const LARGURA = 320;
 const ALTURA = 200;
 type Cor = [number, number, number];
 
-const SEGMENTOS: Record<string, string> = { "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcfgd" };
+const SEGMENTOS: Record<string, string> = {
+  "0": "abcdef",
+  "1": "bc",
+  "2": "abged",
+  "3": "abgcd",
+  "4": "fgbc",
+  "5": "afgcd",
+  "6": "afgedc",
+  "7": "abc",
+  "8": "abcdefg",
+  "9": "abcfgd",
+};
 
 function lerCor(hex: string): Cor {
   const limpo = hex.replace("#", "");
-  return [parseInt(limpo.slice(0, 2), 16), parseInt(limpo.slice(2, 4), 16), parseInt(limpo.slice(4, 6), 16)];
+  return [
+    parseInt(limpo.slice(0, 2), 16),
+    parseInt(limpo.slice(2, 4), 16),
+    parseInt(limpo.slice(4, 6), 16),
+  ];
 }
 
 const tabelaCrc = Array.from({ length: 256 }, (_, n) => {
@@ -23,7 +38,8 @@ const tabelaCrc = Array.from({ length: 256 }, (_, n) => {
 
 function crc32(dados: Buffer) {
   let c = 0xffffffff;
-  for (let i = 0; i < dados.length; i += 1) c = tabelaCrc[(c ^ dados[i]) & 0xff] ^ (c >>> 8);
+  for (let i = 0; i < dados.length; i += 1)
+    c = tabelaCrc[(c ^ dados[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
@@ -45,23 +61,56 @@ function codificarPng(pixels: Uint8Array) {
   const linhas = Buffer.alloc((LARGURA * 3 + 1) * ALTURA);
   for (let y = 0; y < ALTURA; y += 1) {
     linhas[y * (LARGURA * 3 + 1)] = 0;
-    Buffer.from(pixels.buffer, pixels.byteOffset + y * LARGURA * 3, LARGURA * 3).copy(linhas, y * (LARGURA * 3 + 1) + 1);
+    Buffer.from(
+      pixels.buffer,
+      pixels.byteOffset + y * LARGURA * 3,
+      LARGURA * 3
+    ).copy(linhas, y * (LARGURA * 3 + 1) + 1);
   }
-  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), bloco("IHDR", cabecalho), bloco("IDAT", deflateSync(linhas)), bloco("IEND", Buffer.alloc(0))]);
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    bloco("IHDR", cabecalho),
+    bloco("IDAT", deflateSync(linhas)),
+    bloco("IEND", Buffer.alloc(0)),
+  ]);
 }
 
 export function fotoDoVisor(pesoGramas: number | null, corSaco = "#1f6fd1") {
   const pixels = new Uint8Array(LARGURA * ALTURA * 3);
-  const pintar = (x0: number, y0: number, largura: number, altura: number, cor: Cor) => {
+  const pintar = (
+    x0: number,
+    y0: number,
+    largura: number,
+    altura: number,
+    cor: Cor
+  ) => {
     for (let y = Math.max(0, y0); y < Math.min(ALTURA, y0 + altura); y += 1) {
-      for (let x = Math.max(0, x0); x < Math.min(LARGURA, x0 + largura); x += 1) pixels.set(cor, (y * LARGURA + x) * 3);
+      for (let x = Math.max(0, x0); x < Math.min(LARGURA, x0 + largura); x += 1)
+        pixels.set(cor, (y * LARGURA + x) * 3);
     }
   };
   // Parede e piso da área das lixeiras.
-  for (let y = 0; y < ALTURA; y += 1) pintar(0, y, LARGURA, 1, y < 150 ? [214 - Math.round(y / 12), 210 - Math.round(y / 12), 202 - Math.round(y / 12)] : [150, 146, 138]);
+  for (let y = 0; y < ALTURA; y += 1)
+    pintar(
+      0,
+      y,
+      LARGURA,
+      1,
+      y < 150
+        ? [
+            214 - Math.round(y / 12),
+            210 - Math.round(y / 12),
+            202 - Math.round(y / 12),
+          ]
+        : [150, 146, 138]
+    );
   // Saco na cor do tipo, com o nó em cima.
   const cor = lerCor(corSaco);
-  const escura: Cor = [Math.round(cor[0] * 0.75), Math.round(cor[1] * 0.75), Math.round(cor[2] * 0.75)];
+  const escura: Cor = [
+    Math.round(cor[0] * 0.75),
+    Math.round(cor[1] * 0.75),
+    Math.round(cor[2] * 0.75),
+  ];
   for (let y = 52; y < 128; y += 1) {
     const recuo = Math.max(0, Math.round((70 - (y - 52)) / 5));
     pintar(34 + recuo, y, 150 - recuo * 2, 1, y % 17 === 0 ? escura : cor);

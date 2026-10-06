@@ -163,7 +163,8 @@ function formatar(campo: string, valor: unknown): string {
     return Object.entries(valor as Record<string, unknown>)
       .filter(([chave]) => !camposOcultos.has(chave))
       .map(
-        ([chave, item]) => `${nomesCampos[chave] ?? chave}: ${formatar(chave, item)}`
+        ([chave, item]) =>
+          `${nomesCampos[chave] ?? chave}: ${formatar(chave, item)}`
       )
       .join(" · ");
   }
@@ -212,7 +213,8 @@ export function descreverMudancas(
         campo in depois ? formatar(campo, depois[campo]) : null;
       return {
         campo,
-        rotulo: nomesCampos[campo] ?? campo.replace(/([A-Z])/g, " $1").toLowerCase(),
+        rotulo:
+          nomesCampos[campo] ?? campo.replace(/([A-Z])/g, " $1").toLowerCase(),
         antes: temAnterior ? valorAntes : null,
         depois: valorDepois,
       };

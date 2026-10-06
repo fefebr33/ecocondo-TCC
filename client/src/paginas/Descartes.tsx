@@ -250,7 +250,8 @@ export default function Descartes() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {formatarDataHora(primeiro.concluidaEm)} ·{" "}
-                          {primeiro.origin} · {plural(lote.length, "tipo", "tipos")} ·{" "}
+                          {primeiro.origin} ·{" "}
+                          {plural(lote.length, "tipo", "tipos")} ·{" "}
                           {formatarPontos(pontosPrevistos)}{" "}
                           {palavra(
                             pontosPrevistos,
@@ -748,11 +749,16 @@ export default function Descartes() {
                 </p>
                 <Button
                   variant="outline"
-                  onClick={() => setLimite(atual => atual + DESCARTES_POR_PAGINA)}
+                  onClick={() =>
+                    setLimite(atual => atual + DESCARTES_POR_PAGINA)
+                  }
                   className="h-10 rounded-xl"
                 >
                   Mostrar mais{" "}
-                  {Math.min(DESCARTES_POR_PAGINA, registros.length - visiveis.length)}
+                  {Math.min(
+                    DESCARTES_POR_PAGINA,
+                    registros.length - visiveis.length
+                  )}
                 </Button>
               </div>
             )}
@@ -901,7 +907,11 @@ function DetalheDescarte({
                       <p>
                         <b>Pontos:</b>{" "}
                         {item.situacao === "aprovado"
-                          ? plural(item.pontosConcedidos, "creditado", "creditados")
+                          ? plural(
+                              item.pontosConcedidos,
+                              "creditado",
+                              "creditados"
+                            )
                           : item.situacao === "pendente" ||
                               item.situacao === "auditoria"
                             ? `${formatarPontos(item.pontosPrevistos)} ${palavra(item.pontosPrevistos, "previsto, entra", "previstos, entram")} depois da aprovação`
@@ -961,14 +971,19 @@ function DetalheDescarte({
                         </span>
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Viu: {item.analiseIa.tipoIdentificado ? rotuloResiduo[item.analiseIa.tipoIdentificado] : "tipo não identificado"}
-                        {" · "}saco {item.analiseIa.corSacoIdentificada ?? "?"} (esperado{" "}
-                        {item.analiseIa.corSacoEsperada ?? "?"})
+                        Viu:{" "}
+                        {item.analiseIa.tipoIdentificado
+                          ? rotuloResiduo[item.analiseIa.tipoIdentificado]
+                          : "tipo não identificado"}
+                        {" · "}saco {item.analiseIa.corSacoIdentificada ?? "?"}{" "}
+                        (esperado {item.analiseIa.corSacoEsperada ?? "?"})
                         {" · "}visor{" "}
                         {item.analiseIa.pesoLidoGramas === null
                           ? "ilegível"
                           : formatarKg(item.analiseIa.pesoLidoGramas)}
-                        {item.analiseIa.descricao ? ` · ${item.analiseIa.descricao}` : ""}
+                        {item.analiseIa.descricao
+                          ? ` · ${item.analiseIa.descricao}`
+                          : ""}
                       </p>
                       {item.analiseIa.motivos.length > 0 && (
                         <ul className="mt-1 list-disc pl-5 text-xs text-[#7a4d0a]">
@@ -1005,7 +1020,8 @@ function DetalheDescarte({
                         {item.historico.map(evento => (
                           <li key={evento.id}>
                             <span className="text-muted-foreground">
-                              {formatarDataHora(evento.criadoEm)} · {evento.autor}
+                              {formatarDataHora(evento.criadoEm)} ·{" "}
+                              {evento.autor}
                             </span>
                             <br />
                             {evento.resumo}
@@ -1279,7 +1295,7 @@ function DialogoConcluirAuditoria({
   const retirada = Number(penalidade) || 0;
   const pontosDasMedidas = escolhidas.reduce(
     (soma, modelo) =>
-      soma + (modelo.tipo === "perda_pontos" ? modelo.pontos ?? 0 : 0),
+      soma + (modelo.tipo === "perda_pontos" ? (modelo.pontos ?? 0) : 0),
     0
   );
   const consequencias =

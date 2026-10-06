@@ -19,7 +19,9 @@ describe("pontos por tipo de descarte", () => {
 
   it("usa a regra configurada pelo administrador quando informada", () => {
     expect(calculateCollectionPoints("concluida", "organico", 3000, 2)).toBe(6);
-    expect(calculateCollectionPoints("concluida", "reciclavel", 3000, 0)).toBe(0);
+    expect(calculateCollectionPoints("concluida", "reciclavel", 3000, 0)).toBe(
+      0
+    );
   });
 
   it("não atribui pontos a descarte não concluído, fração de ponto ou peso inválido", () => {
@@ -32,12 +34,48 @@ describe("pontos por tipo de descarte", () => {
 
 describe("situação do descarte", () => {
   it("segue concluído → pendente → aprovado/reprovado, com auditoria para casos graves", () => {
-    expect(situacaoDescarte({ status: "concluida", pendenteAprovacaoPeso: true, aprovacaoPesoStatus: "pendente" })).toBe("pendente");
-    expect(situacaoDescarte({ status: "concluida", pendenteAprovacaoPeso: false, aprovacaoPesoStatus: "aprovado" })).toBe("aprovado");
-    expect(situacaoDescarte({ status: "concluida", pendenteAprovacaoPeso: false, aprovacaoPesoStatus: "rejeitado" })).toBe("reprovado");
-    expect(situacaoDescarte({ status: "concluida", pendenteAprovacaoPeso: true, aprovacaoPesoStatus: "auditoria" })).toBe("auditoria");
+    expect(
+      situacaoDescarte({
+        status: "concluida",
+        pendenteAprovacaoPeso: true,
+        aprovacaoPesoStatus: "pendente",
+      })
+    ).toBe("pendente");
+    expect(
+      situacaoDescarte({
+        status: "concluida",
+        pendenteAprovacaoPeso: false,
+        aprovacaoPesoStatus: "aprovado",
+      })
+    ).toBe("aprovado");
+    expect(
+      situacaoDescarte({
+        status: "concluida",
+        pendenteAprovacaoPeso: false,
+        aprovacaoPesoStatus: "rejeitado",
+      })
+    ).toBe("reprovado");
+    expect(
+      situacaoDescarte({
+        status: "concluida",
+        pendenteAprovacaoPeso: true,
+        aprovacaoPesoStatus: "auditoria",
+      })
+    ).toBe("auditoria");
     // Registro antigo, de antes da aprovação obrigatória.
-    expect(situacaoDescarte({ status: "concluida", pendenteAprovacaoPeso: false, aprovacaoPesoStatus: null })).toBe("aprovado");
-    expect(situacaoDescarte({ status: "cancelada", pendenteAprovacaoPeso: false, aprovacaoPesoStatus: null })).toBe("cancelado");
+    expect(
+      situacaoDescarte({
+        status: "concluida",
+        pendenteAprovacaoPeso: false,
+        aprovacaoPesoStatus: null,
+      })
+    ).toBe("aprovado");
+    expect(
+      situacaoDescarte({
+        status: "cancelada",
+        pendenteAprovacaoPeso: false,
+        aprovacaoPesoStatus: null,
+      })
+    ).toBe("cancelado");
   });
 });

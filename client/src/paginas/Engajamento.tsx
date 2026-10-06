@@ -171,7 +171,9 @@ export default function Engagement() {
                       {resident.position}
                     </b>
                     <span>
-                      <span className={`block text-sm font-semibold ${resident.suspensaoPeriodo ? "text-muted-foreground" : ""}`}>
+                      <span
+                        className={`block text-sm font-semibold ${resident.suspensaoPeriodo ? "text-muted-foreground" : ""}`}
+                      >
                         {resident.nome}
                         {resident.voce ? " (você)" : ""}
                       </span>
@@ -245,8 +247,10 @@ export default function Engagement() {
                 {isResident ? (
                   <>
                     Seu saldo:{" "}
-                    <b className="text-foreground">{plural(saldo, "ponto", "pontos")}</b>. O
-                    resgate só acontece se houver saldo e estoque.
+                    <b className="text-foreground">
+                      {plural(saldo, "ponto", "pontos")}
+                    </b>
+                    . O resgate só acontece se houver saldo e estoque.
                   </>
                 ) : (
                   "Custo e disponibilidade de cada recompensa. Recompensas desativadas não aparecem para os moradores."

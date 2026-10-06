@@ -18,23 +18,36 @@ function appendHashSuffix(relKey: string): string {
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
-  contentType = "application/octet-stream",
+  contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
   const key = appendHashSuffix(normalizeKey(relKey));
   const dados = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const db = await getDb();
-  await db.insert(arquivos).values({ chave: key, tipoConteudo: contentType, tamanho: dados.length, dados });
+  await db
+    .insert(arquivos)
+    .values({
+      chave: key,
+      tipoConteudo: contentType,
+      tamanho: dados.length,
+      dados,
+    });
   return { key, url: `/uploads/${key}` };
 }
 
 /** Lê um arquivo guardado no banco (null se não existir). */
 export async function lerArquivo(relKey: string) {
   const db = await getDb();
-  const [arquivo] = await db.select().from(arquivos).where(eq(arquivos.chave, normalizeKey(relKey))).limit(1);
+  const [arquivo] = await db
+    .select()
+    .from(arquivos)
+    .where(eq(arquivos.chave, normalizeKey(relKey)))
+    .limit(1);
   return arquivo ?? null;
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
+export async function storageGet(
+  relKey: string
+): Promise<{ key: string; url: string }> {
   const key = normalizeKey(relKey);
   return { key, url: `/uploads/${key}` };
 }
@@ -44,14 +57,21 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
 }
 
 /** Decodifica uma imagem enviada como data URL (ex.: "data:image/webp;base64,...") e salva no armazenamento local. */
-export async function salvarImagemBase64(imageDataUrl: string | null | undefined, prefixoChave: string) {
-  if (!imageDataUrl) return { key: null as string | null, url: null as string | null };
-  const match = imageDataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)$/);
+export async function salvarImagemBase64(
+  imageDataUrl: string | null | undefined,
+  prefixoChave: string
+) {
+  if (!imageDataUrl)
+    return { key: null as string | null, url: null as string | null };
+  const match = imageDataUrl.match(
+    /^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)$/
+  );
   if (!match) throw new Error("Envie uma imagem PNG, JPEG ou WebP válida.");
   const subtype = match[1] === "jpg" ? "jpeg" : match[1];
   const extension = subtype === "jpeg" ? "jpg" : subtype;
   const bytes = Buffer.from(match[2], "base64");
-  if (bytes.length > 4 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 4 MB.");
+  if (bytes.length > 4 * 1024 * 1024)
+    throw new Error("A imagem deve ter no máximo 4 MB.");
   const key = `${prefixoChave}/${Date.now()}.${extension}`;
   return storagePut(key, bytes, `image/${subtype}`);
 }

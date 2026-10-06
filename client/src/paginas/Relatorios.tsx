@@ -207,7 +207,11 @@ export default function Reports() {
       label: "Total descartado (aprovado)",
       value: data ? `${formatarNumero(data.totalKg)} kg` : "—",
       helper: data
-        ? plural(data.porSituacao.aprovado, "descarte aprovado", "descartes aprovados")
+        ? plural(
+            data.porSituacao.aprovado,
+            "descarte aprovado",
+            "descartes aprovados"
+          )
         : "",
       icon: FileText,
     },
@@ -242,33 +246,35 @@ export default function Reports() {
         description="Desempenho ambiental, participação, pontos, prêmios e auditoria, com gráficos por bloco, por mês e por tipo. Escolha o período e o bloco. O PDF traz os mesmos gráficos e indicadores do painel; a planilha do Excel traz uma aba para cada assunto."
         action={
           <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => exportPlanilha.mutate(period)}
-            title={
-              bloco === "todos"
-                ? "Planilha de todos os blocos"
-                : `Planilha só do bloco ${bloco}`
-            }
-            disabled={exportPlanilha.isPending}
-            className="h-10 rounded-xl border-[#c9ddd0] bg-white font-semibold text-[#0d6747]"
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            {exportPlanilha.isPending ? "Gerando..." : "Baixar planilha (Excel)"}
-          </Button>
-          <Button
-            onClick={() => exportPdf.mutate(period)}
-            title={
-              bloco === "todos"
-                ? "PDF de todos os blocos"
-                : `PDF só do bloco ${bloco}`
-            }
-            disabled={exportPdf.isPending}
-            className="h-10 rounded-xl bg-[#0f7350] font-semibold text-white hover:bg-[#0a6243]"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            {exportPdf.isPending ? "Gerando PDF..." : "Exportar PDF"}
-          </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportPlanilha.mutate(period)}
+              title={
+                bloco === "todos"
+                  ? "Planilha de todos os blocos"
+                  : `Planilha só do bloco ${bloco}`
+              }
+              disabled={exportPlanilha.isPending}
+              className="h-10 rounded-xl border-[#c9ddd0] bg-white font-semibold text-[#0d6747]"
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              {exportPlanilha.isPending
+                ? "Gerando..."
+                : "Baixar planilha (Excel)"}
+            </Button>
+            <Button
+              onClick={() => exportPdf.mutate(period)}
+              title={
+                bloco === "todos"
+                  ? "PDF de todos os blocos"
+                  : `PDF só do bloco ${bloco}`
+              }
+              disabled={exportPdf.isPending}
+              className="h-10 rounded-xl bg-[#0f7350] font-semibold text-white hover:bg-[#0a6243]"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {exportPdf.isPending ? "Gerando PDF..." : "Exportar PDF"}
+            </Button>
           </div>
         }
       />
@@ -418,7 +424,8 @@ export default function Reports() {
                       >
                         <span className="truncate">{item.titulo}</span>
                         <span className="shrink-0 text-muted-foreground">
-                          {item.quantidade}x · {plural(item.pontos, "pt", "pts")}
+                          {item.quantidade}x ·{" "}
+                          {plural(item.pontos, "pt", "pts")}
                         </span>
                       </li>
                     ))}
@@ -906,7 +913,8 @@ export default function Reports() {
       {data?.gestao && (
         <section className="mt-6">
           <h2 className="text-lg font-semibold tracking-[-0.02em]">
-            Gestão no período: IA, auditorias, medidas, campanhas, adesivos e ocorrências
+            Gestão no período: IA, auditorias, medidas, campanhas, adesivos e
+            ocorrências
           </h2>
           <IndicadoresGestao gestao={data.gestao} />
         </section>

@@ -32,47 +32,134 @@ const Adesivos = lazy(() => import("@/paginas/Adesivos"));
 const LeituraQr = lazy(() => import("@/paginas/LeituraQr"));
 
 function CarregandoTela() {
-  return <p role="status" className="p-6 text-sm text-muted-foreground">Carregando...</p>;
+  return (
+    <p role="status" className="p-6 text-sm text-muted-foreground">
+      Carregando...
+    </p>
+  );
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // O menu fica na tela enquanto a página escolhida é baixada.
-  return <AppShell><Suspense fallback={<CarregandoTela />}>{children}</Suspense></AppShell>;
+  return (
+    <AppShell>
+      <Suspense fallback={<CarregandoTela />}>{children}</Suspense>
+    </AppShell>
+  );
 }
 
 function Router() {
   return (
     <Suspense fallback={<CarregandoTela />}>
-    <Switch>
-      <Route path="/" component={Inicio} />
-      <Route path="/entrar" component={Entrar} />
-      <Route path="/estacao" component={Estacao} />
-      <Route path="/dashboard"><ProtectedRoute><Painel /></ProtectedRoute></Route>
-      <Route path="/definir-senha" component={DefinirSenha} />
-      <Route path="/descartes"><ProtectedRoute><Descartes /></ProtectedRoute></Route>
-      <Route path="/coletas"><Redirect to="/descartes" replace /></Route>
-      <Route path="/adesivos"><ProtectedRoute><Adesivos /></ProtectedRoute></Route>
-      <Route path="/leitura"><ProtectedRoute><LeituraQr /></ProtectedRoute></Route>
-      <Route path="/manual"><ProtectedRoute><Manual /></ProtectedRoute></Route>
-      <Route path="/moradores/painel"><ProtectedRoute><PainelMorador /></ProtectedRoute></Route>
-      <Route path="/moradores"><ProtectedRoute><Moradores /></ProtectedRoute></Route>
-      <Route path="/pessoas"><ProtectedRoute><Pessoas /></ProtectedRoute></Route>
-      <Route path="/relatorios"><ProtectedRoute><Relatorios /></ProtectedRoute></Route>
-      <Route path="/auditoria"><ProtectedRoute><Auditoria /></ProtectedRoute></Route>
-      <Route path="/engajamento"><ProtectedRoute><Engajamento /></ProtectedRoute></Route>
-      <Route path="/podio"><ProtectedRoute><Podio /></ProtectedRoute></Route>
-      <Route path="/guia"><ProtectedRoute><GuiaDescarte /></ProtectedRoute></Route>
-      <Route path="/notificacoes"><ProtectedRoute><Notificacoes /></ProtectedRoute></Route>
-      <Route path="/ambiental"><ProtectedRoute><Sustentabilidade /></ProtectedRoute></Route>
-      <Route path="/comunidade"><ProtectedRoute><Comunidade /></ProtectedRoute></Route>
-      <Route path="/configuracoes"><ProtectedRoute><Configuracoes /></ProtectedRoute></Route>
-      <Route path="/404" component={NaoEncontrado} />
-      <Route component={NaoEncontrado} />
-    </Switch>
+      <Switch>
+        <Route path="/" component={Inicio} />
+        <Route path="/entrar" component={Entrar} />
+        <Route path="/estacao" component={Estacao} />
+        <Route path="/dashboard">
+          <ProtectedRoute>
+            <Painel />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/definir-senha" component={DefinirSenha} />
+        <Route path="/descartes">
+          <ProtectedRoute>
+            <Descartes />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/coletas">
+          <Redirect to="/descartes" replace />
+        </Route>
+        <Route path="/adesivos">
+          <ProtectedRoute>
+            <Adesivos />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/leitura">
+          <ProtectedRoute>
+            <LeituraQr />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/manual">
+          <ProtectedRoute>
+            <Manual />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/moradores/painel">
+          <ProtectedRoute>
+            <PainelMorador />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/moradores">
+          <ProtectedRoute>
+            <Moradores />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/pessoas">
+          <ProtectedRoute>
+            <Pessoas />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/relatorios">
+          <ProtectedRoute>
+            <Relatorios />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/auditoria">
+          <ProtectedRoute>
+            <Auditoria />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/engajamento">
+          <ProtectedRoute>
+            <Engajamento />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/podio">
+          <ProtectedRoute>
+            <Podio />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/guia">
+          <ProtectedRoute>
+            <GuiaDescarte />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/notificacoes">
+          <ProtectedRoute>
+            <Notificacoes />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/ambiental">
+          <ProtectedRoute>
+            <Sustentabilidade />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/comunidade">
+          <ProtectedRoute>
+            <Comunidade />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/configuracoes">
+          <ProtectedRoute>
+            <Configuracoes />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/404" component={NaoEncontrado} />
+        <Route component={NaoEncontrado} />
+      </Switch>
     </Suspense>
   );
 }
 
 export default function App() {
-  return <ErrorBoundary><ThemeProvider defaultTheme="light" switchable><TooltipProvider><Toaster /><Router /></TooltipProvider></ThemeProvider></ErrorBoundary>;
+  return (
+    <ErrorBoundary>
+      <ThemeProvider defaultTheme="light" switchable>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
+  );
 }

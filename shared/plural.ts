@@ -13,6 +13,10 @@ export function palavra(quantidade: number, singular: string, plural: string) {
 }
 
 /** Número (no formato brasileiro, até 2 casas) com a palavra concordando: plural(3, "ponto", "pontos") → "3 pontos". */
-export function plural(quantidade: number, singular: string, pluralForma: string) {
+export function plural(
+  quantidade: number,
+  singular: string,
+  pluralForma: string
+) {
   return `${quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${palavra(quantidade, singular, pluralForma)}`;
 }

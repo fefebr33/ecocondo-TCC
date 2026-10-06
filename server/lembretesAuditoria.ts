@@ -13,14 +13,42 @@ export const LEMBRETE_AUDITORIA_HORAS = 24;
  * para cada descarte), dizendo há quanto tempo está parada e o que falta fazer.
  */
 export async function lembrarAuditoriasParadas(db: any, agora = new Date()) {
-  const limite = new Date(agora.getTime() - LEMBRETE_AUDITORIA_HORAS * 60 * 60 * 1000);
-  const paradas: Array<typeof coletas.$inferSelect> = await db.select().from(coletas).where(and(eq(coletas.aprovacaoPesoStatus, "auditoria"), lte(coletas.auditoriaAbertaEm, limite)));
+  const limite = new Date(
+    agora.getTime() - LEMBRETE_AUDITORIA_HORAS * 60 * 60 * 1000
+  );
+  const paradas: Array<typeof coletas.$inferSelect> = await db
+    .select()
+    .from(coletas)
+    .where(
+      and(
+        eq(coletas.aprovacaoPesoStatus, "auditoria"),
+        lte(coletas.auditoriaAbertaEm, limite)
+      )
+    );
   let enviados = 0;
   for (const coleta of paradas) {
-    const [recente] = await db.select({ id: notificacoes.id }).from(notificacoes).where(and(eq(notificacoes.coletaId, coleta.id), eq(notificacoes.tipo, "auditoria_pendente"), gte(notificacoes.criadoEm, limite))).limit(1);
+    const [recente] = await db
+      .select({ id: notificacoes.id })
+      .from(notificacoes)
+      .where(
+        and(
+          eq(notificacoes.coletaId, coleta.id),
+          eq(notificacoes.tipo, "auditoria_pendente"),
+          gte(notificacoes.criadoEm, limite)
+        )
+      )
+      .limit(1);
     if (recente) continue;
-    const dias = Math.max(1, Math.floor((agora.getTime() - (coleta.auditoriaAbertaEm ?? agora).getTime()) / DIA_MS));
-    const kg = ((coleta.pesoGramas ?? 0) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+    const dias = Math.max(
+      1,
+      Math.floor(
+        (agora.getTime() - (coleta.auditoriaAbertaEm ?? agora).getTime()) /
+          DIA_MS
+      )
+    );
+    const kg = ((coleta.pesoGramas ?? 0) / 1000).toLocaleString("pt-BR", {
+      maximumFractionDigits: 2,
+    });
     await notificarAdministradores(db, {
       condominioId: coleta.condominioId,
       coletaId: coleta.id,

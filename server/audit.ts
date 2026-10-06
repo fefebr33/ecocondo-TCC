@@ -17,7 +17,9 @@ export type RegistroAuditoria = {
 
 function serializarEstado(valor: Record<string, unknown> | null | undefined) {
   if (!valor) return null;
-  return JSON.stringify(valor, (_chave, item) => (item instanceof Date ? item.toISOString() : item));
+  return JSON.stringify(valor, (_chave, item) =>
+    item instanceof Date ? item.toISOString() : item
+  );
 }
 
 export async function writeAuditLog(db: any, registro: RegistroAuditoria) {
@@ -34,7 +36,15 @@ export async function writeAuditLog(db: any, registro: RegistroAuditoria) {
   });
 }
 
-export function collectionAuditState(registro: { status: string; pesoGramas: number | null; pontosConcedidos: number; coletorId: number | null; agendadaPara: Date; concluidaEm: Date | null; observacoes: string | null }) {
+export function collectionAuditState(registro: {
+  status: string;
+  pesoGramas: number | null;
+  pontosConcedidos: number;
+  coletorId: number | null;
+  agendadaPara: Date;
+  concluidaEm: Date | null;
+  observacoes: string | null;
+}) {
   return {
     status: registro.status,
     pesoGramas: registro.pesoGramas,
@@ -46,7 +56,16 @@ export function collectionAuditState(registro: { status: string; pesoGramas: num
   };
 }
 
-export function incidentAuditState(registro: { status: string; bloco: string; tipoResiduo: string; local: string; descricao: string; notaResolucao: string | null; resolvidoPorId: number | null; resolvidaEm: Date | null }) {
+export function incidentAuditState(registro: {
+  status: string;
+  bloco: string;
+  tipoResiduo: string;
+  local: string;
+  descricao: string;
+  notaResolucao: string | null;
+  resolvidoPorId: number | null;
+  resolvidaEm: Date | null;
+}) {
   return {
     status: registro.status,
     bloco: registro.bloco,
