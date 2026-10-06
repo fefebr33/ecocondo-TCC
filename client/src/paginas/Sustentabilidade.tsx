@@ -39,6 +39,7 @@ import {
   YAxis,
 } from "recharts";
 import { toast } from "sonner";
+import { palavra } from "@shared/plural";
 
 const wasteLabels: Record<string, string> = {
   reciclavel: "Reciclável",
@@ -806,7 +807,13 @@ export default function Sustainability() {
                 1
               )}
             </b>
-            <span className="text-sm text-[#c6e4d1]">árvore(s) poupada(s)</span>
+            <span className="text-sm text-[#c6e4d1]">
+              {palavra(
+                Math.round((summary.data?.equivalencias.arvoresPoupadas ?? 0) * 10) / 10,
+                "árvore poupada",
+                "árvores poupadas"
+              )}
+            </span>
           </span>
           <span className="rounded-2xl bg-white/10 p-4">
             <Droplets className="h-4 w-4 text-[#91d7ae]" />
@@ -933,7 +940,11 @@ export default function Sustainability() {
                       {item.progresso}% da meta
                       {item.atingida ? " · Meta atingida! 🎉" : ""} · equivale a{" "}
                       {formatarNumero(item.equivalencias.arvoresPoupadas, 1)}{" "}
-                      árvore(s) poupada(s)
+                      {palavra(
+                        Math.round(item.equivalencias.arvoresPoupadas * 10) / 10,
+                        "árvore poupada",
+                        "árvores poupadas"
+                      )}
                     </p>
                   </div>
                 ))

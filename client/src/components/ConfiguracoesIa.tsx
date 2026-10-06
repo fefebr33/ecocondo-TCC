@@ -64,6 +64,13 @@ export function ConfiguracaoAnaliseIa() {
             : "Modo demonstração (sem chave da API)"}
         </Badge>
       </div>
+      {config.data && config.data.modoIa !== "claude" && (
+        <p className="mt-3 rounded-xl bg-[#fff8ec] p-3 text-sm text-[#5c3a06]">
+          Sem a chave da API do Claude, a IA só é simulada nas estações em modo
+          demonstração. Nas estações de verdade, todo descarte fica pendente
+          até um administrador conferir a foto.
+        </p>
+      )}
       <form
         onSubmit={(event: FormEvent) => {
           event.preventDefault();

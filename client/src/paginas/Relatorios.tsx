@@ -48,6 +48,7 @@ import {
   type SituacaoDescarte,
 } from "@/lib/descarte";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 const wasteOptions = [
   "todos",
@@ -206,7 +207,7 @@ export default function Reports() {
       label: "Total descartado (aprovado)",
       value: data ? `${formatarNumero(data.totalKg)} kg` : "—",
       helper: data
-        ? `${data.porSituacao.aprovado} descarte(s) aprovado(s)`
+        ? plural(data.porSituacao.aprovado, "descarte aprovado", "descartes aprovados")
         : "",
       icon: FileText,
     },
@@ -227,7 +228,7 @@ export default function Reports() {
           ? "—"
           : `${formatarNumero(data.participationRate, 1)}%`,
       helper: data
-        ? `${data.participantsCount} de ${data.residentsCount} morador(es)`
+        ? `${data.participantsCount} de ${plural(data.residentsCount, "morador", "moradores")}`
         : "",
       icon: UsersRound,
     },
@@ -405,7 +406,7 @@ export default function Reports() {
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {data
-                    ? `${data.resgates.entregues} entregue(s) · ${data.resgates.pendentes} pendente(s) · ${data.resgates.cancelados} cancelado(s)`
+                    ? `${plural(data.resgates.entregues, "entregue", "entregues")} · ${plural(data.resgates.pendentes, "pendente", "pendentes")} · ${plural(data.resgates.cancelados, "cancelado", "cancelados")}`
                     : ""}
                 </p>
                 {data?.resgates.porRecompensa.length ? (
@@ -417,7 +418,7 @@ export default function Reports() {
                       >
                         <span className="truncate">{item.titulo}</span>
                         <span className="shrink-0 text-muted-foreground">
-                          {item.quantidade}x · {item.pontos} pts
+                          {item.quantidade}x · {plural(item.pontos, "pt", "pts")}
                         </span>
                       </li>
                     ))}
@@ -465,7 +466,8 @@ export default function Reports() {
                 </dl>
                 <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <ShieldCheck className="h-3.5 w-3.5" />
-                  {data?.auditEvents ?? 0} registro(s) de auditoria no período
+                  {plural(data?.auditEvents ?? 0, "registro", "registros")} de
+                  auditoria no período
                 </p>
               </article>
             </div>
@@ -733,7 +735,7 @@ export default function Reports() {
                         </span>
                         <span className="text-right">
                           <span className="block text-sm font-bold text-[#0f7350]">
-                            {resident.points} pts
+                            {plural(resident.points, "pt", "pts")}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {formatarNumero(resident.weightKg)} kg

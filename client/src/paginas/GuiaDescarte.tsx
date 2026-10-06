@@ -3,6 +3,7 @@ import { corDeTextoSobre, rotuloResiduo } from "@/lib/descarte";
 import { trpc } from "@/lib/trpc";
 import { formatarNumero } from "@/lib/utils";
 import { AlertTriangle, CheckCircle2, ShoppingBag } from "lucide-react";
+import { palavra } from "@shared/plural";
 
 /** Guia de descarte: o que vai em cada tipo, a cor do saco (o condomínio fornece sacos coloridos) e os limites da estação. */
 export default function DisposalGuide() {
@@ -100,7 +101,7 @@ export default function DisposalGuide() {
                       {formatarNumero(regra.pesoMaximoGramas / 1000)} kg por
                       descarte ·{" "}
                       {regra.pontosPorKg > 0
-                        ? `${formatarNumero(regra.pontosPorKg)} ponto(s) por kg aprovado`
+                        ? `${formatarNumero(regra.pontosPorKg)} ${palavra(regra.pontosPorKg, "ponto", "pontos")} por kg aprovado`
                         : "não dá pontos, mas conta nos indicadores"}
                       .
                     </p>

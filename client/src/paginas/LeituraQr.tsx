@@ -22,6 +22,7 @@ import {
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 const formatarData = (valor: Date | string | null | undefined) =>
   valor
@@ -160,8 +161,9 @@ export default function LeituraQr() {
                   · entregue em {formatarData(dados.entregueEm)}
                 </p>
                 <p className="text-muted-foreground">
-                  Kit: {dados.morador.adesivos.disponivel} disponível(is),{" "}
-                  {dados.morador.adesivos.utilizado} usado(s)
+                  Kit:{" "}
+                  {plural(dados.morador.adesivos.disponivel, "disponível", "disponíveis")},{" "}
+                  {plural(dados.morador.adesivos.utilizado, "usado", "usados")}
                 </p>
                 <Button asChild variant="outline" className="mt-2 w-fit rounded-xl">
                   <Link href={`/moradores/painel?id=${dados.morador.id}`}>
@@ -244,7 +246,8 @@ export default function LeituraQr() {
                 {dados.ocorrencias.length > 0 && (
                   <p className="flex items-center gap-2 text-xs text-[#7a4d0a]">
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    {dados.ocorrencias.length} ocorrência(s) ligada(s) a este
+                    {plural(dados.ocorrencias.length, "ocorrência ligada", "ocorrências ligadas")}{" "}
+                    a este
                     descarte.
                   </p>
                 )}

@@ -124,7 +124,7 @@ Travas antifraude: só tablet pareado registra; código do morador de uso único
 
 ### Análise automática (IA)
 
-A análise usa a API do Claude (`server/ia/analiseDescarte.ts`). Sem a variável `ANTHROPIC_API_KEY` (ou com `IA_SIMULACAO=1`), ela roda em **modo simulação**: na estação em modo demonstração, o administrador escolhe o que a IA "vê" (tudo certo, cor errada, outro tipo, peso diferente, foto ilegível). Em **Configurações > Análise automática** ficam a aprovação automática (liga/desliga), a confiança mínima e se o adesivo é obrigatório. Cada análise fica gravada (`analises_ia`) e aparece no detalhe do descarte. A balança não é ligada ao sistema: a IA lê o peso na foto do visor.
+A análise usa a API do Claude (`server/ia/analiseDescarte.ts`). Sem a variável `ANTHROPIC_API_KEY` (ou com `IA_SIMULACAO=1`), ela roda em **modo simulação**, que vale só na estação em modo demonstração: ali o administrador escolhe o que a IA "vê" (tudo certo, cor errada, outro tipo, peso diferente, foto ilegível). Numa estação de verdade sem a chave, nada é aprovado sozinho: todo descarte fica pendente até um administrador conferir a foto. A IA recebe só a foto e as cores dos sacos, sem o tipo e o peso que o morador informou, para não ser induzida a concordar; a comparação com o informado é feita pelas regras do sistema. Em **Configurações > Análise automática** ficam a aprovação automática (liga/desliga), a confiança mínima e se o adesivo é obrigatório. Cada análise fica gravada (`analises_ia`) e aparece no detalhe do descarte. A balança não é ligada ao sistema: a IA lê o peso na foto do visor.
 
 ### Adesivos QR
 
@@ -178,7 +178,8 @@ Com o modo demonstração ligado, a tela de login também tem os botões **Entra
 | `LOGIN_DEMONSTRACAO=desativado` | Desliga os botões "Entrar como" (sem senha). Use num servidor público, porque com eles qualquer visitante entra como administrador. O login com e-mail e senha continua. |
 | `DATABASE_URL` | Endereço do MySQL, no formato `mysql://usuario:senha@servidor:porta/banco` (padrão `mysql://root@127.0.0.1:3306/ecocondo`). |
 | `DATABASE_SSL=true` | Usa conexão segura com o MySQL (necessário na maioria dos serviços na nuvem). |
-| `ANTHROPIC_API_KEY` | Chave da API do Claude para a análise automática dos descartes. Sem ela, a análise roda em modo simulação. |
+| `ANTHROPIC_API_KEY` | Chave da API do Claude para a análise automática dos descartes. Sem ela, a análise só é simulada nas estações em modo demonstração; nas outras, todo descarte espera a conferência do administrador. |
+| `TRUST_PROXY` | `1` quando o servidor fica atrás de um proxy (no Render e no Codespaces já é automático); usado para saber o endereço real de quem tenta entrar com senha errada. |
 | `IA_SIMULACAO=1` | Força o modo simulação mesmo com a chave configurada. |
 | `DATABASE_SSL_CA` | Caminho do certificado CA do provedor, quando ele fornece um (ex.: `./ca.pem`). |
 

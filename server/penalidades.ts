@@ -5,6 +5,7 @@ import { rotuloTipoPenalidade } from "@shared/rotulos";
 import { writeAuditLog } from "./audit";
 import { movimentarPontos } from "./pontos";
 import { notificarAdministradores, notificarUsuario } from "./notificacoes";
+import { plural } from "@shared/plural";
 
 export type TipoPenalidade = (typeof tiposPenalidade)[number];
 export type UnidadeDuracao = (typeof unidadesDuracao)[number];
@@ -112,7 +113,7 @@ export async function aplicarPenalidade(db: any, dados: MedidaInformada & {
   });
 
   const periodo = fim ? descreverPeriodo(inicio, fim) : null;
-  const efeito = medida.tipo === "perda_pontos" ? `-${medida.pontos} ponto(s)`
+  const efeito = medida.tipo === "perda_pontos" ? `-${plural(medida.pontos ?? 0, "ponto", "pontos")}`
     : medida.tipo === "suspensao_campanhas" ? `sem campanhas ${periodo}`
     : medida.tipo === "suspensao_participacao" ? `sem campanhas, sem resgatar prêmios e sem pontos nos descartes ${periodo}`
     : periodo ? `vale ${periodo}` : "registrada no histórico";

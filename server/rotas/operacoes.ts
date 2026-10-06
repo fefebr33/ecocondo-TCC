@@ -15,6 +15,7 @@ import { notificarAdministradores, notificarUsuario } from "../notificacoes";
 import { regrasDoCondominio } from "../regrasResiduo";
 import { aplicarPenalidade } from "../penalidades";
 import { creditarComResto, estornarComResto, formatarPontos, milesimosDoDescarte, situacaoDescarte } from "@shared/descarte";
+import { palavra, plural } from "@shared/plural";
 
 const moradorInput = z.object({
   name: z.string().trim().min(3).max(180),
@@ -309,9 +310,9 @@ export const operationsRouter = router({
       if (coleta.moradorId) {
         const motivo = `Irregularidade confirmada na auditoria do descarte nº ${coleta.id}: ${input.parecer}`;
         if (input.penalidadePontos > 0) {
-          await aplicarPenalidade(db, { condominioId: coleta.condominioId, autorId: ctx.user.id, moradorId: coleta.moradorId, coletaId: coleta.id, motivo, personalizada: { tipo: "perda_pontos", nome: `Retirada de ${input.penalidadePontos} ponto(s)`, pontos: input.penalidadePontos } });
+          await aplicarPenalidade(db, { condominioId: coleta.condominioId, autorId: ctx.user.id, moradorId: coleta.moradorId, coletaId: coleta.id, motivo, personalizada: { tipo: "perda_pontos", nome: `Retirada de ${plural(input.penalidadePontos, "ponto", "pontos")}`, pontos: input.penalidadePontos } });
           penalidade += input.penalidadePontos;
-          aplicadas.push(`-${input.penalidadePontos} ponto(s)`);
+          aplicadas.push(`-${plural(input.penalidadePontos, "ponto", "pontos")}`);
         }
         for (const modeloId of Array.from(new Set(input.medidas))) {
           const aplicada = await aplicarPenalidade(db, { condominioId: coleta.condominioId, autorId: ctx.user.id, moradorId: coleta.moradorId, coletaId: coleta.id, motivo, modeloId });
@@ -369,7 +370,7 @@ type RegrasPorTipo = Awaited<ReturnType<typeof regrasDoCondominio>>;
 
 /** Valor do descarte em milésimos de ponto: o que o tablet prometeu (gravado no registro) ou, nos registros antigos, pela regra atual. */
 function milesimosPrevistos(registro: Pick<Coleta, "pontosPrevistosMilesimos" | "pesoGramas" | "tipoResiduo">, regras: RegrasPorTipo) {
-  return registro.pontosPrevistosMilesimos ?? milesimosDoDescarte(registro.pesoGramas, regras[registro.tipoResiduo].pontosPorKg);
+  return registro.pontosPrevistosMilesimos ?? milesimosDoDescarte(registro.pesoGramas, regras[registro.tipoResiduo].pontosPorKg, registro.tipoResiduo);
 }
 
 /** O descarte já entrou no saldo (e na fração guardada do morador)? Vale para os aprovados e para os que foram à auditoria depois de aprovados. */
@@ -411,12 +412,12 @@ export async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, 
     if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Outro administrador já decidiu este descarte." });
     if (coleta.moradorId && novoResto !== null) await tx.update(moradores).set({ restoPontosMilesimos: novoResto }).where(eq(moradores.id, coleta.moradorId));
     if (coleta.moradorId && pontos > 0 && !jaCreditados) {
-      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "credito_coleta", pontos, coletaId: coleta.id, revisaoColeta: coleta.revisao, autorId: ctx.user.id, descricao: `Descarte nº ${coleta.id} ${opcoes.automatico ? "aprovado pela IA" : "aprovado"} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}, vale ${formatarPontos(exato / 1000)} ponto(s))` });
+      await movimentarPontos(tx, { condominioId: coleta.condominioId, moradorId: coleta.moradorId, tipo: "credito_coleta", pontos, coletaId: coleta.id, revisaoColeta: coleta.revisao, autorId: ctx.user.id, descricao: `Descarte nº ${coleta.id} ${opcoes.automatico ? "aprovado pela IA" : "aprovado"} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}, vale ${formatarPontos(exato / 1000)} ${palavra(exato / 1000, "ponto", "pontos")})` });
     }
   }).catch(converterDuplicidade);
 
   const valor = formatarPontos(exato / 1000);
-  const efeitoPontos = jaCreditados ? "pontos já creditados antes" : !exato ? "sem pontos (regra do tipo)" : pontos ? `vale ${valor} ponto(s); ${pontos} ponto(s) inteiro(s) entraram no saldo` : `vale ${valor} ponto(s), guardado(s) como fração até completar 1 ponto`;
+  const efeitoPontos = jaCreditados ? "pontos já creditados antes" : !exato ? "sem pontos (regra do tipo)" : pontos ? `vale ${valor} ${palavra(exato / 1000, "ponto", "pontos")}; ${plural(pontos, "ponto inteiro entrou", "pontos inteiros entraram")} no saldo` : `vale ${valor} ${palavra(exato / 1000, "ponto, guardado", "pontos, guardados")} como fração até completar 1 ponto`;
   await writeAuditLog(db, {
     condominioId: coleta.condominioId,
     autorId: ctx.user.id,
@@ -437,8 +438,8 @@ export async function aprovarColeta(ctx: ContextoAdministrador, coleta: Coleta, 
   const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
   // Uma notificação só (antes eram duas: "aprovado" e "+N pontos").
   if (!daAuditoria && opcoes.notificar !== false) {
-    const sobrePontos = !exato ? "" : pontos ? ` Ele vale ${valor} ponto(s): +${pontos} no seu saldo.` : ` Ele vale ${valor} ponto(s), que ficam guardados e se somam aos próximos descartes até completar 1 ponto.`;
-    await notificarUsuario(db, usuarioMorador, { ...base, tipo: pontos > 0 ? "pontos_ganhos" : "revisao_administrativa", titulo: pontos > 0 ? `Descarte aprovado: +${pontos} ponto(s)` : "Descarte aprovado", mensagem: `A administração conferiu a foto e o peso e aprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}).${sobrePontos}${observacao ? ` Observação: ${observacao}` : ""}` });
+    const sobrePontos = !exato ? "" : pontos ? ` Ele vale ${valor} ${palavra(exato / 1000, "ponto", "pontos")}: +${pontos} no seu saldo.` : ` Ele vale ${valor} ${palavra(exato / 1000, "ponto, que fica guardado e se soma", "pontos, que ficam guardados e se somam")} e se somam aos próximos descartes até completar 1 ponto.`;
+    await notificarUsuario(db, usuarioMorador, { ...base, tipo: pontos > 0 ? "pontos_ganhos" : "revisao_administrativa", titulo: pontos > 0 ? `Descarte aprovado: +${plural(pontos, "ponto", "pontos")}` : "Descarte aprovado", mensagem: `A administração conferiu a foto e o peso e aprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}).${sobrePontos}${observacao ? ` Observação: ${observacao}` : ""}` });
   }
   return { success: true, pointsAwarded: jaCreditados ? 0 : pontos };
 }
@@ -481,7 +482,7 @@ export async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta,
     throw error;
   });
 
-  const efeito = pontosEstornados > 0 ? `${pontosEstornados} ponto(s) estornado(s)` : contabilizado && exato > 0 ? `${formatarPontos(exato / 1000)} ponto(s) de fração retirado(s)` : pontosPendentes > 0 ? `${formatarPontos(pontosPendentes)} ponto(s) pendente(s) cancelado(s)` : "nenhum ponto envolvido";
+  const efeito = pontosEstornados > 0 ? plural(pontosEstornados, "ponto estornado", "pontos estornados") : contabilizado && exato > 0 ? `${formatarPontos(exato / 1000)} ${palavra(exato / 1000, "ponto de fração retirado", "pontos de fração retirados")}` : pontosPendentes > 0 ? `${formatarPontos(pontosPendentes)} ${palavra(pontosPendentes, "ponto pendente cancelado", "pontos pendentes cancelados")}` : "nenhum ponto envolvido";
   await writeAuditLog(db, {
     condominioId: coleta.condominioId,
     autorId: ctx.user.id,
@@ -497,8 +498,8 @@ export async function reprovarColeta(ctx: ContextoAdministrador, coleta: Coleta,
   const usuarioMorador = await usuarioDoMorador(coleta.moradorId);
   const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
   // Uma notificação só, com o motivo e o efeito nos pontos (antes eram duas).
-  const efeitoParaMorador = pontosEstornados > 0 ? ` ${pontosEstornados} ponto(s) foram retirados do seu saldo.` : contabilizado && exato > 0 ? ` O valor dele (${formatarPontos(exato / 1000)} ponto) saiu da fração guardada.` : pontosPendentes > 0 ? ` Os ${formatarPontos(pontosPendentes)} ponto(s) previsto(s) não serão creditados.` : "";
-  await notificarUsuario(db, usuarioMorador, { ...base, tipo: "coleta_reprovada", titulo: pontosEstornados > 0 ? `Descarte reprovado: -${pontosEstornados} ponto(s)` : "Descarte reprovado", mensagem: `A administração reprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}). Motivo: ${motivo.replace(/[.!\s]+$/, "")}.${efeitoParaMorador}` });
+  const efeitoParaMorador = pontosEstornados > 0 ? ` ${plural(pontosEstornados, "ponto foi retirado", "pontos foram retirados")} do seu saldo.` : contabilizado && exato > 0 ? ` O valor dele (${formatarPontos(exato / 1000)} ${palavra(exato / 1000, "ponto", "pontos")}) saiu da fração guardada.` : pontosPendentes > 0 ? ` ${formatarPontos(pontosPendentes)} ${palavra(pontosPendentes, "ponto previsto não será creditado", "pontos previstos não serão creditados")}.` : "";
+  await notificarUsuario(db, usuarioMorador, { ...base, tipo: "coleta_reprovada", titulo: pontosEstornados > 0 ? `Descarte reprovado: -${plural(pontosEstornados, "ponto", "pontos")}` : "Descarte reprovado", mensagem: `A administração reprovou o descarte nº ${coleta.id} (${formatarKg(coleta.pesoGramas)} kg de ${residuoNaFrase[coleta.tipoResiduo]}). Motivo: ${motivo.replace(/[.!\s]+$/, "")}.${efeitoParaMorador}` });
   await notificarAdministradores(db, { ...base, tipo: "coleta_reprovada", titulo: "Descarte reprovado", mensagem: `O descarte nº ${coleta.id} (bloco ${coleta.bloco}) foi reprovado: ${motivo}. Efeito: ${efeito}.` }, ctx.user.id);
   return { success: true, pointsAwarded: 0, pointsReversed: pontosEstornados, pendingPointsCancelled: pontosPendentes };
 }
@@ -557,13 +558,13 @@ export async function reverterParaNovaAvaliacao(ctx: ContextoAdministrador, cole
   }).catch(converterDuplicidade);
   await writeAuditLog(db, {
     condominioId: coleta.condominioId, autorId: ctx.user.id, tipoEntidade: "coleta", entidadeId: coleta.id, acao: "aprovacao_revertida",
-    resumo: `Aprovação do descarte nº ${coleta.id} revertida; voltou para nova avaliação${pontosEstornados ? ` e ${pontosEstornados} ponto(s) saíram do saldo` : ""}.`,
+    resumo: `Aprovação do descarte nº ${coleta.id} revertida; voltou para nova avaliação${pontosEstornados ? ` e ${plural(pontosEstornados, "ponto saiu", "pontos saíram")} do saldo` : ""}.`,
     estadoAnterior: { situacao: "aprovado", pontosConcedidos: coleta.pontosConcedidos, aprovadoPorId: coleta.aprovacaoPesoPorId },
     estadoNovo: { situacao: "pendente", pontosConcedidos: 0, pontosEstornados, revisao: coleta.revisao + 1 },
     motivo,
   });
   const base = { condominioId: coleta.condominioId, coletaId: coleta.id };
-  await notificarUsuario(db, await usuarioDoMorador(coleta.moradorId), { ...base, tipo: "descarte_revertido", titulo: "Descarte voltou para conferência", mensagem: `A aprovação do descarte nº ${coleta.id} foi revertida e ele será avaliado de novo. Motivo: ${motivo.replace(/[.!\s]+$/, "")}.${pontosEstornados ? ` ${pontosEstornados} ponto(s) saíram do seu saldo até a nova decisão.` : ""}` });
+  await notificarUsuario(db, await usuarioDoMorador(coleta.moradorId), { ...base, tipo: "descarte_revertido", titulo: "Descarte voltou para conferência", mensagem: `A aprovação do descarte nº ${coleta.id} foi revertida e ele será avaliado de novo. Motivo: ${motivo.replace(/[.!\s]+$/, "")}.${pontosEstornados ? ` ${plural(pontosEstornados, "ponto saiu", "pontos saíram")} do seu saldo até a nova decisão.` : ""}` });
   await notificarAdministradores(db, { ...base, tipo: "descarte_revertido", titulo: "Aprovação revertida", mensagem: `O descarte nº ${coleta.id} (bloco ${coleta.bloco}) voltou para nova avaliação: ${motivo}` }, ctx.user.id);
   return { success: true, destino: "nova_avaliacao" as const, pointsReversed: pontosEstornados };
 }

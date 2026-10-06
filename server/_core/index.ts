@@ -4,6 +4,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerLoginRoute } from "./login";
+import { registrarCabecalhosDeSeguranca } from "./seguranca";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../rotas";
 import { getDb, prepararBanco, urlDoBanco } from "../db";
@@ -60,8 +61,14 @@ async function conectarBanco() {
 async function startServer() {
   await conectarBanco();
   const app = express();
+  // Atrás do proxy do Render ou do Codespaces: confia só no último salto, para req.ip ser o endereço real de quem acessa
+  // (usado no bloqueio de senhas erradas por origem). Sem proxy, não confia no cabeçalho (que o próprio visitante poderia
+  // inventar para fugir do bloqueio). TRUST_PROXY=1 liga e TRUST_PROXY=0 desliga em outros servidores.
+  const atrasDeProxy = process.env.TRUST_PROXY ? process.env.TRUST_PROXY === "1" : Boolean(process.env.RENDER || process.env.CODESPACES);
+  app.set("trust proxy", atrasDeProxy ? 1 : false);
   const server = createServer(app);
   // Fotos chegam em base64 dentro do JSON (até ~5,5 MB validados nas rotas); o limite fica logo acima disso.
+  registrarCabecalhosDeSeguranca(app);
   app.use(express.json({ limit: "8mb" }));
   app.use(express.urlencoded({ limit: "1mb", extended: true }));
   registerStorageProxy(app);

@@ -379,9 +379,10 @@ export const manualAdministrador: Secao[] = [
       </>,
       <>
         Com a <b>participação suspensa</b>, o morador continua descartando,
-        mas sem pontos; não entra em campanhas, não resgata prêmios, não
-        recebe prêmio do pódio e aparece em cinza no pódio, com o nome oculto
-        para os vizinhos.
+        mas sem pontos; não entra em campanhas nem resgata prêmios e fica fora
+        do pódio e do ranking enquanto durar a suspensão. Quem vinha atrás
+        sobe de posição e recebe o prêmio. Os vizinhos não veem a suspensão; a
+        administração vê o suspenso em "Fora do pódio por suspensão".
       </>,
       <>
         <b>Revogar</b> encerra a medida na hora e devolve os pontos retirados;

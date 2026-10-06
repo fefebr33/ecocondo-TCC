@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { rotuloResiduo } from "@shared/rotulos";
 import { TIPOS_RESIDUO } from "@shared/descarte";
 import type { DadosRelatorioPdf } from "./relatorioPdf";
+import { plural } from "@shared/plural";
 
 /**
  * Planilha completa do relatório (Excel .xlsx), uma aba por assunto: resumo, por tipo, por mês, por bloco, ranking,
@@ -72,7 +73,7 @@ export async function gerarRelatorioPlanilha(dados: DadosPlanilha) {
     ["Moradores que participaram", dados.participantsCount, `de ${dados.residentsCount} (${dados.participationRate === null ? "-" : `${dados.participationRate.toLocaleString("pt-BR")}%`})`, INTEIRO],
     ["Pontos distribuídos", dados.pontos.distribuidos, "", INTEIRO],
     ["Pontos estornados", dados.pontos.estornados, "Descartes reprovados ou revertidos", INTEIRO],
-    ["Pontos gastos em resgates", dados.pontos.resgatados, `${dados.resgates.total} resgate(s), ${dados.resgates.entregues} entregue(s)`, INTEIRO],
+    ["Pontos gastos em resgates", dados.pontos.resgatados, `${plural(dados.resgates.total, "resgate", "resgates")}, ${plural(dados.resgates.entregues, "entregue", "entregues")}`, INTEIRO],
     ["Ocorrências registradas", dados.environmentalIncidents, "", INTEIRO],
     ["Eventos na auditoria", dados.auditEvents, "", INTEIRO],
     ["Árvores poupadas", dados.equivalencias.arvoresPoupadas, "17 kg de papel = 1 árvore", KG],

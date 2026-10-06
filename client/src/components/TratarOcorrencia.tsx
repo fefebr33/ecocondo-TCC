@@ -5,6 +5,7 @@ import { rotuloConclusaoOcorrencia } from "@shared/rotulos";
 import { FormEvent, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 type Conclusao = keyof typeof rotuloConclusaoOcorrencia;
 
@@ -86,7 +87,7 @@ export default function TratarOcorrencia({
       <p className="text-xs text-muted-foreground">
         Registrada por {ocorrencia.relator ?? "—"}
         {ocorrencia.denunciasFalsasRelator > 0
-          ? ` · ${ocorrencia.denunciasFalsasRelator} denúncia(s) falsa(s) antes`
+          ? ` · ${plural(ocorrencia.denunciasFalsasRelator, "denúncia falsa", "denúncias falsas")} antes`
           : ""}
         {ocorrencia.envolvido
           ? ` · morador do descarte: ${ocorrencia.envolvido.nome} (bloco ${ocorrencia.envolvido.bloco}, apto ${ocorrencia.envolvido.apartamento}); não é mostrado a quem denunciou`

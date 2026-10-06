@@ -20,5 +20,5 @@ export async function regrasDoCondominio(condominioId: number): Promise<Record<T
 /** Pontos de um descarte concluído pela regra do condomínio. */
 export async function pontosPelaRegra(condominioId: number, tipo: TipoResiduo, pesoGramas: number | null) {
   const regras = await regrasDoCondominio(condominioId);
-  return pontosDoDescarte(pesoGramas, regras[tipo].pontosPorKg);
+  return pontosDoDescarte(pesoGramas, regras[tipo].pontosPorKg, tipo);
 }

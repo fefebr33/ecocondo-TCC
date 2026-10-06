@@ -9,6 +9,7 @@ import {
   esperaRestanteMs,
   limparTentativas,
   LIMITE_TENTATIVAS_CODIGO,
+  reservarConferenciaCodigo,
 } from "./estacaoPesagem";
 
 const agora = new Date("2026-09-25T15:00:00");
@@ -86,5 +87,23 @@ describe("dia da estação no horário de Brasília", () => {
     expect(inicioDoDiaEmBrasilia(new Date("2026-09-30T23:30:00Z")).toISOString()).toBe("2026-09-30T03:00:00.000Z");
     expect(inicioDoDiaEmBrasilia(new Date("2026-10-01T02:59:00Z")).toISOString()).toBe("2026-09-30T03:00:00.000Z");
     expect(inicioDoDiaEmBrasilia(new Date("2026-10-01T03:00:00Z")).toISOString()).toBe("2026-10-01T03:00:00.000Z");
+  });
+});
+
+describe("códigos enviados ao mesmo tempo no tablet", () => {
+  it("só deixa conferir ao mesmo tempo as tentativas que ainda restam antes da espera", () => {
+    const estacaoId = 9_001;
+    limparTentativas(estacaoId);
+    const vagas = Array.from({ length: LIMITE_TENTATIVAS_CODIGO }, () => reservarConferenciaCodigo(estacaoId, 1000));
+    expect(() => reservarConferenciaCodigo(estacaoId, 1000)).toThrow(LimiteAntifraudeExcedidoError);
+    vagas.forEach((liberar) => liberar());
+    // Depois de erros, sobra menos vaga: com 4 erros, só 1 conferência por vez.
+    for (let erro = 1; erro < LIMITE_TENTATIVAS_CODIGO; erro += 1) registrarTentativaErrada(estacaoId, 1000);
+    const liberar = reservarConferenciaCodigo(estacaoId, 1000);
+    expect(() => reservarConferenciaCodigo(estacaoId, 1000)).toThrow(/conferindo/);
+    liberar();
+    liberar();
+    expect(() => reservarConferenciaCodigo(estacaoId, 1000)()).not.toThrow();
+    limparTentativas(estacaoId);
   });
 });

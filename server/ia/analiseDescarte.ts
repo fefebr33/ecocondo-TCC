@@ -188,7 +188,8 @@ export async function lerComClaude(item: ItemParaAnalise): Promise<LeituraIa> {
         role: "user",
         content: [
           { type: "image", source: { type: "base64", media_type: tipoMidia, data: foto[2] } },
-          { type: "text", text: `Cores dos sacos neste condomínio: ${cores}.\nO morador declarou: ${rotuloResiduo[item.tipoDeclarado]}, ${formatarKg(item.pesoDeclaradoGramas)} kg, saco esperado ${item.corSacoEsperada.toLowerCase()}.` },
+          // Sem o que o morador declarou: a IA diz só o que vê (sem ser induzida a concordar); a comparação é feita por decidirAnalise.
+          { type: "text", text: `Cores dos sacos neste condomínio: ${cores}.\nDescreva o que a foto mostra.` },
         ],
       }],
     });
@@ -219,10 +220,20 @@ export async function lerComClaude(item: ItemParaAnalise): Promise<LeituraIa> {
   }
 }
 
-/** Analisa um item: API do Claude quando há chave (e não é uma simulação pedida na estação de demonstração); senão, simulação. */
+/** Motivo gravado quando uma estação de verdade (fora do modo demonstração) não tem a IA configurada. */
+export const ERRO_SEM_CHAVE_IA = "sem chave da API do Claude configurada no servidor";
+
+/**
+ * Analisa um item: API do Claude quando há chave (e não é uma simulação pedida na estação de demonstração).
+ * A simulação vale só na estação em modo demonstração. Numa estação de verdade sem chave, a análise fica indisponível
+ * e o descarte vai para a avaliação de um responsável: nunca é aprovado sozinho sem alguém (pessoa ou IA) olhar a foto.
+ */
 export async function analisarItem(item: ItemParaAnalise, opcoes: { simulacao?: SimulacaoIa | null; estacaoDemonstracao: boolean }): Promise<LeituraIa> {
   const simulacaoPedida = opcoes.estacaoDemonstracao && opcoes.simulacao && opcoes.simulacao !== "tudo_certo";
   if (iaReal() && !simulacaoPedida && item.imagemDataUrl) return lerComClaude(item);
   if (iaReal() && !simulacaoPedida && !opcoes.estacaoDemonstracao) return { ...simularLeitura(item), modo: "claude", modelo: MODELO_IA, fotoLegivel: false, pesoLidoGramas: null, confianca: 0, descricao: "Sem foto para analisar." };
-  return simularLeitura(item, opcoes.estacaoDemonstracao ? opcoes.simulacao ?? "tudo_certo" : "tudo_certo");
+  if (!opcoes.estacaoDemonstracao) {
+    return { modo: "simulacao", modelo: null, tipoIdentificado: null, pesoLidoGramas: null, corSacoIdentificada: null, confianca: 0, fotoLegivel: false, problemas: [], descricao: "Análise automática indisponível: a foto aguarda a conferência de um responsável.", erro: ERRO_SEM_CHAVE_IA, duracaoMs: 0 };
+  }
+  return simularLeitura(item, opcoes.simulacao ?? "tudo_certo");
 }

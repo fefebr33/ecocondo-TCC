@@ -7,9 +7,11 @@ describe("pontos por tipo de descarte", () => {
     expect(calculateCollectionPoints("concluida", "reciclavel", 3750)).toBe(3);
   });
 
-  it("cada tipo tem a sua regra: eletrônico e perigoso valem mais, orgânico menos e rejeito não pontua", () => {
+  it("cada tipo tem a sua regra: eletrônico vale mais, perigoso vale por entrega, orgânico menos e rejeito não pontua", () => {
     expect(calculateCollectionPoints("concluida", "eletronico", 2500)).toBe(5);
-    expect(calculateCollectionPoints("concluida", "perigoso", 1000)).toBe(2);
+    // Perigoso: 1 ponto por entrega, qualquer que seja o peso (pontuar por kg premiaria trazer mais resíduo perigoso).
+    expect(calculateCollectionPoints("concluida", "perigoso", 1000)).toBe(1);
+    expect(calculateCollectionPoints("concluida", "perigoso", 4000)).toBe(1);
     expect(calculateCollectionPoints("concluida", "organico", 3000)).toBe(1);
     expect(calculateCollectionPoints("concluida", "rejeito", 9000)).toBe(0);
     expect(REGRAS_PADRAO.rejeito.pontosPorKg).toBe(0);

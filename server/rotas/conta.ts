@@ -35,11 +35,12 @@ export const contaRouter = router({
   configuracao: publicProcedure.query(() => ({ demonstracao: ENV.loginDemonstracaoAtivo })),
   entrarComSenha: publicProcedure.input(z.object({ email: z.string().trim().email().max(320), senha: z.string().min(1).max(128) })).mutation(async ({ ctx, input }) => {
     const email = normalizarEmail(input.email);
-    if (loginBloqueado(email)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Muitas tentativas erradas. Espere 15 minutos ou use \"Esqueci minha senha\"." });
+    const origem = ctx.req.ip ?? null;
+    if (loginBloqueado(email, { origem })) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Muitas tentativas erradas neste aparelho. Espere 15 minutos ou peça ao síndico um link de nova senha." });
     const db = await getDb();
     const [usuario] = await db.select().from(usuarios).where(eq(usuarios.email, email)).limit(1);
     const certa = await conferirSenha(input.senha, usuario?.senhaHash);
-    registrarTentativa(email, certa);
+    registrarTentativa(email, certa, { origem });
     if (!usuario || !certa) throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha incorretos." });
     if (await acessoDesativado(usuario.id, usuario.email, db)) throw new TRPCError({ code: "FORBIDDEN", message: ACESSO_DESATIVADO });
     await db.update(usuarios).set({ ultimoAcesso: new Date() }).where(eq(usuarios.id, usuario.id));
@@ -73,7 +74,7 @@ export const contaRouter = router({
     const registro = await lerTokenSenha(db, input.token);
     if (registro && (await acessoDesativado(null, registro.email, db))) throw new TRPCError({ code: "FORBIDDEN", message: ACESSO_DESATIVADO });
     const usuario = await definirSenhaPorToken(db, input.token, input.senha).catch(erroDeSenha);
-    registrarTentativa(usuario.email ?? "", true);
+    registrarTentativa(usuario.email ?? "", true, { origem: ctx.req.ip ?? null });
     await abrirSessao(ctx, usuario);
     return { success: true, manualLido: Boolean(usuario.manualLidoEm) };
   }),

@@ -10,6 +10,7 @@ import { movimentarPontos } from "../pontos";
 import { notificarAdministradores, notificarUsuario } from "../notificacoes";
 import { aplicarPenalidade, historicoPenalidades, modelosDoCondominio } from "../penalidades";
 import { administratorOnly, withProfile } from "./nucleo";
+import { palavra, plural } from "@shared/plural";
 
 const modeloInput = z.object({
   id: z.number().int().positive().optional(),
@@ -77,9 +78,9 @@ export const penalidadesRouter = router({
           await movimentarPontos(tx, { condominioId: penalidade.condominioId, moradorId: penalidade.moradorId, tipo: "ajuste", pontos: penalidade.pontos, penalidadeId: penalidade.id, autorId: ctx.user.id, descricao: `Devolução: medida "${penalidade.nome}" revogada` });
         }
       });
-      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "penalidade", entidadeId: penalidade.id, acao: "penalidade_revogada", resumo: `Medida "${penalidade.nome}" revogada${penalidade.tipo === "perda_pontos" && penalidade.pontos ? `; ${penalidade.pontos} ponto(s) devolvido(s)` : ""}.`, estadoAnterior: { status: penalidade.status }, estadoNovo: { status: "revogada" }, motivo: input.motivo });
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "penalidade", entidadeId: penalidade.id, acao: "penalidade_revogada", resumo: `Medida "${penalidade.nome}" revogada${penalidade.tipo === "perda_pontos" && penalidade.pontos ? `; ${plural(penalidade.pontos, "ponto devolvido", "pontos devolvidos")}` : ""}.`, estadoAnterior: { status: penalidade.status }, estadoNovo: { status: "revogada" }, motivo: input.motivo });
       const [morador] = await db.select({ usuarioId: moradores.usuarioId, nome: moradores.nome, bloco: moradores.bloco }).from(moradores).where(eq(moradores.id, penalidade.moradorId)).limit(1);
-      const devolvidos = penalidade.tipo === "perda_pontos" && penalidade.pontos ? ` Os ${penalidade.pontos} ponto(s) voltaram ao seu saldo e à sua pontuação do pódio.` : "";
+      const devolvidos = penalidade.tipo === "perda_pontos" && penalidade.pontos ? ` ${plural(penalidade.pontos, "ponto voltou", "pontos voltaram")} ao seu saldo e à sua pontuação do pódio.` : "";
       const voltaAoNormal = penalidade.tipo === "suspensao_participacao" ? " Sua participação voltou ao normal: campanhas, resgates e pontos dos descartes, e o seu nome volta a aparecer no pódio conforme a sua escolha." : "";
       await notificarUsuario(db, morador?.usuarioId ?? null, { condominioId: ctx.eco.condominio.id, tipo: "penalidade_encerrada", titulo: "Medida revogada", mensagem: `A administração revogou a medida "${penalidade.nome}".${devolvidos}${voltaAoNormal} Motivo: ${input.motivo}` });
       await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "penalidade_encerrada", titulo: "Medida revogada", mensagem: `A medida "${penalidade.nome}" de ${morador?.nome ?? "um morador"}${morador?.bloco ? ` (bloco ${morador.bloco})` : ""} foi revogada. Motivo: ${input.motivo}` }, ctx.user.id);

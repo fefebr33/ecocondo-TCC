@@ -14,8 +14,24 @@ export const REGRAS_PADRAO: Record<TipoResiduo, { pesoMinimoGramas: number; peso
   organico: { pesoMinimoGramas: 100, pesoMaximoGramas: 15_000, pontosPorKg: 0.5 },
   rejeito: { pesoMinimoGramas: 100, pesoMaximoGramas: 15_000, pontosPorKg: 0 },
   eletronico: { pesoMinimoGramas: 50, pesoMaximoGramas: 20_000, pontosPorKg: 2 },
-  perigoso: { pesoMinimoGramas: 10, pesoMaximoGramas: 5_000, pontosPorKg: 2 },
+  // Perigoso (pilhas, remédios, lâmpadas) vale por entrega, não por kg: pontuar por peso premiaria quem traz MAIS resíduo perigoso.
+  perigoso: { pesoMinimoGramas: 10, pesoMaximoGramas: 5_000, pontosPorKg: 1 },
 };
+
+/**
+ * Tipos que pontuam por entrega (valor fixo a cada descarte aprovado, qualquer que seja o peso). Para eles, o campo
+ * `pontosPorKg` da regra quer dizer "pontos por entrega". O limite de descartes por dia da estação vale para eles também.
+ */
+export const TIPOS_PONTOS_POR_ENTREGA: readonly TipoResiduo[] = ["perigoso"];
+
+export function pontuaPorEntrega(tipo: TipoResiduo | null | undefined) {
+  return Boolean(tipo && TIPOS_PONTOS_POR_ENTREGA.includes(tipo));
+}
+
+/** Como a regra de pontos aparece nas telas: "1 pt/kg" ou "1 pt por entrega". */
+export function unidadePontos(tipo: TipoResiduo) {
+  return pontuaPorEntrega(tipo) ? "por entrega" : "por kg";
+}
 
 /** Limites que o administrador não pode ultrapassar ao configurar as regras (um saco de apartamento, não um caminhão). */
 export const PESO_MAXIMO_CONFIGURAVEL_GRAMAS = 50_000;
@@ -30,9 +46,10 @@ export const CORES_PADRAO: Record<TipoResiduo, { cor: string; nome: string }> = 
   perigoso: { cor: "#e8761f", nome: "Laranja" },
 };
 
-/** Pontos de um descarte: kg × pontos por kg do tipo, arredondado para baixo (sem fração de ponto). */
-export function pontosDoDescarte(pesoGramas: number | null | undefined, pontosPorKg: number) {
+/** Pontos de um descarte: kg × pontos por kg do tipo (ou o valor fixo, nos tipos por entrega), arredondado para baixo. */
+export function pontosDoDescarte(pesoGramas: number | null | undefined, pontosPorKg: number, tipo?: TipoResiduo | null) {
   if (!pesoGramas || pesoGramas <= 0 || pontosPorKg <= 0) return 0;
+  if (pontuaPorEntrega(tipo)) return Math.floor(pontosPorKg + 1e-9);
   return Math.floor((pesoGramas / 1000) * pontosPorKg + 1e-9);
 }
 
@@ -40,8 +57,9 @@ export function pontosDoDescarte(pesoGramas: number | null | undefined, pontosPo
  * Valor exato de um descarte em milésimos de ponto (kg × pontos por kg × 1000; 1 kg de reciclável = 1000).
  * O descarte vale a fração exata; as frações de cada morador se somam e viram ponto inteiro no saldo (ver creditarComResto).
  */
-export function milesimosDoDescarte(pesoGramas: number | null | undefined, pontosPorKg: number) {
+export function milesimosDoDescarte(pesoGramas: number | null | undefined, pontosPorKg: number, tipo?: TipoResiduo | null) {
   if (!pesoGramas || pesoGramas <= 0 || pontosPorKg <= 0) return 0;
+  if (pontuaPorEntrega(tipo)) return Math.round(pontosPorKg * 1000);
   return Math.round(pesoGramas * pontosPorKg);
 }
 

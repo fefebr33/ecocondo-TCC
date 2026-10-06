@@ -217,7 +217,7 @@ describeComMysql("IA, adesivos QR, medidas, campanhas, ocorrências e avisos", (
     expect(registros.some((registro) => registro.motivo === "Saco aberto na lixeira")).toBe(true);
   });
 
-  it("medidas: modelos pré-definidos; suspensão deixa descartar sem pontos, esconde o nome no pódio; revogar devolve os pontos", async () => {
+  it("medidas: modelos pré-definidos; suspensão deixa descartar sem pontos e tira do pódio; revogar devolve os pontos", async () => {
     const modelos = await admin.penalidades.modelos();
     expect(modelos.length).toBeGreaterThanOrEqual(6);
     const perda = modelos.find((modelo) => modelo.tipo === "perda_pontos")!;
@@ -237,10 +237,14 @@ describeComMysql("IA, adesivos QR, medidas, campanhas, ocorrências e avisos", (
     const previaSuspensa = await tablet().estacao.previa({ code: codigoSuspensa, itens: [{ wasteType: "reciclavel", weightGrams: 3000, stickerCode: adesivoSuspensa }] });
     expect(previaSuspensa.pontosPrevistos).toBe(0);
     expect(previaSuspensa.semPontos).toMatch(/suspensa/);
-    // No pódio, os vizinhos não veem o nome dela enquanto durar a suspensão.
+    // Suspensa, a Ana sai do pódio e do ranking: os vizinhos não veem a suspensão e quem vinha atrás sobe.
     const podioBruno = await bruno.podio.ranking({ periodo: "mensal" });
-    const linhaAna = podioBruno.ranking.find((linha) => linha.suspensao);
-    if (linhaAna) expect(linhaAna.nome).not.toMatch(/Ana/);
+    expect(podioBruno.ranking.some((linha) => linha.suspensao || /Ana/.test(linha.nome))).toBe(false);
+    expect(podioBruno.foraPorSuspensao).toEqual([]);
+    const podioAdmin = await admin.podio.ranking({ periodo: "mensal" });
+    expect(podioAdmin.ranking.some((linha) => linha.moradorId === anaId)).toBe(false);
+    if (podioAntes > perda.pontos!) expect(podioAdmin.foraPorSuspensao.map((linha) => linha.moradorId)).toContain(anaId);
+    expect((await bruno.engajamento.ranking()).linhas.some((linha) => /Ana/.test(linha.nome))).toBe(false);
     // O descarte feito durante a suspensão é registrado, mas não rende pontos.
     const saldoSuspensa = await saldo(anaId);
     const registrado = await descartar(ana, { stickerCode: adesivoSuspensa });
@@ -255,11 +259,12 @@ describeComMysql("IA, adesivos QR, medidas, campanhas, ocorrências e avisos", (
 
     await admin.penalidades.revogar({ id: aplicada.id, motivo: "Aplicada por engano no teste" });
     expect(await saldo(anaId)).toBe(antes);
-    if (podioAntes > perda.pontos!) expect(await pontosNoPodio()).toBe(podioAntes);
     expect((await ana.notificacoes.listar()).some((item) => item.tipo === "penalidade_encerrada" && /voltaram/.test(item.mensagem))).toBe(true);
     // A suspensão termina sozinha quando vence (rotina de hora em hora).
     await (await getDb()).update(penalidades).set({ fimEm: new Date(Date.now() - 1000) }).where(eq(penalidades.id, suspensa.id));
     expect(await encerrarPenalidadesVencidas(await getDb())).toBe(1);
+    // Sem suspensão e com a retirada revogada, ela volta ao pódio com os pontos de antes.
+    if (podioAntes > perda.pontos!) expect(await pontosNoPodio()).toBe(podioAntes);
     await expect(ana.estacao.gerarCodigo()).resolves.toHaveProperty("code");
     expect((await ana.notificacoes.listar()).some((item) => item.tipo === "penalidade_encerrada")).toBe(true);
 

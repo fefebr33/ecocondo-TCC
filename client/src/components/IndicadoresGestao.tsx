@@ -19,6 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import { Link } from "wouter";
+import { plural } from "@shared/plural";
 
 const cartao =
   "rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6";
@@ -121,7 +122,8 @@ export default function IndicadoresGestao({ gestao }: { gestao: Gestao }) {
       <article className={cartao}>
         <Titulo icone={Megaphone} texto="Campanhas" link="/comunidade#campanhas" />
         <p className="mt-1 text-xs text-muted-foreground">
-          {gestao.campanhas.participacoes} participação(ões) no total
+          {plural(gestao.campanhas.participacoes, "participação", "participações")}{" "}
+          no total
         </p>
         <div className="mt-3 h-40">
           <ResponsiveContainer>

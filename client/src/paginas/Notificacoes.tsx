@@ -25,6 +25,7 @@ import { FormEvent, useState } from "react";
 import { useLocation } from "wouter";
 import { categoriasAviso, rotuloCategoriaAviso, rotuloPublicoAviso } from "@shared/notificacoes";
 import { toast } from "sonner";
+import { palavra, plural } from "@shared/plural";
 
 type Categoria = { rotulo: string; icone: typeof Bell; cor: string };
 const categorias: Record<string, Categoria> = {
@@ -176,7 +177,7 @@ export default function Notifications() {
       setSelecionando(false);
       toast.success(
         resultado.excluidas
-          ? `${resultado.excluidas} notificação(ões) excluída(s).`
+          ? `${plural(resultado.excluidas, "notificação excluída", "notificações excluídas")}.`
           : "Nenhuma notificação para excluir."
       );
     },
@@ -243,7 +244,7 @@ export default function Notifications() {
       <PageIntro
         eyebrow="Comunicação"
         title="Notificações"
-        description={`${unread.data?.count ?? 0} notificação(ões) não lida(s) para você. Toque em uma notificação para ir direto ao que ela fala. Use a lixeira para excluir as que não precisa mais (ou "Excluir lidas" para limpar a lista).`}
+        description={`${plural(unread.data?.count ?? 0, "notificação não lida", "notificações não lidas")} para você. Toque em uma notificação para ir direto ao que ela fala. Use a lixeira para excluir as que não precisa mais (ou "Excluir lidas" para limpar a lista).`}
         action={notificationAction}
       />
       <section className="rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6">
@@ -372,7 +373,7 @@ export default function Notifications() {
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Excluir ${selecionadas.length} notificação(ões)? Elas somem só da sua lista.`
+                      `Excluir ${plural(selecionadas.length, "notificação", "notificações")}? ${palavra(selecionadas.length, "Ela some", "Elas somem")} só da sua lista.`
                     )
                   )
                     excluir.mutate({ ids: selecionadas });
@@ -413,7 +414,7 @@ export default function Notifications() {
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Excluir as ${totalLidas} notificação(ões) já lidas? As não lidas continuam.`
+                      `Excluir ${totalLidas === 1 ? "a notificação já lida" : `as ${totalLidas} notificações já lidas`}? As não lidas continuam.`
                     )
                   )
                     excluir.mutate({ somenteLidas: true });

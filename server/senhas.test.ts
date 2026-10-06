@@ -18,11 +18,13 @@ describe("senhas", () => {
     expect(() => validarForcaSenha("boaSenha2026")).not.toThrow();
   });
 
-  it("bloqueia o e-mail depois de várias senhas erradas seguidas", () => {
+  it("bloqueia o e-mail depois de várias senhas erradas seguidas, só para a origem que errou", () => {
     const agora = Date.now();
-    for (let tentativa = 0; tentativa < TENTATIVAS_MAXIMAS; tentativa += 1) registrarTentativa("alvo@teste.local", false, agora);
-    expect(loginBloqueado("ALVO@teste.local", agora + 1000)).toBe(true);
-    expect(loginBloqueado("alvo@teste.local", agora + 16 * 60 * 1000)).toBe(false);
+    for (let tentativa = 0; tentativa < TENTATIVAS_MAXIMAS; tentativa += 1) registrarTentativa("alvo@teste.local", false, { origem: "10.0.0.9", agora });
+    expect(loginBloqueado("ALVO@teste.local", { origem: "10.0.0.9", agora: agora + 1000 })).toBe(true);
+    // O dono da conta, de outra rede, continua entrando.
+    expect(loginBloqueado("alvo@teste.local", { origem: "200.1.2.3", agora: agora + 1000 })).toBe(false);
+    expect(loginBloqueado("alvo@teste.local", { origem: "10.0.0.9", agora: agora + 16 * 60 * 1000 })).toBe(false);
   });
 
   it("o token do link é guardado como hash", () => {

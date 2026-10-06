@@ -50,6 +50,7 @@
 .dark .bg-\[\#f4faf6\] { background-color: #1f2c24; }
 .dark .bg-\[\#f5f8f5\] { background-color: #232923; }
 .dark .bg-\[\#f5faf7\] { background-color: #202b24; }
+.dark .bg-\[\#f6f7f6\] { background-color: #252725; }
 .dark .bg-\[\#f6f8f6\] { background-color: #242824; }
 .dark .bg-\[\#f6f8f6\]\/90 { background-color: rgb(36 40 36 / 0.9); }
 .dark .bg-\[\#f6faf7\] { background-color: #202a23; }
@@ -96,6 +97,7 @@
 .dark .border-\[\#e2ebe5\] { border-color: #38413b; }
 .dark .border-\[\#e3b6b0\] { border-color: #563e3b; }
 .dark .border-\[\#e3dbf5\] { border-color: #372f4a; }
+.dark .border-\[\#e3e6e4\] { border-color: #3c3f3d; }
 .dark .border-\[\#e4ece7\] { border-color: #38403b; }
 .dark .border-\[\#e5ede8\] { border-color: #37403b; }
 .dark .border-\[\#e5eee8\] { border-color: #37413a; }
@@ -109,6 +111,7 @@
 .dark .border-\[\#f3dca3\] { border-color: #5a4f36; }
 .dark .border-\[\#f3dcb0\] { border-color: #574b34; }
 .dark .border-\[\#f3dcb4\] { border-color: #564933; }
+.dark .divide-\[\#e3e6e4\] > :not(:last-child) { border-color: #3c3f3d; }
 .dark .divide-\[\#edf2ef\] > :not(:last-child) { border-color: #363d38; }
 .dark .focus\:ring-\[\#0f7350\]\/30:focus { --tw-ring-color: rgb(134 220 190 / 0.3); }
 .dark .group:hover .group-hover\:text-\[\#0f7350\] { color: #86dcbe; }
@@ -158,6 +161,7 @@
 .dark .text-\[\#4d5551\] { color: #d4d8d6; }
 .dark .text-\[\#4d6157\] { color: #d0d9d5; }
 .dark .text-\[\#5b3aa6\] { color: #9a81d3; }
+.dark .text-\[\#5c3a06\] { color: #ddbc8a; }
 .dark .text-\[\#5c3d0a\] { color: #ddbd8a; }
 .dark .text-\[\#637b20\] { color: #c4db83; }
 .dark .text-\[\#6b3fa0\] { color: #a785cf; }

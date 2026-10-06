@@ -9,7 +9,7 @@ import { writeAuditLog } from "../audit";
 import { pesoConfirmadoGramas } from "../dominio/antifraude";
 import { classificarPodio } from "../dominio/regrasPodio";
 import { nomePublico, recortarRankingPublico } from "../dominio/privacidadeRanking";
-import { suspensoesVigentesDoCondominio } from "../penalidades";
+import { suspensoesVigentesDoCondominio, type SuspensaoResumo } from "../penalidades";
 
 const periodos = periodosPodio;
 export type Periodo = (typeof periodos)[number];
@@ -87,7 +87,8 @@ export function descontarPenalidades<T extends { moradorId: number; pontos: numb
   return Array.from(porMorador.values());
 }
 
-export async function classificacaoDoPeriodo(condominioId: number, inicioPeriodo: Date, fim: Date) {
+/** Totais (pontos e peso) de cada morador no período, já com as retiradas de pontos das medidas. */
+export async function totaisDoPeriodo(condominioId: number, inicioPeriodo: Date, fim: Date) {
   const db = await getDb();
   const inicio = (await inicioDoCiclo(condominioId, inicioPeriodo))!;
   const registros = await db.select().from(coletas).where(and(
@@ -96,7 +97,37 @@ export async function classificacaoDoPeriodo(condominioId: number, inicioPeriodo
     gte(coletas.concluidaEm, inicio),
     lte(coletas.concluidaEm, fim),
   ));
-  return classificarPodio(descontarPenalidades(somarPorMorador(registros), await ajustesDePenalidade(condominioId, inicio, fim)));
+  return descontarPenalidades(somarPorMorador(registros), await ajustesDePenalidade(condominioId, inicio, fim));
+}
+
+/**
+ * Classificação oficial do período. Quem está com a participação suspensa fica fora: não aparece para os vizinhos
+ * (a punição não é exposta) e não ocupa vaga no pódio, então o 4º colocado sobe e passa a receber o prêmio do 3º.
+ */
+export async function classificacaoDoPeriodo(condominioId: number, inicioPeriodo: Date, fim: Date) {
+  const db = await getDb();
+  const suspensoes = await suspensoesVigentesDoCondominio(db, condominioId);
+  return classificarPodio(semSuspensos(await totaisDoPeriodo(condominioId, inicioPeriodo, fim), suspensoes));
+}
+
+/** Tira dos totais quem está suspenso agora (antes de classificar, para as posições subirem). */
+export function semSuspensos<T extends { moradorId: number }>(totais: T[], suspensoes: Map<number, unknown>) {
+  return totais.filter((linha) => !suspensoes.has(linha.moradorId));
+}
+
+/** Para a administração: quem ficou fora da classificação por suspensão, com os pontos que teria. */
+export function foraPorSuspensao<T extends { moradorId: number; pontos: number; pesoGramas: number }>(
+  totais: T[],
+  suspensoes: Map<number, SuspensaoResumo>,
+  moradoresPorId: Map<number, { nome: string; bloco: string; apartamento: string }>,
+) {
+  return totais
+    .filter((linha) => suspensoes.has(linha.moradorId) && linha.pontos > 0 && moradoresPorId.has(linha.moradorId))
+    .sort((a, b) => b.pontos - a.pontos)
+    .map((linha) => {
+      const morador = moradoresPorId.get(linha.moradorId)!;
+      return { moradorId: linha.moradorId, nome: morador.nome, bloco: morador.bloco, apartamento: morador.apartamento, pontos: linha.pontos, pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)), periodo: suspensoes.get(linha.moradorId)!.periodo };
+    });
 }
 
 export const podioRouter = router({
@@ -157,6 +188,8 @@ export const podioRouter = router({
         premios,
         minhaPosicao: minha ? { position: minha.posicao, pontos: minha.pontos, pesoKg: Number((minha.pesoGramas / 1000).toFixed(2)) } : null,
         minhaSuspensao: ctx.eco.morador && suspensoes.get(ctx.eco.morador.id) ? { periodo: suspensoes.get(ctx.eco.morador.id)!.periodo, fimEm: suspensoes.get(ctx.eco.morador.id)!.fimEm } : null,
+        // Só a administração vê quem ficou fora do pódio por suspensão (e quantos pontos teria).
+        foraPorSuspensao: ehAdministrador ? foraPorSuspensao(await totaisDoPeriodo(ctx.eco.condominio.id, inicio, fim), suspensoes, moradoresPorId) : [],
         totalParticipantes: total,
       };
     }),

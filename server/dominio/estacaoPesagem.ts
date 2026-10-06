@@ -157,3 +157,29 @@ export function registrarTentativaErrada(estacaoId: number, agora = Date.now()) 
 export function limparTentativas(estacaoId: number) {
   tentativas.delete(estacaoId);
 }
+
+/**
+ * Conferências de código em andamento por tablet. Sem isso, centenas de pedidos enviados ao mesmo tempo passavam pela
+ * espera antes do primeiro erro ser contado. Só cabem ao mesmo tempo as tentativas que ainda restam antes da espera
+ * (no mínimo uma), então chutar códigos em paralelo não rende mais do que chutar um por vez.
+ */
+const conferenciasEmAndamento = new Map<number, number>();
+
+/** Reserva uma conferência de código no tablet; lança o erro de espera se o tablet estiver em espera ou cheio. Devolve a função que libera a vaga. */
+export function reservarConferenciaCodigo(estacaoId: number, agora = Date.now()) {
+  verificarBloqueioTentativas(estacaoId, agora);
+  const erros = registroAtual(estacaoId, agora)?.erros ?? 0;
+  const emAndamento = conferenciasEmAndamento.get(estacaoId) ?? 0;
+  if (emAndamento >= Math.max(1, LIMITE_TENTATIVAS_CODIGO - erros)) {
+    throw new LimiteAntifraudeExcedidoError("O tablet ainda está conferindo outro código. Espere alguns segundos e tente de novo.");
+  }
+  conferenciasEmAndamento.set(estacaoId, emAndamento + 1);
+  let liberada = false;
+  return () => {
+    if (liberada) return;
+    liberada = true;
+    const restante = (conferenciasEmAndamento.get(estacaoId) ?? 1) - 1;
+    if (restante > 0) conferenciasEmAndamento.set(estacaoId, restante);
+    else conferenciasEmAndamento.delete(estacaoId);
+  };
+}

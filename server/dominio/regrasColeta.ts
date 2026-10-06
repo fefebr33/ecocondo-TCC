@@ -9,5 +9,5 @@ export type WasteCategory = "reciclavel" | "organico" | "rejeito" | "eletronico"
  */
 export function calculateCollectionPoints(status: CompletionStatus, wasteType: WasteCategory, weightGrams: number | null | undefined, pontosPorKg = REGRAS_PADRAO[wasteType].pontosPorKg) {
   if (status !== "concluida") return 0;
-  return pontosDoDescarte(weightGrams, pontosPorKg);
+  return pontosDoDescarte(weightGrams, pontosPorKg, wasteType);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decidirAnalise, mesmaCor, simularLeitura, type ItemParaAnalise } from "./analiseDescarte";
+import { analisarItem, decidirAnalise, ERRO_SEM_CHAVE_IA, mesmaCor, simularLeitura, type ItemParaAnalise } from "./analiseDescarte";
 import { normalizarCodigoAdesivo } from "@shared/adesivos";
 
 const item: ItemParaAnalise = {
@@ -50,5 +50,22 @@ describe("código dos adesivos", () => {
     expect(normalizarCodigoAdesivo("https://ecocondo.app/leitura?adesivo=EC-7K3F-9Q2M")).toBe("EC-7K3F-9Q2M");
     expect(normalizarCodigoAdesivo("EC-0000-1111")).toBeNull();
     expect(normalizarCodigoAdesivo("")).toBeNull();
+  });
+});
+
+describe("sem a chave da API", () => {
+  it("só simula na estação em modo demonstração; na estação de verdade o descarte vai para a conferência humana", async () => {
+    const chave = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      const comFoto = { ...item, imagemDataUrl: "data:image/png;base64,iVBORw0KGgo=" };
+      const real = await analisarItem(comFoto, { estacaoDemonstracao: false });
+      expect(real.erro).toBe(ERRO_SEM_CHAVE_IA);
+      expect(decidirAnalise(item, real, regras).resultado).toBe("erro");
+      const demonstracao = await analisarItem(comFoto, { estacaoDemonstracao: true });
+      expect(decidirAnalise(item, demonstracao, regras).resultado).toBe("aprovado_automatico");
+    } finally {
+      if (chave !== undefined) process.env.ANTHROPIC_API_KEY = chave;
+    }
   });
 });

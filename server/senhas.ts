@@ -11,7 +11,10 @@ type TipoToken = (typeof tiposTokenSenha)[number];
 export const SENHA_MINIMA = 8;
 /** Validade do link: o de primeiro acesso dura 3 dias (o síndico manda pelo WhatsApp); o de recuperação, 2 horas. */
 export const VALIDADE_TOKEN_MS: Record<TipoToken, number> = { primeiro_acesso: 72 * 60 * 60 * 1000, recuperacao: 2 * 60 * 60 * 1000 };
-/** Depois de tantas senhas erradas seguidas para o mesmo e-mail, o login fica bloqueado por 15 minutos. */
+/**
+ * Depois de tantas senhas erradas seguidas para o mesmo e-mail, vindas do mesmo aparelho/rede (endereço de origem), o login
+ * fica bloqueado por 15 minutos para essa origem. O dono da conta, entrando de outro lugar, não é trancado por quem errou.
+ */
 export const TENTATIVAS_MAXIMAS = 5;
 const BLOQUEIO_MS = 15 * 60 * 1000;
 
@@ -90,13 +93,19 @@ export async function definirSenhaPorToken(db: any, token: string, senha: string
 
 const tentativas = new Map<string, { erros: number; bloqueadoAte: number }>();
 
-export function loginBloqueado(email: string, agora = Date.now()) {
-  const registro = tentativas.get(normalizarEmail(email));
+type OrigemTentativa = { origem?: string | null; agora?: number };
+
+function chaveTentativa(email: string, origem?: string | null) {
+  return `${normalizarEmail(email)}|${origem ?? ""}`;
+}
+
+export function loginBloqueado(email: string, { origem, agora = Date.now() }: OrigemTentativa = {}) {
+  const registro = tentativas.get(chaveTentativa(email, origem));
   return Boolean(registro && registro.bloqueadoAte > agora);
 }
 
-export function registrarTentativa(email: string, acertou: boolean, agora = Date.now()) {
-  const chave = normalizarEmail(email);
+export function registrarTentativa(email: string, acertou: boolean, { origem, agora = Date.now() }: OrigemTentativa = {}) {
+  const chave = chaveTentativa(email, origem);
   if (acertou) {
     tentativas.delete(chave);
     return;

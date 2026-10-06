@@ -12,6 +12,7 @@ import { movimentarPontos } from "../pontos";
 import { NOTIFICACOES_OBRIGATORIAS, notificarAdministradores, notificarUsuario } from "../notificacoes";
 import { regrasDoCondominio } from "../regrasResiduo";
 import { administratorOnly, withProfile } from "./nucleo";
+import { plural } from "@shared/plural";
 
 const confirmacaoZerar = "ZERAR";
 
@@ -30,7 +31,7 @@ export const configuracoesDescarteRouter = router({
       const pontosPorKg = Math.round(input.pointsPerKg * 100) / 100;
       await db.insert(regrasResiduo).values({ condominioId: ctx.eco.condominio.id, tipoResiduo: input.wasteType, pesoMinimoGramas: input.minGrams, pesoMaximoGramas: input.maxGrams, pontosPorKg })
         .onDuplicateKeyUpdate({ set: { pesoMinimoGramas: input.minGrams, pesoMaximoGramas: input.maxGrams, pontosPorKg, atualizadoEm: new Date() } });
-      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "configuracao", entidadeId: ctx.eco.condominio.id, acao: "regra_descarte_alterada", resumo: `Regra de ${rotuloResiduo[input.wasteType]} alterada: ${input.minGrams / 1000} a ${input.maxGrams / 1000} kg, ${pontosPorKg} ponto(s) por kg.`, estadoAnterior: { pesoMinimoGramas: anterior.pesoMinimoGramas, pesoMaximoGramas: anterior.pesoMaximoGramas, pontosPorKg: anterior.pontosPorKg }, estadoNovo: { pesoMinimoGramas: input.minGrams, pesoMaximoGramas: input.maxGrams, pontosPorKg } });
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "configuracao", entidadeId: ctx.eco.condominio.id, acao: "regra_descarte_alterada", resumo: `Regra de ${rotuloResiduo[input.wasteType]} alterada: ${input.minGrams / 1000} a ${input.maxGrams / 1000} kg, ${plural(pontosPorKg, "ponto", "pontos")} por kg.`, estadoAnterior: { pesoMinimoGramas: anterior.pesoMinimoGramas, pesoMaximoGramas: anterior.pesoMaximoGramas, pontosPorKg: anterior.pontosPorKg }, estadoNovo: { pesoMinimoGramas: input.minGrams, pesoMaximoGramas: input.maxGrams, pontosPorKg } });
       return { success: true };
     }),
     restaurarPadrao: administratorOnly.input(z.object({ wasteType: z.enum(tiposResiduo) })).mutation(async ({ ctx, input }) => {
@@ -65,7 +66,7 @@ export const configuracoesDescarteRouter = router({
         // As frações guardadas também recomeçam do zero no novo ciclo.
         await tx.update(moradores).set({ restoPontosMilesimos: 0 }).where(eq(moradores.condominioId, ctx.eco.condominio.id));
       });
-      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pontos", entidadeId: ctx.eco.condominio.id, acao: "pontos_zerados", resumo: `Pontos de ${comSaldo.length} morador(es) zerados (${totalZerado} ponto(s) no total). Novo ciclo começou.`, motivo: input.reason, estadoAnterior: { saldos: comSaldo.map((morador) => ({ moradorId: morador.id, pontos: morador.pontos })) }, estadoNovo: { cicloIniciadoEm: agora } });
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pontos", entidadeId: ctx.eco.condominio.id, acao: "pontos_zerados", resumo: `Pontos de ${plural(comSaldo.length, "morador", "moradores")} zerados (${plural(totalZerado, "ponto", "pontos")} no total). Novo ciclo começou.`, motivo: input.reason, estadoAnterior: { saldos: comSaldo.map((morador) => ({ moradorId: morador.id, pontos: morador.pontos })) }, estadoNovo: { cicloIniciadoEm: agora } });
       await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: null, tipo: "pontos_zerados", titulo: "Novo ciclo de pontos", mensagem: `A administração zerou os pontos de todos para começar um novo ciclo. Motivo: ${input.reason}` });
       return { moradores: comSaldo.length, pontos: totalZerado, zeradoEm: agora };
     }),
@@ -77,9 +78,9 @@ export const configuracoesDescarteRouter = router({
       if (morador.pontos + input.points < 0) throw new TRPCError({ code: "BAD_REQUEST", message: `O saldo de ${morador.nome} é ${morador.pontos}; o débito não pode deixar o saldo negativo.` });
       const saldo = await db.transaction((tx) => movimentarPontos(tx, { condominioId: ctx.eco.condominio.id, moradorId: morador.id, tipo: "ajuste", pontos: input.points, autorId: ctx.user.id, descricao: `Ajuste da administração: ${input.reason}`, exigirSaldo: true }));
       if (saldo === null) throw new TRPCError({ code: "CONFLICT", message: "O saldo mudou enquanto você ajustava. Tente de novo." });
-      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pontos", entidadeId: morador.id, acao: "pontos_ajustados", resumo: `${input.points > 0 ? "+" : ""}${input.points} ponto(s) para ${morador.nome}.`, motivo: input.reason, estadoAnterior: { saldo: morador.pontos }, estadoNovo: { saldo } });
-      await notificarUsuario(db, morador.usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "pontos_ajustados", titulo: "Ajuste nos seus pontos", mensagem: `A administração ${input.points > 0 ? "creditou" : "debitou"} ${Math.abs(input.points)} ponto(s). Motivo: ${input.reason}. Saldo atual: ${saldo}.` });
-      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "pontos_ajustados", titulo: "Ajuste de pontos", mensagem: `${morador.nome} (bloco ${morador.bloco}) recebeu ${input.points > 0 ? "+" : ""}${input.points} ponto(s). Motivo: ${input.reason}. Saldo atual: ${saldo}.` }, ctx.user.id);
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "pontos", entidadeId: morador.id, acao: "pontos_ajustados", resumo: `${input.points > 0 ? "+" : ""}${plural(input.points, "ponto", "pontos")} para ${morador.nome}.`, motivo: input.reason, estadoAnterior: { saldo: morador.pontos }, estadoNovo: { saldo } });
+      await notificarUsuario(db, morador.usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "pontos_ajustados", titulo: "Ajuste nos seus pontos", mensagem: `A administração ${input.points > 0 ? "creditou" : "debitou"} ${plural(Math.abs(input.points), "ponto", "pontos")}. Motivo: ${input.reason}. Saldo atual: ${saldo}.` });
+      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "pontos_ajustados", titulo: "Ajuste de pontos", mensagem: `${morador.nome} (bloco ${morador.bloco}) recebeu ${input.points > 0 ? "+" : ""}${plural(input.points, "ponto", "pontos")}. Motivo: ${input.reason}. Saldo atual: ${saldo}.` }, ctx.user.id);
       return { saldo };
     }),
   }),

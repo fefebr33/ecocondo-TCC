@@ -16,7 +16,7 @@ import { pesoConfirmadoGramas } from "../dominio/antifraude";
 import { nomePublico, recortarRankingPublico } from "../dominio/privacidadeRanking";
 import { classificarPodio } from "../dominio/regrasPodio";
 import { origensDosRegistros } from "./operacoes";
-import { ajustesDePenalidade, calcularIntervalo, classificacaoDoPeriodo, descontarPenalidades, inicioDoCiclo, somarPorMorador } from "./podio";
+import { ajustesDePenalidade, calcularIntervalo, classificacaoDoPeriodo, descontarPenalidades, foraPorSuspensao, inicioDoCiclo, semSuspensos, somarPorMorador } from "./podio";
 import { rotuloSituacao, situacaoDescarte, TIPOS_RESIDUO, type SituacaoDescarte } from "@shared/descarte";
 import { guiasDoCondominio } from "../guias";
 import { writeAuditLog } from "../audit";
@@ -29,6 +29,7 @@ import { tiposPorPerfil } from "@shared/notificacoes";
 import type { EcoRole } from "@shared/permissions";
 import { estacoesBloqueadas } from "../dominio/estacaoPesagem";
 import { compararPeriodos, evolucaoMensal, resumirPontos, taxaDeConclusao } from "../dominio/indicadoresPainel";
+import { palavra, plural } from "@shared/plural";
 
 /** Com este estoque (ou menos) a administração recebe o aviso de estoque baixo. */
 export const LIMITE_ESTOQUE_BAIXO = 2;
@@ -270,7 +271,7 @@ export async function dadosDoRelatorio(condominioId: number, nomeCondominio: str
   const comunidade = await db.select().from(moradores).where(eq(moradores.condominioId, condominioId));
   const suspensoes = await suspensoesVigentesDoCondominio(db, condominioId);
   const registros = await db.select().from(coletas).where(and(...condicoesCsv(condominioId, input), eq(coletas.status, "concluida")));
-  const top3 = classificarPodio(descontarPenalidades(somarPorMorador(registros), await ajustesDePenalidade(condominioId, input?.startDate, input?.endDate))).filter((linha) => linha.noPodio).map((linha) => {
+  const top3 = classificarPodio(semSuspensos(descontarPenalidades(somarPorMorador(registros), await ajustesDePenalidade(condominioId, input?.startDate, input?.endDate)), suspensoes)).filter((linha) => linha.noPodio).map((linha) => {
     const morador = comunidade.find((item) => item.id === linha.moradorId);
     return { posicao: linha.posicao, nome: morador ? nomePublico(morador, suspensoes.has(morador.id)) : "Morador removido", bloco: morador?.bloco ?? "-", pontos: linha.pontos, pesoKg: Number((linha.pesoGramas / 1000).toFixed(2)) };
   });
@@ -440,8 +441,10 @@ export const analyticsRouter = router({
       // Só os campos exibidos no ranking: e-mail, telefone e códigos dos vizinhos não saem do servidor.
       const comunidade = await db.select({ moradorId: moradores.id, nome: moradores.nome, bloco: moradores.bloco, apartamento: moradores.apartamento, saldo: moradores.pontos, ocultarNomeNoPodio: moradores.ocultarNomeNoPodio }).from(moradores).where(eq(moradores.condominioId, ctx.eco.condominio.id));
       const porId = new Map(comunidade.map((morador) => [morador.moradorId, morador]));
-      const classificados = classificarPodio((await pontosAcumulados(ctx.eco.condominio.id)).filter((linha) => porId.has(linha.moradorId)));
       const suspensoes = await suspensoesVigentesDoCondominio(db, ctx.eco.condominio.id);
+      const totais = (await pontosAcumulados(ctx.eco.condominio.id)).filter((linha) => porId.has(linha.moradorId));
+      // Suspenso fica fora da classificação (como no pódio); a administração o vê numa lista à parte.
+      const classificados = classificarPodio(semSuspensos(totais, suspensoes));
       const saldo = ctx.eco.morador ? (await db.select({ pontos: moradores.pontos }).from(moradores).where(eq(moradores.id, ctx.eco.morador.id)).limit(1))[0]?.pontos ?? 0 : null;
       if (ctx.eco.perfil.papel === "administrador") {
         return {
@@ -452,6 +455,7 @@ export const analyticsRouter = router({
           minhaPosicao: null,
           totalParticipantes: classificados.length,
           saldo,
+          foraPorSuspensao: foraPorSuspensao(totais, suspensoes, new Map(comunidade.map((morador) => [morador.moradorId, morador]))),
         };
       }
       // Morador: só o top 3 (nome e bloco) e a própria posição; ninguém abaixo do 3º lugar é exposto.
@@ -466,6 +470,7 @@ export const analyticsRouter = router({
         minhaPosicao: minha ? { position: minha.posicao, pontos: minha.pontos } : null,
         totalParticipantes: total,
         saldo,
+        foraPorSuspensao: [] as ReturnType<typeof foraPorSuspensao>,
       };
     }),
     /** Extrato de pontos: o morador vê o dele; o administrador pode ver o de qualquer morador do condomínio. */
@@ -502,7 +507,7 @@ export const analyticsRouter = router({
       const inserida = await db.insert(recompensas).values({ condominioId: ctx.eco.condominio.id, titulo: input.title, descricao: input.description, custoPontos: input.pointsCost, estoque: input.stock }).$returningId();
       await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "recompensa", entidadeId: inserida[0].id, acao: "recompensa_criada", resumo: `Recompensa "${input.title}" adicionada ao catálogo (${input.pointsCost} pontos).`, estadoNovo: { titulo: input.title, custoPontos: input.pointsCost, estoque: input.stock } });
       // Comunicado para todos (destinatário nulo): novo prêmio disponível no catálogo.
-      await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: null, tipo: "novo_premio", titulo: "Novo prêmio no catálogo", mensagem: `"${input.title}" já pode ser resgatado por ${input.pointsCost} ponto(s)${input.stock !== null ? ` (${input.stock} disponível(is))` : ""}. Veja em Engajamento.` });
+      await db.insert(notificacoes).values({ condominioId: ctx.eco.condominio.id, destinatarioId: null, tipo: "novo_premio", titulo: "Novo prêmio no catálogo", mensagem: `"${input.title}" já pode ser resgatado por ${plural(input.pointsCost, "ponto", "pontos")}${input.stock !== null ? ` (${plural(input.stock, "disponível", "disponíveis")})` : ""}. Veja em Engajamento.` });
       return { id: inserida[0].id };
     }),
     /** Muda custo, estoque ou disponibilidade de uma recompensa do catálogo (com auditoria do valor anterior e do novo). */
@@ -550,11 +555,11 @@ export const analyticsRouter = router({
       });
       if (resultado === "sem_pontos" || resultado === "sem_estoque") await recusar(resultado);
       const resgateId = resultado as number;
-      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "resgate", entidadeId: resgateId, acao: "resgate_solicitado", resumo: `${morador.nome} resgatou "${recompensa.titulo}" por ${recompensa.custoPontos} ponto(s).`, estadoAnterior: { saldo: (saldoDepois ?? 0) + recompensa.custoPontos, estoque: recompensa.estoque }, estadoNovo: { saldo: saldoDepois, estoque: estoqueDepois, status: "solicitado" } });
-      await notificarUsuario(db, ctx.user.id, { condominioId: ctx.eco.condominio.id, tipo: "premio_resgatado", titulo: "Prêmio resgatado", mensagem: `Você resgatou "${recompensa.titulo}" por ${recompensa.custoPontos} ponto(s). Saldo atual: ${saldoDepois} ponto(s). A administração avisa quando estiver pronto para retirar.` });
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "resgate", entidadeId: resgateId, acao: "resgate_solicitado", resumo: `${morador.nome} resgatou "${recompensa.titulo}" por ${plural(recompensa.custoPontos, "ponto", "pontos")}.`, estadoAnterior: { saldo: (saldoDepois ?? 0) + recompensa.custoPontos, estoque: recompensa.estoque }, estadoNovo: { saldo: saldoDepois, estoque: estoqueDepois, status: "solicitado" } });
+      await notificarUsuario(db, ctx.user.id, { condominioId: ctx.eco.condominio.id, tipo: "premio_resgatado", titulo: "Prêmio resgatado", mensagem: `Você resgatou "${recompensa.titulo}" por ${plural(recompensa.custoPontos, "ponto", "pontos")}. Saldo atual: ${plural(saldoDepois ?? 0, "ponto", "pontos")}. A administração avisa quando estiver pronto para retirar.` });
       await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "novo_resgate", titulo: "Novo resgate de prêmio", mensagem: `${morador.nome} (bloco ${morador.bloco}) resgatou "${recompensa.titulo}". Aprove ou registre a entrega em Engajamento > Pedidos de resgate.` });
       if (estoqueDepois === 0) await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "sem_estoque", titulo: "Prêmio sem estoque", mensagem: `"${recompensa.titulo}" acabou. Reponha o estoque ou desative a recompensa em Engajamento.` });
-      else if (estoqueDepois !== null && estoqueDepois <= LIMITE_ESTOQUE_BAIXO) await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "estoque_baixo", titulo: "Estoque baixo", mensagem: `Restam ${estoqueDepois} unidade(s) de "${recompensa.titulo}".` });
+      else if (estoqueDepois !== null && estoqueDepois <= LIMITE_ESTOQUE_BAIXO) await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "estoque_baixo", titulo: "Estoque baixo", mensagem: `${palavra(estoqueDepois, "Resta", "Restam")} ${plural(estoqueDepois, "unidade", "unidades")} de "${recompensa.titulo}".` });
       return { success: true, id: resgateId, balance: saldoDepois };
     }),
     meusResgates: withProfile.query(async ({ ctx }) => {
@@ -583,9 +588,9 @@ export const analyticsRouter = router({
           await tx.update(recompensas).set({ estoque: sql`${recompensas.estoque} + 1`, atualizadoEm: new Date() }).where(and(eq(recompensas.id, resgate.recompensaId), sql`${recompensas.estoque} IS NOT NULL`));
         }
       });
-      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "resgate", entidadeId: resgate.id, acao: `resgate_${input.status}`, resumo: `Resgate de "${recompensa}" marcado como ${rotuloStatusResgate[input.status].toLowerCase()}${input.status === "cancelado" ? `; ${resgate.pontosGastos} ponto(s) devolvido(s)` : ""}.`, estadoAnterior: { status: resgate.status }, estadoNovo: { status: input.status }, motivo: input.reason || null });
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "resgate", entidadeId: resgate.id, acao: `resgate_${input.status}`, resumo: `Resgate de "${recompensa}" marcado como ${rotuloStatusResgate[input.status].toLowerCase()}${input.status === "cancelado" ? `; ${plural(resgate.pontosGastos, "ponto devolvido", "pontos devolvidos")}` : ""}.`, estadoAnterior: { status: resgate.status }, estadoNovo: { status: input.status }, motivo: input.reason || null });
       const morador = await db.select({ usuarioId: moradores.usuarioId }).from(moradores).where(eq(moradores.id, resgate.moradorId)).limit(1);
-      const textos = { aprovado: `Seu resgate de "${recompensa}" foi aprovado e será entregue em breve.`, entregue: `Seu resgate de "${recompensa}" foi marcado como entregue.`, cancelado: `Seu resgate de "${recompensa}" foi cancelado e ${resgate.pontosGastos} ponto(s) foram devolvidos.${input.reason ? ` Motivo: ${input.reason}` : ""}` } as const;
+      const textos = { aprovado: `Seu resgate de "${recompensa}" foi aprovado e será entregue em breve.`, entregue: `Seu resgate de "${recompensa}" foi marcado como entregue.`, cancelado: `Seu resgate de "${recompensa}" foi cancelado e ${plural(resgate.pontosGastos, "ponto foi devolvido", "pontos foram devolvidos")}.${input.reason ? ` Motivo: ${input.reason}` : ""}` } as const;
       await notificarUsuario(db, morador[0]?.usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "resgate_atualizado", titulo: "Atualização de resgate", mensagem: textos[input.status] });
       return { success: true };
     }),

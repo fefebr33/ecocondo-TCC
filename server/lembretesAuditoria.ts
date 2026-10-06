@@ -2,6 +2,7 @@ import { and, eq, gte, lte } from "drizzle-orm";
 import { coletas, notificacoes } from "../drizzle/schema";
 import { residuoNaFrase } from "@shared/rotulos";
 import { notificarAdministradores } from "./notificacoes";
+import { plural } from "@shared/plural";
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 /** Depois de quanto tempo sem parecer a auditoria vira lembrete para a administração (e de quanto em quanto tempo ele se repete). */
@@ -24,8 +25,8 @@ export async function lembrarAuditoriasParadas(db: any, agora = new Date()) {
       condominioId: coleta.condominioId,
       coletaId: coleta.id,
       tipo: "auditoria_pendente",
-      titulo: `Auditoria parada há ${dias} dia(s): descarte nº ${coleta.id}`,
-      mensagem: `O descarte nº ${coleta.id} (${kg} kg de ${residuoNaFrase[coleta.tipoResiduo]}, bloco ${coleta.bloco}) está em auditoria há ${dias} dia(s) sem parecer. Motivo da auditoria: ${coleta.motivoAuditoria ?? "não informado"}. Enquanto isso, os pontos do morador ficam parados. Conclua em Descartes > Em auditoria.`,
+      titulo: `Auditoria parada há ${plural(dias, "dia", "dias")}: descarte nº ${coleta.id}`,
+      mensagem: `O descarte nº ${coleta.id} (${kg} kg de ${residuoNaFrase[coleta.tipoResiduo]}, bloco ${coleta.bloco}) está em auditoria há ${plural(dias, "dia", "dias")} sem parecer. Motivo da auditoria: ${coleta.motivoAuditoria ?? "não informado"}. Enquanto isso, os pontos do morador ficam parados. Conclua em Descartes > Em auditoria.`,
     });
     enviados += 1;
   }

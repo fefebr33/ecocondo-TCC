@@ -40,6 +40,7 @@ import {
   rotuloSituacaoCurto,
 } from "@/lib/descarte";
 import { situacaoDescarte } from "@shared/descarte";
+import { plural } from "@shared/plural";
 const labels: Record<string, string> = {
   reciclavel: "Reciclável",
   organico: "Orgânico",
@@ -84,7 +85,7 @@ export default function Dashboard() {
       label: "Total descartado",
       value: data?.totalKg ? `${formatarNumero(data.totalKg)} kg` : "—",
       helper: data?.porSituacao.aprovado
-        ? `${data.porSituacao.aprovado} descarte(s) aprovado(s)`
+        ? plural(data.porSituacao.aprovado, "descarte aprovado", "descartes aprovados")
         : "Aguardando descartes aprovados",
       icon: Recycle,
       tone: "emerald",
@@ -170,12 +171,12 @@ export default function Dashboard() {
               <b>Participação suspensa {medida.periodo ?? ""}</b> ({medida.nome}).
               Você pode continuar levando o lixo à estação, mas os descartes não
               valem pontos, não dá para entrar em campanhas nem resgatar prêmios,
-              e o seu nome fica oculto no pódio para os vizinhos. Tudo volta ao
-              normal quando a suspensão acabar ou a administração revogar.
+              e você fica fora do pódio e do ranking (os vizinhos não veem a
+              suspensão). Tudo volta ao normal quando a suspensão acabar ou a
+              administração revogar.
             </div>
           ))}
-        <PainelPessoal />
-        <article className={`mt-5 ${cartao}`}>
+        <article className={`mb-5 ${cartao}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="flex items-center gap-2 text-base font-semibold tracking-[-0.025em]">
               <Medal className="h-5 w-5 text-[#c99a2e]" />
@@ -212,7 +213,7 @@ export default function Dashboard() {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Bloco {linha.bloco} · {linha.pontos} pts
+                    Bloco {linha.bloco} · {plural(linha.pontos, "pt", "pts")}
                   </p>
                 </li>
               ))}
@@ -230,6 +231,7 @@ export default function Dashboard() {
             </p>
           )}
         </article>
+        <PainelPessoal compacto />
       </div>
     );
   }
@@ -453,7 +455,7 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {total} descarte(s) no total.
+                    {plural(total, "descarte", "descartes")} no total.
                   </p>
                 </>
               );
@@ -473,7 +475,7 @@ export default function Dashboard() {
                 <p className="mt-3 text-[30px] font-bold tracking-[-0.05em]">
                   {isAdmin
                     ? data.pontosMes.movimentados
-                    : `${data.saldo ?? 0} pts`}
+                    : plural(data.saldo ?? 0, "pt", "pts")}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {isAdmin ? "entradas e saídas somadas" : "saldo atual"}
@@ -690,7 +692,7 @@ export default function Dashboard() {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Bloco {linha.bloco} · {linha.pontos} pts ·{" "}
+                    Bloco {linha.bloco} · {plural(linha.pontos, "pt", "pts")} ·{" "}
                     {formatarNumero(linha.pesoKg)} kg
                   </p>
                 </li>
@@ -718,7 +720,7 @@ export default function Dashboard() {
           </p>
           <h2 className="mt-2 text-xl font-bold tracking-[-0.04em]">
             {data?.porSituacao.pendente
-              ? `${data.porSituacao.pendente} descarte(s) esperando você.`
+              ? `${plural(data.porSituacao.pendente, "descarte", "descartes")} esperando você.`
               : hasCompleted
                 ? "Acompanhe o pódio do período."
                 : "Instale a estação de pesagem."}

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 function formatDate(value: Date | string) {
   return new Date(value).toLocaleDateString("pt-BR", {
@@ -251,7 +252,7 @@ export default function Podio() {
                   {linha.apartamento ? ` · ${linha.apartamento}` : ""}
                 </p>
                 <p className="mt-3 text-lg font-bold text-[#0f7350]">
-                  {linha.pontos} pts
+                  {plural(linha.pontos, "pt", "pts")}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {formatarNumero(linha.pesoKg)} kg de peso confirmado
@@ -337,11 +338,15 @@ export default function Podio() {
                 <p className="text-sm font-semibold">
                   {data?.minhaPosicao
                     ? `Sua posição: ${data.minhaPosicao.position}º de ${data.totalParticipantes}`
-                    : "Você não pontuou neste período"}
+                    : data?.minhaSuspensao
+                      ? "Você está fora do pódio durante a suspensão"
+                      : "Você não pontuou neste período"}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {data?.minhaPosicao
-                    ? `${data.minhaPosicao.pontos} pts · ${formatarNumero(data.minhaPosicao.pesoKg)} kg de peso confirmado. Só você vê a sua posição.`
+                  {data?.minhaSuspensao && !data?.minhaPosicao
+                    ? `Sua participação está suspensa ${data.minhaSuspensao.periodo}. Enquanto isso você não aparece no pódio nem no ranking; os vizinhos não veem a suspensão. Quando ela acabar, você volta a concorrer.`
+                    : data?.minhaPosicao
+                    ? `${plural(data.minhaPosicao.pontos, "ponto", "pontos")} · ${formatarNumero(data.minhaPosicao.pesoKg)} kg de peso confirmado. Só você vê a sua posição.`
                     : periodoAtual
                       ? "Registre sua reciclagem na estação de pesagem para entrar na disputa."
                       : "Nenhum descarte seu foi aprovado neste período."}
@@ -352,13 +357,8 @@ export default function Podio() {
               <input
                 type="checkbox"
                 className="mt-1 h-4 w-4 accent-[#0f7350]"
-                checked={
-                  Boolean(data?.minhaSuspensao) ||
-                  (profile.data?.resident?.ocultarNomeNoPodio ?? false)
-                }
-                disabled={
-                  definirExibicao.isPending || Boolean(data?.minhaSuspensao)
-                }
+                checked={profile.data?.resident?.ocultarNomeNoPodio ?? false}
+                disabled={definirExibicao.isPending}
                 onChange={event =>
                   definirExibicao.mutate({ hideName: event.target.checked })
                 }
@@ -369,9 +369,7 @@ export default function Podio() {
                   Não mostrar meu nome no pódio
                 </span>
                 <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                  {data?.minhaSuspensao
-                    ? `Obrigatório enquanto durar a sua suspensão (${data.minhaSuspensao.periodo}): para os vizinhos você aparece como "Morador(a) do bloco ${profile.data?.resident?.bloco ?? "?"}". Só você e a administração veem o seu nome.`
-                    : `Se você ficar entre os três primeiros, aparece como "Morador(a) do bloco ${profile.data?.resident?.bloco ?? "?"}". Você continua concorrendo ao prêmio.`}
+                  {`Se você ficar entre os três primeiros, aparece como "Morador(a) do bloco ${profile.data?.resident?.bloco ?? "?"}". Você continua concorrendo ao prêmio.`}
                 </span>
               </span>
             </label>
@@ -407,7 +405,7 @@ export default function Podio() {
                   </span>
                   <span className="text-right">
                     <span className="block text-sm font-bold text-[#0f7350]">
-                      {linha.pontos} pts
+                      {plural(linha.pontos, "pt", "pts")}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {formatarNumero(linha.pesoKg)} kg
@@ -416,6 +414,37 @@ export default function Podio() {
                 </li>
               ))}
             </ol>
+          </div>
+        )}
+        {isAdmin && (data?.foraPorSuspensao?.length ?? 0) > 0 && (
+          <div className="mt-6 rounded-2xl border border-[#e3e6e4] bg-[#f6f7f6] p-4">
+            <p className="text-xs font-bold uppercase tracking-[.08em] text-muted-foreground">
+              Fora do pódio por suspensão (visível só para a administração)
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Quem está suspenso não entra na classificação: as posições abaixo
+              dele sobem e o prêmio vai para quem ficou no pódio. Os vizinhos
+              não veem esta lista.
+            </p>
+            <ul className="mt-2 divide-y divide-[#e3e6e4]">
+              {data!.foraPorSuspensao.map(linha => (
+                <li
+                  key={linha.moradorId}
+                  className="flex items-center justify-between gap-3 py-2 text-sm"
+                >
+                  <span>
+                    <span className="block font-semibold">{linha.nome}</span>
+                    <span className="text-xs text-muted-foreground">
+                      Bloco {linha.bloco} · {linha.apartamento} · suspenso(a){" "}
+                      {linha.periodo}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right text-xs text-muted-foreground">
+                    teria {formatarNumero(linha.pontos)} pontos
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </section>

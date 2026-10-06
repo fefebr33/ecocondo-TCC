@@ -2,6 +2,7 @@ import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, type RGB } from "pdf
 import { rotuloCategoriaOcorrencia, rotuloResiduo, rotuloTipoPenalidade } from "@shared/rotulos";
 import { TIPOS_RESIDUO } from "@shared/descarte";
 import type { TipoResiduo } from "@shared/descarte";
+import { palavra, plural } from "@shared/plural";
 
 /**
  * Relatório de gestão em PDF, no mesmo espírito do painel: cartões com os números principais, gráficos de barras
@@ -347,14 +348,14 @@ export async function gerarRelatorioPdf(dados: DadosRelatorioPdf) {
 
   doc.titulo("Resumo do período", "Só descartes aprovados entram no peso. Pendentes, reprovados e em auditoria ficam de fora até a decisão.");
   doc.cartoes([
-    { rotulo: "Peso confirmado", valor: `${numero(dados.totalKg)} kg`, ajuda: `${dados.porSituacao.aprovado} descarte(s) aprovado(s)` },
+    { rotulo: "Peso confirmado", valor: `${numero(dados.totalKg)} kg`, ajuda: plural(dados.porSituacao.aprovado, "descarte aprovado", "descartes aprovados") },
     { rotulo: "Recicláveis", valor: `${numero(dados.recyclableKg)} kg`, ajuda: dados.recyclingRate === null ? "sem dados" : `${numero(dados.recyclingRate)}% do total` },
     { rotulo: "CO2 evitado", valor: `${numero(dados.co2EstimateKg)} kg`, ajuda: "estimativa (0,75 kg por kg reciclável)" },
-    { rotulo: "Participação", valor: dados.participationRate === null ? "-" : `${numero(dados.participationRate)}%`, ajuda: `${dados.participantsCount} de ${dados.residentsCount} morador(es)` },
-    { rotulo: "Pontos distribuídos", valor: numero(dados.pontos.distribuidos, 0), ajuda: `${numero(dados.pontos.estornados, 0)} estornado(s)` },
-    { rotulo: "Pontos em resgates", valor: numero(dados.pontos.resgatados, 0), ajuda: `${dados.resgates.total} resgate(s), ${dados.resgates.entregues} entregue(s)` },
-    { rotulo: "Aguardando decisão", valor: String(dados.porSituacao.pendente + dados.porSituacao.auditoria), ajuda: `${dados.porSituacao.pendente} pendente(s), ${dados.porSituacao.auditoria} em auditoria` },
-    { rotulo: "Ocorrências", valor: String(dados.environmentalIncidents), ajuda: `${dados.auditEvents} evento(s) na auditoria` },
+    { rotulo: "Participação", valor: dados.participationRate === null ? "-" : `${numero(dados.participationRate)}%`, ajuda: `${dados.participantsCount} de ${plural(dados.residentsCount, "morador", "moradores")}` },
+    { rotulo: "Pontos distribuídos", valor: numero(dados.pontos.distribuidos, 0), ajuda: `${numero(dados.pontos.estornados, 0)} ${palavra(dados.pontos.estornados, "estornado", "estornados")}` },
+    { rotulo: "Pontos em resgates", valor: numero(dados.pontos.resgatados, 0), ajuda: `${plural(dados.resgates.total, "resgate", "resgates")}, ${plural(dados.resgates.entregues, "entregue", "entregues")}` },
+    { rotulo: "Aguardando decisão", valor: String(dados.porSituacao.pendente + dados.porSituacao.auditoria), ajuda: `${plural(dados.porSituacao.pendente, "pendente", "pendentes")}, ${dados.porSituacao.auditoria} em auditoria` },
+    { rotulo: "Ocorrências", valor: String(dados.environmentalIncidents), ajuda: `${plural(dados.auditEvents, "evento", "eventos")} na auditoria` },
   ]);
 
   doc.titulo("Peso aprovado por tipo de resíduo");

@@ -35,6 +35,7 @@ import { calculateComplianceOverview, calculateGoalProgress, compareBlocks, comp
 import { pesoConfirmadoGramas } from "../dominio/antifraude";
 import { situacaoDescarte } from "@shared/descarte";
 import { incidentAuditState, writeAuditLog } from "../audit";
+import { palavra, plural } from "@shared/plural";
 
 const periodInput = z.object({ startDate: z.date().optional(), endDate: z.date().optional() }).optional();
 /** Denúncias falsas do mesmo autor a partir das quais a administração recebe um alerta para avaliar medidas. */
@@ -354,7 +355,7 @@ export const sustainabilityRouter = router({
       await db.insert(participantesCampanha).values({ campanhaId: input.campaignId, moradorId: ctx.eco.morador.id }).onDuplicateKeyUpdate({ set: { entrouEm: new Date() } });
       await notificarUsuario(db, ctx.user.id, { condominioId: ctx.eco.condominio.id, tipo: "campanha_participacao", titulo: `Você entrou na campanha "${campanha.titulo}"`, mensagem: `Sua participação foi registrada. Meta: ${campanha.descricaoMeta}. Vai até ${campanha.dataFim.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}.` });
       const [{ total }] = await db.select({ total: count() }).from(participantesCampanha).where(eq(participantesCampanha.campanhaId, campanha.id));
-      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "campanha_participacao", titulo: `Nova participação: ${campanha.titulo}`, mensagem: `${ctx.eco.morador.nome} (bloco ${ctx.eco.morador.bloco}) entrou na campanha "${campanha.titulo}". Agora são ${Number(total)} participante(s).` });
+      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "campanha_participacao", titulo: `Nova participação: ${campanha.titulo}`, mensagem: `${ctx.eco.morador.nome} (bloco ${ctx.eco.morador.bloco}) entrou na campanha "${campanha.titulo}". ${palavra(Number(total), "Agora é", "Agora são")} ${plural(Number(total), "participante", "participantes")}.` });
       return { success: true };
     }),
   }),

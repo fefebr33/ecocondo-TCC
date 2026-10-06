@@ -13,8 +13,17 @@ export type CollectionCsvRow = {
   notes: string | null;
 };
 
+/**
+ * Texto que o Excel leria como fórmula (começa com =, +, -, @ ou tabulação) ganha um apóstrofo na frente, para nenhum
+ * nome ou observação virar fórmula ao abrir o arquivo. Números (inclusive negativos, como "-3" no extrato) ficam como estão.
+ */
+function protegerFormula(conteudo: string) {
+  if (/^-?\d+([.,]\d+)?$/.test(conteudo)) return conteudo;
+  return /^[=+\-@\t\r]/.test(conteudo) ? `'${conteudo}` : conteudo;
+}
+
 function escapeCsv(value: string | number | null | undefined) {
-  const content = value === null || value === undefined ? "" : String(value);
+  const content = value === null || value === undefined ? "" : typeof value === "number" ? String(value) : protegerFormula(value);
   return `"${content.replaceAll('"', '""')}"`;
 }
 

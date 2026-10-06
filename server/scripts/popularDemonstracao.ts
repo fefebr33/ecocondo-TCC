@@ -290,7 +290,7 @@ async function main() {
   const divergentes = await saldosInconsistentes(db);
   console.log(`Dados de demonstração criados: ${criadas} descartes, ${vizinhos.length + 1} moradores. Rode pnpm dev e entre como Administrador ou Morador.`);
   console.log(`Login com e-mail e senha: admin@ecocondo.local ou morador@ecocondo.local, senha ${SENHA_DEMONSTRACAO}.`);
-  console.log(divergentes.length ? `ATENÇÃO: ${divergentes.length} saldo(s) de pontos não batem com o extrato.` : "Saldos de pontos conferidos com o extrato: tudo certo.");
+  console.log(divergentes.length ? `ATENÇÃO: ${divergentes.length === 1 ? "1 saldo de pontos não bate" : `${divergentes.length} saldos de pontos não batem`} com o extrato.` : "Saldos de pontos conferidos com o extrato: tudo certo.");
   console.log("IA da estação em modo simulação nos dados de demonstração; com ANTHROPIC_API_KEY no .env, os novos descartes são analisados pelo Claude.");
   console.log(`Estação de pesagem "Lixeiras do térreo" (modo demonstração ligado): abra /estacao?codigo=${encodeURIComponent(tokenEstacao)} no tablet (ou em outra aba) para parear.`);
 }

@@ -12,6 +12,7 @@ import { writeAuditLog } from "../audit";
 import { notificarAdministradores, notificarUsuario } from "../notificacoes";
 import { administratorOnly, withProfile } from "./nucleo";
 import { MODELO_IA, modoIaAtual } from "../ia/analiseDescarte";
+import { palavra, plural } from "@shared/plural";
 
 /** Gera um código de adesivo (EC-XXXX-XXXX) com sorteio criptográfico; a unicidade é garantida pelo índice do banco. */
 export function gerarCodigoAdesivo() {
@@ -73,11 +74,11 @@ async function entregarAdesivos(ctx: { user: { id: number }; eco: { condominio: 
   });
   await writeAuditLog(db, {
     condominioId, autorId: ctx.user.id, tipoEntidade: "adesivo", entidadeId: pedidoId, acao: "adesivos_entregues",
-    resumo: `${dados.quantidade} adesivo(s) com QR Code entregue(s) a ${morador.nome} (bloco ${morador.bloco}, apto ${morador.apartamento}); de ${codigos[0]} a ${codigos[codigos.length - 1]}.`,
+    resumo: `${plural(dados.quantidade, "adesivo", "adesivos")} com QR Code ${palavra(dados.quantidade, "entregue", "entregues")} a ${morador.nome} (bloco ${morador.bloco}, apto ${morador.apartamento}); de ${codigos[0]} a ${codigos[codigos.length - 1]}.`,
     estadoNovo: { pedidoId, moradorId: morador.id, quantidade: dados.quantidade, codigos },
     motivo: dados.observacao ?? null,
   });
-  await notificarUsuario(db, morador.usuarioId, { condominioId, tipo: "adesivos_entregues", titulo: `${dados.quantidade} adesivo(s) entregue(s)`, mensagem: `A administração entregou ${dados.quantidade} adesivo(s) com QR Code para os seus sacos. Cada adesivo vale para um saco só. Confira a quantidade em Meus adesivos.` });
+  await notificarUsuario(db, morador.usuarioId, { condominioId, tipo: "adesivos_entregues", titulo: `${plural(dados.quantidade, "adesivo entregue", "adesivos entregues")}`, mensagem: `A administração entregou ${plural(dados.quantidade, "adesivo", "adesivos")} com QR Code para os seus sacos. Cada adesivo vale para um saco só. Confira a quantidade em Meus adesivos.` });
   return { pedidoId, codigos };
 }
 
@@ -127,8 +128,8 @@ export const adesivosRouter = router({
       const [aberto] = await db.select({ id: pedidosAdesivos.id }).from(pedidosAdesivos).where(and(eq(pedidosAdesivos.moradorId, morador.id), eq(pedidosAdesivos.status, "solicitado"))).limit(1);
       if (aberto) throw new TRPCError({ code: "BAD_REQUEST", message: "Você já tem um pedido de adesivos aguardando a administração." });
       const [inserido] = await db.insert(pedidosAdesivos).values({ condominioId: ctx.eco.condominio.id, moradorId: morador.id, quantidadeSolicitada: input.quantidade, observacao: input.observacao || null, solicitadoPorId: ctx.user.id }).$returningId();
-      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "adesivo", entidadeId: inserido.id, acao: "adesivos_solicitados", resumo: `${morador.nome} pediu ${input.quantidade} adesivo(s) com QR Code.`, estadoNovo: { quantidade: input.quantidade }, motivo: input.observacao || null });
-      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "adesivos_solicitados", titulo: "Pedido de adesivos", mensagem: `${morador.nome} (bloco ${morador.bloco}, apto ${morador.apartamento}) pediu ${input.quantidade} adesivo(s) com QR Code.${input.observacao ? ` Observação: ${input.observacao}` : ""}` });
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "adesivo", entidadeId: inserido.id, acao: "adesivos_solicitados", resumo: `${morador.nome} pediu ${plural(input.quantidade, "adesivo", "adesivos")} com QR Code.`, estadoNovo: { quantidade: input.quantidade }, motivo: input.observacao || null });
+      await notificarAdministradores(db, { condominioId: ctx.eco.condominio.id, tipo: "adesivos_solicitados", titulo: "Pedido de adesivos", mensagem: `${morador.nome} (bloco ${morador.bloco}, apto ${morador.apartamento}) pediu ${plural(input.quantidade, "adesivo", "adesivos")} com QR Code.${input.observacao ? ` Observação: ${input.observacao}` : ""}` });
       return { id: inserido.id };
     }),
     /** Administrador: pedidos (abertos primeiro) com a quantidade que cada morador ainda tem. */
@@ -168,9 +169,9 @@ export const adesivosRouter = router({
       if (!pedido) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido não encontrado." });
       const [alteracao] = await db.update(pedidosAdesivos).set({ status: "recusado", observacao: input.motivo, entreguePorId: ctx.user.id, entregueEm: new Date() }).where(and(eq(pedidosAdesivos.id, pedido.id), eq(pedidosAdesivos.status, "solicitado")));
       if (!alteracao.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "Este pedido já foi atendido ou recusado." });
-      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "adesivo", entidadeId: pedido.id, acao: "pedido_adesivos_recusado", resumo: `Pedido de ${pedido.quantidadeSolicitada} adesivo(s) recusado.`, motivo: input.motivo });
+      await writeAuditLog(db, { condominioId: ctx.eco.condominio.id, autorId: ctx.user.id, tipoEntidade: "adesivo", entidadeId: pedido.id, acao: "pedido_adesivos_recusado", resumo: `Pedido de ${plural(pedido.quantidadeSolicitada, "adesivo", "adesivos")} recusado.`, motivo: input.motivo });
       const usuarioId = (await moradorDoCondominio(ctx.eco.condominio.id, pedido.moradorId)).usuarioId;
-      await notificarUsuario(db, usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "adesivos_entregues", titulo: "Pedido de adesivos não atendido", mensagem: `A administração não atendeu o seu pedido de ${pedido.quantidadeSolicitada} adesivo(s). Motivo: ${input.motivo}` });
+      await notificarUsuario(db, usuarioId, { condominioId: ctx.eco.condominio.id, tipo: "adesivos_entregues", titulo: "Pedido de adesivos não atendido", mensagem: `A administração não atendeu o seu pedido de ${plural(pedido.quantidadeSolicitada, "adesivo", "adesivos")}. Motivo: ${input.motivo}` });
       return { success: true };
     }),
     /** Códigos de um pedido entregue, para imprimir a folha de adesivos de novo. */
@@ -193,7 +194,7 @@ export const adesivosRouter = router({
       const [dono] = await db.select({ usuarioId: moradores.usuarioId }).from(moradores).where(eq(moradores.id, adesivo.moradorId)).limit(1);
       const [restantes] = await db.select({ total: count() }).from(adesivos).where(and(eq(adesivos.moradorId, adesivo.moradorId), eq(adesivos.status, "disponivel")));
       const sobra = Number(restantes?.total ?? 0);
-      await notificarUsuario(db, dono?.usuarioId ?? null, { condominioId: ctx.eco.condominio.id, tipo: "adesivo_cancelado", titulo: "Adesivo cancelado", mensagem: `A administração cancelou o seu adesivo ${codigo}: ele não vale mais na estação. Motivo: ${input.motivo.replace(/[.!\s]+$/, "")}. ${sobra ? `Você ainda tem ${sobra} adesivo(s) disponível(is).` : "Você ficou sem adesivos disponíveis: peça mais em Meus adesivos."}` });
+      await notificarUsuario(db, dono?.usuarioId ?? null, { condominioId: ctx.eco.condominio.id, tipo: "adesivo_cancelado", titulo: "Adesivo cancelado", mensagem: `A administração cancelou o seu adesivo ${codigo}: ele não vale mais na estação. Motivo: ${input.motivo.replace(/[.!\s]+$/, "")}. ${sobra ? `Você ainda tem ${plural(sobra, "adesivo disponível", "adesivos disponíveis")}.` : "Você ficou sem adesivos disponíveis: peça mais em Meus adesivos."}` });
       return { success: true };
     }),
     /**

@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 import { rotuloResiduo } from "@/lib/descarte";
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 const dateValue = (offset = 0) => {
   const date = new Date();
@@ -622,7 +623,7 @@ function CartaoCampanha({
           valor={
             item.status === "encerrada"
               ? "Encerrada"
-              : `${indicadores.diasRestantes} dia(s)`
+              : plural(indicadores.diasRestantes, "dia", "dias")
           }
         />
         <Indicador rotulo="Reciclado" valor={`${indicadores.kgReciclados.toLocaleString("pt-BR")} kg`} />

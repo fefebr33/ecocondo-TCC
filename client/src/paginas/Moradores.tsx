@@ -24,6 +24,7 @@ import {
 import { Link } from "wouter";
 import { FormEvent, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 const initialForm: {
   name: string;
@@ -180,8 +181,9 @@ export default function Residents() {
               Cadastro residencial
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {visibleResidents.length} de {residents?.length ?? 0} morador(es)
-              com os filtros atuais.
+              {visibleResidents.length} de{" "}
+              {plural(residents?.length ?? 0, "morador", "moradores")} com os
+              filtros atuais.
             </p>
           </div>
         </div>
@@ -483,9 +485,9 @@ export default function Residents() {
           <DialogHeader>
             <DialogTitle>Ajustar pontos de {ajusteAlvo?.nome}</DialogTitle>
             <DialogDescription>
-              Saldo atual: {ajusteAlvo?.pontos} ponto(s). Use número positivo
-              para creditar e negativo para debitar. O ajuste entra no extrato
-              do morador, que é avisado com o motivo.
+              Saldo atual: {plural(ajusteAlvo?.pontos ?? 0, "ponto", "pontos")}.
+              Use número positivo para creditar e negativo para debitar. O
+              ajuste entra no extrato do morador, que é avisado com o motivo.
             </DialogDescription>
           </DialogHeader>
           <form

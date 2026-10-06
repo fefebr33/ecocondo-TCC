@@ -30,3 +30,12 @@ describe("pontos com fração", () => {
     }
   });
 });
+
+describe("resíduo perigoso", () => {
+  it("vale por entrega, não por kg", () => {
+    expect(milesimosDoDescarte(10, 1, "perigoso")).toBe(1000);
+    expect(milesimosDoDescarte(4000, 1, "perigoso")).toBe(1000);
+    expect(milesimosDoDescarte(4000, 1, "reciclavel")).toBe(4000);
+    expect(milesimosDoDescarte(0, 1, "perigoso")).toBe(0);
+  });
+});

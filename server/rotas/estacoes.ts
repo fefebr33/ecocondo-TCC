@@ -26,13 +26,14 @@ import {
   hashTokenEstacao,
   limparTentativas,
   registrarTentativaErrada,
-  verificarBloqueioTentativas,
+  reservarConferenciaCodigo,
 } from "../dominio/estacaoPesagem";
 import { analisarItem, decidirAnalise, mesmaCor, simulacoesIa, type LeituraIa } from "../ia/analiseDescarte";
 import { idUsuarioSistemaIa } from "../ia/usuarioSistema";
 import { aprovarColeta } from "./operacoes";
 import { suspensaoVigente } from "../penalidades";
 import { LIMITE_ADESIVOS_ACABANDO, normalizarCodigoAdesivo } from "@shared/adesivos";
+import { palavra, plural } from "@shared/plural";
 
 /** Cabeçalho enviado pelo tablet pareado com o código de pareamento guardado nele. */
 export const CABECALHO_TOKEN_ESTACAO = "x-estacao-token";
@@ -53,11 +54,20 @@ const codigoInput = z.string().trim().regex(/^\d{6}$/, "Digite os 6 números do 
 
 /** Encontra o morador dono de um código temporário válido; conta a tentativa errada para bloquear chutes no tablet. */
 async function moradorPorCodigo(estacao: EstacaoPesagem, codigo: string) {
+  let liberar: () => void;
   try {
-    verificarBloqueioTentativas(estacao.id);
+    liberar = reservarConferenciaCodigo(estacao.id);
   } catch (error) {
     throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: error instanceof Error ? error.message : "Tablet bloqueado temporariamente." });
   }
+  try {
+    return await conferirCodigo(estacao, codigo);
+  } finally {
+    liberar();
+  }
+}
+
+async function conferirCodigo(estacao: EstacaoPesagem, codigo: string) {
   const db = await getDb();
   const encontrado = await db.select().from(moradores).where(and(
     eq(moradores.condominioId, estacao.condominioId),
@@ -132,7 +142,7 @@ async function avaliarDescarte(estacao: EstacaoPesagem, morador: Morador, itens:
   // Suspensão da participação: o descarte é registrado normalmente, mas não vale pontos até a suspensão acabar ou ser revogada.
   const suspensao = await suspensaoVigente(db, morador.id);
   return itens.map((item, indice) => {
-    const milesimos = suspensao ? 0 : milesimosDoDescarte(item.weightGrams, regras[item.wasteType].pontosPorKg);
+    const milesimos = suspensao ? 0 : milesimosDoDescarte(item.weightGrams, regras[item.wasteType].pontosPorKg, item.wasteType);
     return { ...item, alertas: alertasPorItem[indice], milesimos, pontosPrevistos: milesimos / 1000, regra: regras[item.wasteType], suspensao };
   });
 }
@@ -473,19 +483,19 @@ export const estacoesRouter = router({
           coletaId: ids[pendentes[0].indice],
           tipo: irregular ? "irregularidade_detectada" : historico ? "peso_suspeito" : "descarte_aguardando_aprovacao",
           titulo: irregular ? "A IA apontou irregularidade num descarte" : "Descarte aguardando avaliação",
-          mensagem: `${morador.nome} (bloco ${morador.bloco}) descartou ${listaItens} na estação "${estacao.nome}" (${numeros}). ${pendentes.length === avaliados.length ? "Nenhum saco" : `${aprovados.length} saco(s) aprovado(s) pela IA; ${pendentes.length}`} ficou(aram) para avaliação: ${motivos.join(" | ")}`,
+          mensagem: `${morador.nome} (bloco ${morador.bloco}) descartou ${listaItens} na estação "${estacao.nome}" (${numeros}). ${pendentes.length === avaliados.length ? palavra(avaliados.length, "O saco ficou", `Os ${avaliados.length} sacos ficaram`) : `${plural(aprovados.length, "saco aprovado", "sacos aprovados")} pela IA; ${pendentes.length} ${palavra(pendentes.length, "ficou", "ficaram")}`} para avaliação: ${motivos.join(" | ")}`,
         });
       }
       // Uma notificação só para o morador, com o que foi aprovado e o que ficou para conferência.
       const pontosPendentes = pendentes.reduce((soma, { item }) => soma + item.milesimos, 0) / 1000;
       const partes = [
-        aprovados.length ? `${aprovados.length === avaliados.length ? "Tudo" : `${aprovados.length} saco(s)`} aprovado(s) na hora pela análise automática${pontosCreditados ? ` (+${pontosCreditados} ponto(s) no saldo)` : ""}.` : null,
-        pendentes.length ? `${pendentes.length === avaliados.length ? "O descarte" : `${pendentes.length} saco(s)`} ficou(aram) para a administração conferir${pontosPendentes ? ` (${formatarPontos(pontosPendentes)} ponto(s) previsto(s) depois da aprovação)` : ""}.` : null,
+        aprovados.length ? `${aprovados.length === avaliados.length ? "Tudo aprovado" : plural(aprovados.length, "saco aprovado", "sacos aprovados")} na hora pela análise automática${pontosCreditados ? ` (+${plural(pontosCreditados, "ponto", "pontos")} no saldo)` : ""}.` : null,
+        pendentes.length ? `${pendentes.length === avaliados.length ? "O descarte ficou" : `${plural(pendentes.length, "saco ficou", "sacos ficaram")}`} para a administração conferir${pontosPendentes ? ` (${formatarPontos(pontosPendentes)} ${palavra(pontosPendentes, "ponto previsto", "pontos previstos")} depois da aprovação)` : ""}.` : null,
       ].filter(Boolean).join(" ");
       await notificarUsuario(db, morador.usuarioId, {
         ...base,
         tipo: pendentes.length ? "pesagem_registrada" : "descarte_aprovado_ia",
-        titulo: pendentes.length ? (aprovados.length ? "Descarte registrado: parte aprovada, parte em conferência" : "Descarte registrado, aguardando avaliação") : pontosCreditados ? `Descarte aprovado: +${pontosCreditados} ponto(s)` : "Descarte aprovado",
+        titulo: pendentes.length ? (aprovados.length ? "Descarte registrado: parte aprovada, parte em conferência" : "Descarte registrado, aguardando avaliação") : pontosCreditados ? `Descarte aprovado: +${plural(pontosCreditados, "ponto", "pontos")}` : "Descarte aprovado",
         mensagem: `A estação "${estacao.nome}" registrou ${listaItens} (${numeros})${simulada ? ", em modo demonstração" : ""}. ${partes}${avaliados[0]?.suspensao ? ` ${textoSemPontos(avaliados[0].suspensao)}` : ""}`,
       });
       // Aviso de adesivos acabando (quando chega ao limite e quando zera), para o morador pedir mais pelo sistema.
@@ -493,7 +503,7 @@ export const estacoesRouter = router({
         const restantes = await adesivosDisponiveis(morador.id);
         const antes = restantes + adesivosItens.filter(Boolean).length;
         if (restantes === 0 || (antes > LIMITE_ADESIVOS_ACABANDO && restantes <= LIMITE_ADESIVOS_ACABANDO)) {
-          await notificarUsuario(db, morador.usuarioId, { condominioId: estacao.condominioId, tipo: "adesivos_acabando", titulo: restantes ? "Seus adesivos estão acabando" : "Seus adesivos acabaram", mensagem: restantes ? `Restam ${restantes} adesivo(s) com QR Code. Peça mais em Meus adesivos para não ficar sem.` : "Você usou todos os adesivos com QR Code. Peça mais em Meus adesivos; sem adesivo não dá para registrar o descarte." });
+          await notificarUsuario(db, morador.usuarioId, { condominioId: estacao.condominioId, tipo: "adesivos_acabando", titulo: restantes ? "Seus adesivos estão acabando" : "Seus adesivos acabaram", mensagem: restantes ? `${palavra(restantes, "Resta", "Restam")} ${plural(restantes, "adesivo", "adesivos")} com QR Code. Peça mais em Meus adesivos para não ficar sem.` : "Você usou todos os adesivos com QR Code. Peça mais em Meus adesivos; sem adesivo não dá para registrar o descarte." });
         }
       }
 
@@ -506,6 +516,8 @@ export const estacoesRouter = router({
         situacao: pendentes.length ? ("pendente" as const) : ("aprovado" as const),
         pendingApproval: pendentes.length > 0,
         pointsAwarded: pontosCreditados,
+        // Valor exato dos sacos aprovados agora (com fração); os pontos inteiros entram no saldo e a fração fica guardada.
+        pontosAprovados: avaliados.filter((_, indice) => situacoes[indice] === "aprovado").reduce((soma, item) => soma + item.milesimos, 0) / 1000,
         pendingPoints: pontosPendentes,
         semPontos: avaliados[0]?.suspensao ? textoSemPontos(avaliados[0].suspensao) : null,
         modoIa: analises[0]?.leitura.modo ?? "simulacao",

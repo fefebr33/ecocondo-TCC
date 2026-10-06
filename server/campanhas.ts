@@ -4,6 +4,7 @@ import type { Campanha } from "../drizzle/schema";
 import { situacaoDescarte } from "@shared/descarte";
 import { notificarAdministradores, notificarTodos, notificarUsuario } from "./notificacoes";
 import { writeAuditLog } from "./audit";
+import { palavra, plural } from "@shared/plural";
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 /** Quantos dias antes do fim os participantes recebem o aviso "a campanha está acabando". */
@@ -74,7 +75,7 @@ export async function processarCampanhas(db: any, agora = new Date()) {
       if (!alteracao.affectedRows) continue;
       alteradas += 1;
       const indicadores = (await indicadoresCampanhas(db, campanha.condominioId, [campanha], agora)).get(campanha.id) ?? vazio();
-      const resumo = `${indicadores.participantes} participante(s), ${indicadores.kgReciclados.toLocaleString("pt-BR")} kg reciclados em ${indicadores.descartes} descarte(s) aprovado(s).`;
+      const resumo = `${plural(indicadores.participantes, "participante", "participantes")}, ${indicadores.kgReciclados.toLocaleString("pt-BR")} kg reciclados em ${plural(indicadores.descartes, "descarte aprovado", "descartes aprovados")}.`;
       await notificarParticipantes(db, campanha, "campanha_encerrada", `Campanha encerrada: ${campanha.titulo}`, `A campanha "${campanha.titulo}" terminou. Resultado: ${resumo} Obrigado por participar!`);
       await notificarAdministradores(db, { condominioId: campanha.condominioId, tipo: "campanha_encerrada", titulo: `Campanha encerrada: ${campanha.titulo}`, mensagem: `A campanha terminou no prazo. ${resumo}` });
       await writeAuditLog(db, { condominioId: campanha.condominioId, autorId: campanha.criadoPorId, tipoEntidade: "campanha", entidadeId: campanha.id, acao: "campanha_encerrada_prazo", resumo: `Campanha "${campanha.titulo}" encerrada automaticamente no fim do prazo. ${resumo}`, estadoAnterior: { status: campanha.status }, estadoNovo: { status: "encerrada", ...indicadores } });
@@ -98,8 +99,8 @@ export async function processarCampanhas(db: any, agora = new Date()) {
       if (!alteracao.affectedRows) continue;
       alteradas += 1;
       const dias = Math.max(1, Math.ceil((campanha.dataFim.getTime() - agora.getTime()) / DIA_MS));
-      await notificarParticipantes(db, campanha, "campanha_encerrando", `Faltam ${dias} dia(s): ${campanha.titulo}`, `A campanha "${campanha.titulo}" termina em ${dias} dia(s). Aproveite para registrar seus descartes.`);
-      await notificarAdministradores(db, { condominioId: campanha.condominioId, tipo: "campanha_encerrando", titulo: `Campanha perto do fim: ${campanha.titulo}`, mensagem: `Faltam ${dias} dia(s) para o fim da campanha.` });
+      await notificarParticipantes(db, campanha, "campanha_encerrando", `${palavra(dias, "Falta", "Faltam")} ${plural(dias, "dia", "dias")}: ${campanha.titulo}`, `A campanha "${campanha.titulo}" termina em ${plural(dias, "dia", "dias")}. Aproveite para registrar seus descartes.`);
+      await notificarAdministradores(db, { condominioId: campanha.condominioId, tipo: "campanha_encerrando", titulo: `Campanha perto do fim: ${campanha.titulo}`, mensagem: `${palavra(dias, "Falta", "Faltam")} ${plural(dias, "dia", "dias")} para o fim da campanha.` });
     }
   }
   return alteradas;

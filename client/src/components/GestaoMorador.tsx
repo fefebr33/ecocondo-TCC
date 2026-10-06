@@ -15,6 +15,7 @@ import { Bot, Gavel, Megaphone, QrCode, ShieldAlert } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 const cartao =
   "rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6";
@@ -47,7 +48,7 @@ export default function GestaoMorador({
             Histórico de medidas
             {gestao.medidasVigentes > 0 && (
               <Badge className="border-0 bg-[#fbeceb] text-[#b3382c] hover:bg-[#fbeceb]">
-                {gestao.medidasVigentes} vigente(s)
+                {plural(gestao.medidasVigentes, "vigente", "vigentes")}
               </Badge>
             )}
           </p>
@@ -92,7 +93,7 @@ export default function GestaoMorador({
                       {medida.nome}
                       <span className="block text-xs text-muted-foreground">
                         {rotuloTipoPenalidade[medida.tipo]}
-                        {medida.pontos ? ` · ${medida.pontos} pts` : ""}
+                        {medida.pontos ? ` · ${plural(medida.pontos, "pt", "pts")}` : ""}
                       </span>
                     </td>
                     <td className="py-2 pr-3 text-xs">

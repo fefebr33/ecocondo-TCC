@@ -10,6 +10,7 @@ import { storagePut } from "../storage";
 import { calcularTrimestre, trimestreAnterior } from "../dominio/trimestre";
 import { calcularEquivalenciasAmbientais } from "../dominio/impactoAmbiental";
 import { pesoConfirmadoGramas } from "../dominio/antifraude";
+import { palavra } from "@shared/plural";
 
 async function gerarPdfCertificado(condominioNome: string, bloco: string, rotuloTrimestre: string, kg: number) {
   const equivalencias = calcularEquivalenciasAmbientais(kg);
@@ -24,7 +25,7 @@ async function gerarPdfCertificado(condominioNome: string, bloco: string, rotulo
   desenhar("Certificado de Sustentabilidade", 90, 340, 22, true, rgb(0.04, 0.39, 0.25));
   desenhar(condominioNome, 90, 305, 15, true);
   desenhar(`Bloco ${bloco} reciclou ${kg.toLocaleString("pt-BR")} kg neste trimestre (${rotuloTrimestre})`, 90, 275, 13);
-  desenhar(`Equivalente a aproximadamente ${equivalencias.arvoresPoupadas.toLocaleString("pt-BR")} árvore(s) poupada(s),`, 90, 240, 11);
+  desenhar(`Equivalente a aproximadamente ${equivalencias.arvoresPoupadas.toLocaleString("pt-BR")} ${palavra(equivalencias.arvoresPoupadas, "árvore poupada", "árvores poupadas")},`, 90, 240, 11);
   desenhar(`${equivalencias.litrosAguaPoupados.toLocaleString("pt-BR")} litros de água e ${equivalencias.co2EvitadoKg.toLocaleString("pt-BR")} kg de CO2e evitados.`, 90, 224, 11);
   desenhar("Reconhecimento emitido automaticamente pelo sistema EcoCondo com base nos descartes registrados.", 90, 180, 9, false, rgb(0.35, 0.4, 0.38));
   desenhar(`Emitido em ${new Date().toLocaleDateString("pt-BR")}`, 90, 60, 9);

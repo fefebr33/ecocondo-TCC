@@ -20,6 +20,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { palavra, plural } from "@shared/plural";
 
 const formatarData = (valor: Date | string | null | undefined) =>
   valor
@@ -125,7 +126,7 @@ function MeusAdesivos() {
           className="rounded-2xl bg-[#fff3df] px-4 py-3 text-sm text-[#7a4d0a]"
         >
           {dados.disponivel
-            ? `Restam só ${dados.disponivel} adesivo(s). Peça mais para não ficar sem.`
+            ? `${palavra(dados.disponivel, "Resta", "Restam")} só ${plural(dados.disponivel, "adesivo", "adesivos")}. Peça mais para não ficar sem.`
             : "Seus adesivos acabaram. Sem adesivo não dá para registrar o descarte na estação."}
         </p>
       )}
@@ -136,7 +137,13 @@ function MeusAdesivos() {
         </h2>
         {dados?.pedidoAberto ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            Você pediu {dados.pedidoAberto.quantidadeSolicitada} adesivo(s) em{" "}
+            Você pediu{" "}
+            {plural(
+              dados.pedidoAberto.quantidadeSolicitada,
+              "adesivo",
+              "adesivos"
+            )}{" "}
+            em{" "}
             {formatarData(dados.pedidoAberto.criadoEm)}. A administração vai
             entregar e você recebe um aviso.
           </p>
@@ -185,8 +192,9 @@ function MeusAdesivos() {
                 className="flex flex-wrap items-center justify-between gap-2 py-2.5"
               >
                 <span>
-                  Pedido nº {pedido.id} · {pedido.quantidadeSolicitada}{" "}
-                  adesivo(s) · {formatarData(pedido.criadoEm)}
+                  Pedido nº {pedido.id} ·{" "}
+                  {plural(pedido.quantidadeSolicitada, "adesivo", "adesivos")} ·{" "}
+                  {formatarData(pedido.criadoEm)}
                   {pedido.observacao ? (
                     <span className="block text-xs text-muted-foreground">
                       {pedido.observacao}
@@ -196,7 +204,7 @@ function MeusAdesivos() {
                 <span className="flex items-center gap-2">
                   {pedido.status === "entregue" && (
                     <span className="text-xs text-muted-foreground">
-                      {pedido.quantidadeEntregue} entregue(s) em{" "}
+                      {plural(pedido.quantidadeEntregue ?? 0, "entregue", "entregues")} em{" "}
                       {formatarData(pedido.entregueEm)}
                     </span>
                   )}
@@ -280,7 +288,7 @@ function AdesivosAdministracao() {
         item => item.id === variaveis.moradorId
       );
       toast.success(
-        `${resultado.codigos.length} adesivo(s) gerado(s). Imprima a folha e entregue ao morador.`
+        `${plural(resultado.codigos.length, "adesivo gerado", "adesivos gerados")}. Imprima a folha e entregue ao morador.`
       );
       setFolha({
         pedidoId: resultado.pedidoId,
@@ -364,8 +372,8 @@ function AdesivosAdministracao() {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Pediu {pedido.quantidadeSolicitada} em{" "}
-                    {formatarData(pedido.criadoEm)} · tem {pedido.disponiveis}{" "}
-                    disponível(is)
+                    {formatarData(pedido.criadoEm)} · tem{" "}
+                    {plural(pedido.disponiveis, "disponível", "disponíveis")}
                     {pedido.observacao ? ` · "${pedido.observacao}"` : ""}
                   </p>
                 </div>
@@ -517,7 +525,7 @@ function AdesivosAdministracao() {
                   <span className="block text-xs text-muted-foreground">
                     Nº {pedido.id} ·{" "}
                     {pedido.status === "entregue"
-                      ? `${pedido.quantidadeEntregue} entregue(s) em ${formatarData(pedido.entregueEm)}`
+                      ? `${plural(pedido.quantidadeEntregue ?? 0, "entregue", "entregues")} em ${formatarData(pedido.entregueEm)}`
                       : `recusado: ${pedido.observacao ?? ""}`}
                   </span>
                 </span>
@@ -630,7 +638,8 @@ function FolhaAdesivos({
             Folha de adesivos · pedido nº {folha.pedidoId}
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {folha.codigos.length} adesivo(s) para {folha.morador} (bloco{" "}
+            {plural(folha.codigos.length, "adesivo", "adesivos")} para {folha.morador}{" "}
+            (bloco{" "}
             {folha.bloco}, apto {folha.apartamento}). Os adesivos levam só o QR
             e o código.
           </p>

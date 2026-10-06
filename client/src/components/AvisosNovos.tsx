@@ -32,16 +32,9 @@ export default function AvisosNovos({ papel }: { papel: EcoRole }) {
     const dados = novas.data;
     if (!dados) return;
     if (primeira.current) {
-      // Ao entrar, um aviso só com o total de não lidas (não um pop-up para cada notificação antiga).
+      // Ao entrar, nenhum aviso das notificações antigas: o número no sininho já mostra quantas estão sem ler
+      // (o aviso flutuante cobria o conteúdo no celular a cada página aberta).
       primeira.current = false;
-      const total = dados.itens.length;
-      if (total)
-        toast(
-          total === 1
-            ? "Você tem 1 notificação não lida."
-            : `Você tem ${total >= 5 ? "5 ou mais" : total} notificações não lidas.`,
-          { action: { label: "Ver", onClick: () => navegar("/notificacoes") } }
-        );
     } else {
       for (const item of [...dados.itens].reverse()) {
         const destino = destinoDaNotificacao(item, papel);
