@@ -16,23 +16,43 @@ export const FATOR_ANOMALIA_PESO = 3;
 export class LimiteAntifraudeExcedidoError extends Error {}
 
 /** Impede que quem confirma a coleta seja a mesma pessoa que o morador beneficiado pelos pontos. */
-export function verificarSegregacaoDeFuncao(usuarioResponsavelId: number, usuarioMoradorBeneficiadoId: number | null | undefined) {
-  if (usuarioMoradorBeneficiadoId !== null && usuarioMoradorBeneficiadoId !== undefined && usuarioResponsavelId === usuarioMoradorBeneficiadoId) {
-    throw new LimiteAntifraudeExcedidoError("Quem confirma o descarte não pode ser o próprio morador beneficiado pelos pontos.");
+export function verificarSegregacaoDeFuncao(
+  usuarioResponsavelId: number,
+  usuarioMoradorBeneficiadoId: number | null | undefined
+) {
+  if (
+    usuarioMoradorBeneficiadoId !== null &&
+    usuarioMoradorBeneficiadoId !== undefined &&
+    usuarioResponsavelId === usuarioMoradorBeneficiadoId
+  ) {
+    throw new LimiteAntifraudeExcedidoError(
+      "Quem confirma o descarte não pode ser o próprio morador beneficiado pelos pontos."
+    );
   }
 }
 
 /** Impede um único lançamento de peso irrealista para uma coleta residencial. */
-export function verificarLimitePorColeta(pesoGramas: number, limite = LIMITE_PESO_POR_COLETA_GRAMAS) {
+export function verificarLimitePorColeta(
+  pesoGramas: number,
+  limite = LIMITE_PESO_POR_COLETA_GRAMAS
+) {
   if (pesoGramas > limite) {
-    throw new LimiteAntifraudeExcedidoError(`O peso informado (${(pesoGramas / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg) excede o limite plausível por descarte (${(limite / 1000).toFixed(0)} kg). Revise o lançamento ou divida em descartes separados.`);
+    throw new LimiteAntifraudeExcedidoError(
+      `O peso informado (${(pesoGramas / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg) excede o limite plausível por descarte (${(limite / 1000).toFixed(0)} kg). Revise o lançamento ou divida em descartes separados.`
+    );
   }
 }
 
 /** Impede que um morador acumule peso concluído acima do limite diário, somando lançamentos do mesmo dia. */
-export function verificarLimiteDiarioMorador(pesoJaConcluidoHojeGramas: number, novoPesoGramas: number, limite = LIMITE_PESO_DIARIO_MORADOR_GRAMAS) {
+export function verificarLimiteDiarioMorador(
+  pesoJaConcluidoHojeGramas: number,
+  novoPesoGramas: number,
+  limite = LIMITE_PESO_DIARIO_MORADOR_GRAMAS
+) {
   if (pesoJaConcluidoHojeGramas + novoPesoGramas > limite) {
-    throw new LimiteAntifraudeExcedidoError(`Este lançamento ultrapassaria o limite diário de ${(limite / 1000).toFixed(0)} kg por morador. Ajuste o peso ou aguarde o próximo dia.`);
+    throw new LimiteAntifraudeExcedidoError(
+      `Este lançamento ultrapassaria o limite diário de ${(limite / 1000).toFixed(0)} kg por morador. Ajuste o peso ou aguarde o próximo dia.`
+    );
   }
 }
 
@@ -40,14 +60,26 @@ export function verificarLimiteDiarioMorador(pesoJaConcluidoHojeGramas: number, 
  * Peso que conta nos totais (painel, relatórios, metas, pódio e certificados): um peso suspeito só entra depois de aprovado
  * pelo segundo administrador, e um peso rejeitado nunca entra. Mantém `null` quando a coleta não tem peso.
  */
-export function pesoConfirmadoGramas(registro: { pesoGramas: number | null; pendenteAprovacaoPeso: boolean; aprovacaoPesoStatus: string | null }) {
+export function pesoConfirmadoGramas(registro: {
+  pesoGramas: number | null;
+  pendenteAprovacaoPeso: boolean;
+  aprovacaoPesoStatus: string | null;
+}) {
   if (registro.pesoGramas === null) return null;
-  if (registro.pendenteAprovacaoPeso || registro.aprovacaoPesoStatus === "rejeitado") return 0;
+  if (
+    registro.pendenteAprovacaoPeso ||
+    registro.aprovacaoPesoStatus === "rejeitado"
+  )
+    return 0;
   return registro.pesoGramas;
 }
 
 /** Sinalização suave (não bloqueia): aponta lançamentos muito acima do padrão histórico do morador para revisão administrativa. */
-export function ehPesoAnomalo(novoPesoGramas: number, mediaHistoricaGramas: number, fator = FATOR_ANOMALIA_PESO) {
+export function ehPesoAnomalo(
+  novoPesoGramas: number,
+  mediaHistoricaGramas: number,
+  fator = FATOR_ANOMALIA_PESO
+) {
   if (mediaHistoricaGramas <= 0) return false;
   return novoPesoGramas > mediaHistoricaGramas * fator;
 }

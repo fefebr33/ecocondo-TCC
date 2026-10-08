@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 type PersonRole = "administrador" | "morador";
 const blank = {
@@ -174,8 +175,12 @@ export default function People() {
         {residentsWithoutEmail.length > 0 && (
           <div className="mt-5 rounded-2xl border border-[#f3dca3] bg-[#fff9e8] p-4 text-sm text-[#7b5811]">
             <p className="font-semibold">
-              {residentsWithoutEmail.length} morador(es) precisa(m) de e-mail
-              para ter acesso.
+              {plural(
+                residentsWithoutEmail.length,
+                "morador precisa",
+                "moradores precisam"
+              )}{" "}
+              de e-mail para ter acesso.
             </p>
             <p className="mt-1 text-xs leading-5">
               Edite o cadastro em Moradores e informe o e-mail. Assim, a pessoa

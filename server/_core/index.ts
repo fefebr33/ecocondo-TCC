@@ -4,6 +4,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerLoginRoute } from "./login";
+import { registrarCabecalhosDeSeguranca } from "./seguranca";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../rotas";
 import { getDb, prepararBanco, urlDoBanco } from "../db";
@@ -12,14 +13,20 @@ import { lembrarAuditoriasParadas } from "../lembretesAuditoria";
 import { processarCampanhas } from "../campanhas";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { runAnnualReport, sendAnnualReportCheck } from "../scheduled/annualReport";
+import {
+  runAnnualReport,
+  sendAnnualReportCheck,
+} from "../scheduled/annualReport";
 import { notificarFalhaOperacional } from "../notificacoes";
 
 /** Registra a falha no log do servidor e avisa os administradores (notificação de falha operacional). */
 function falhaDaRotina(rotina: string) {
   return (error: unknown) => {
     console.error(`[${rotina}] falha na verificação:`, error);
-    return notificarFalhaOperacional(`Falha na rotina: ${rotina}`, `A rotina automática "${rotina}" falhou: ${error instanceof Error ? error.message : String(error)}. Ela roda de novo na próxima hora; se o aviso se repetir, confira o servidor e o banco de dados.`);
+    return notificarFalhaOperacional(
+      `Falha na rotina: ${rotina}`,
+      `A rotina automática "${rotina}" falhou: ${error instanceof Error ? error.message : String(error)}. Ela roda de novo na próxima hora; se o aviso se repetir, confira o servidor e o banco de dados.`
+    );
   };
 }
 
@@ -52,7 +59,9 @@ async function conectarBanco() {
   } catch (error) {
     const endereco = new URL(urlDoBanco());
     endereco.password = endereco.password ? "****" : "";
-    console.error(`[Banco de dados] Não foi possível conectar ao MySQL em ${endereco.toString()}. Confira se o MySQL está rodando e o DATABASE_URL do arquivo .env (veja o README).`);
+    console.error(
+      `[Banco de dados] Não foi possível conectar ao MySQL em ${endereco.toString()}. Confira se o MySQL está rodando e o DATABASE_URL do arquivo .env (veja o README).`
+    );
     throw error;
   }
 }
@@ -60,13 +69,23 @@ async function conectarBanco() {
 async function startServer() {
   await conectarBanco();
   const app = express();
+  // Atrás do proxy do Render ou do Codespaces: confia só no último salto, para req.ip ser o endereço real de quem acessa
+  // (usado no bloqueio de senhas erradas por origem). Sem proxy, não confia no cabeçalho (que o próprio visitante poderia
+  // inventar para fugir do bloqueio). TRUST_PROXY=1 liga e TRUST_PROXY=0 desliga em outros servidores.
+  const atrasDeProxy = process.env.TRUST_PROXY
+    ? process.env.TRUST_PROXY === "1"
+    : Boolean(process.env.RENDER || process.env.CODESPACES);
+  app.set("trust proxy", atrasDeProxy ? 1 : false);
   const server = createServer(app);
   // Fotos chegam em base64 dentro do JSON (até ~5,5 MB validados nas rotas); o limite fica logo acima disso.
+  registrarCabecalhosDeSeguranca(app);
   app.use(express.json({ limit: "8mb" }));
   app.use(express.urlencoded({ limit: "1mb", extended: true }));
   registerStorageProxy(app);
   registerLoginRoute(app);
-  app.get("/api/health", (_req, res) => res.json({ ok: true, timestamp: Date.now() }));
+  app.get("/api/health", (_req, res) =>
+    res.json({ ok: true, timestamp: Date.now() })
+  );
   app.post("/api/scheduled/annual-report", sendAnnualReportCheck);
   // tRPC API
   app.use(
@@ -113,7 +132,7 @@ async function startServer() {
   }, HOUR_MS);
 }
 
-startServer().catch((error) => {
+startServer().catch(error => {
   console.error(error);
   process.exit(1);
 });

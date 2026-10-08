@@ -24,7 +24,9 @@ export function lerCertificado(valor: string) {
 /** SSL opcional, exigido pela maioria dos serviços de MySQL na nuvem; DATABASE_SSL_CA traz o certificado do provedor, quando ele fornece um. */
 function opcoesSsl() {
   if (process.env.DATABASE_SSL !== "true") return {};
-  const ca = process.env.DATABASE_SSL_CA ? lerCertificado(process.env.DATABASE_SSL_CA) : undefined;
+  const ca = process.env.DATABASE_SSL_CA
+    ? lerCertificado(process.env.DATABASE_SSL_CA)
+    : undefined;
   return { ssl: { rejectUnauthorized: true, ...(ca ? { ca } : {}) } };
 }
 
@@ -45,8 +47,11 @@ let _db: BancoDados | null = null;
 // Banco MySQL acessado por um pool de conexões; cada conexão nova grava e lê datas em UTC.
 export async function getDb() {
   if (!_db) {
-    _pool = mysql.createPool({ ...opcoesConexao(urlDoBanco()), connectionLimit: 10 });
-    _pool.on("connection", (conexao) => {
+    _pool = mysql.createPool({
+      ...opcoesConexao(urlDoBanco()),
+      connectionLimit: 10,
+    });
+    _pool.on("connection", conexao => {
       conexao.query("SET time_zone = '+00:00'");
     });
     _db = criarDrizzle(_pool);
@@ -72,7 +77,10 @@ export async function abrirConexao(url = urlDoBanco()) {
 export function separarNomeDoBanco(url: string) {
   const endereco = new URL(url);
   const nome = decodeURIComponent(endereco.pathname.replace(/^\//, ""));
-  if (!/^[A-Za-z0-9_]+$/.test(nome)) throw new Error(`Nome de banco inválido em DATABASE_URL: "${nome}". Use só letras, números e _.`);
+  if (!/^[A-Za-z0-9_]+$/.test(nome))
+    throw new Error(
+      `Nome de banco inválido em DATABASE_URL: "${nome}". Use só letras, números e _.`
+    );
   endereco.pathname = "/";
   return { nome, urlServidor: endereco.toString() };
 }
@@ -82,8 +90,11 @@ export async function prepararBanco(opcoes: { recriar?: boolean } = {}) {
   const { nome, urlServidor } = separarNomeDoBanco(urlDoBanco());
   const servidor = await abrirConexao(urlServidor);
   try {
-    if (opcoes.recriar) await servidor.query(`DROP DATABASE IF EXISTS \`${nome}\``);
-    await servidor.query(`CREATE DATABASE IF NOT EXISTS \`${nome}\` CHARACTER SET utf8mb4`);
+    if (opcoes.recriar)
+      await servidor.query(`DROP DATABASE IF EXISTS \`${nome}\``);
+    await servidor.query(
+      `CREATE DATABASE IF NOT EXISTS \`${nome}\` CHARACTER SET utf8mb4`
+    );
   } finally {
     await servidor.end();
   }
@@ -147,9 +158,16 @@ export async function upsertUser(usuario: NovoUsuario): Promise<void> {
       conjuntoAtualizacao.ultimoAcesso = new Date();
     }
 
-    const existente = await db.select().from(usuarios).where(eq(usuarios.idExterno, valores.idExterno)).limit(1);
+    const existente = await db
+      .select()
+      .from(usuarios)
+      .where(eq(usuarios.idExterno, valores.idExterno))
+      .limit(1);
     if (existente[0]) {
-      await db.update(usuarios).set(conjuntoAtualizacao).where(eq(usuarios.idExterno, valores.idExterno));
+      await db
+        .update(usuarios)
+        .set(conjuntoAtualizacao)
+        .where(eq(usuarios.idExterno, valores.idExterno));
     } else {
       await db.insert(usuarios).values(valores);
     }
@@ -161,7 +179,11 @@ export async function upsertUser(usuario: NovoUsuario): Promise<void> {
 
 export async function getUserByOpenId(idExterno: string) {
   const db = await getDb();
-  const resultado = await db.select().from(usuarios).where(eq(usuarios.idExterno, idExterno)).limit(1);
+  const resultado = await db
+    .select()
+    .from(usuarios)
+    .where(eq(usuarios.idExterno, idExterno))
+    .limit(1);
 
   return resultado.length > 0 ? resultado[0] : undefined;
 }

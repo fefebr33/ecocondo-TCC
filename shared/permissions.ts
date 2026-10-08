@@ -26,5 +26,7 @@ export function canAccessRoute(role: EcoRole, route: string) {
 }
 
 export function allowedRoutesFor(role: EcoRole) {
-  return Object.keys(routePermissions).filter((route) => canAccessRoute(role, route));
+  return Object.keys(routePermissions).filter(route =>
+    canAccessRoute(role, route)
+  );
 }

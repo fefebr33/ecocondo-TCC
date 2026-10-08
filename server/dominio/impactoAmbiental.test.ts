@@ -17,6 +17,10 @@ describe("calcularEquivalenciasAmbientais", () => {
   });
 
   it("retorna zero para zero quilos", () => {
-    expect(calcularEquivalenciasAmbientais(0)).toEqual({ arvoresPoupadas: 0, litrosAguaPoupados: 0, co2EvitadoKg: 0 });
+    expect(calcularEquivalenciasAmbientais(0)).toEqual({
+      arvoresPoupadas: 0,
+      litrosAguaPoupados: 0,
+      co2EvitadoKg: 0,
+    });
   });
 });

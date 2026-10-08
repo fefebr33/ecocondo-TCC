@@ -43,6 +43,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { toast } from "sonner";
+import { palavra, plural } from "@shared/plural";
+
+/** Quantos descartes a lista mostra de cada vez. */
+const DESCARTES_POR_PAGINA = 30;
 
 type Filtros = {
   search: string;
@@ -100,6 +104,10 @@ export default function Descartes() {
     isLoading,
     error,
   } = trpc.coletas.listar.useQuery(entrada);
+  // A lista mostra 30 descartes por vez ("Mostrar mais"), em vez de centenas numa página só; volta a 30 ao mudar os filtros.
+  const [limite, setLimite] = useState(DESCARTES_POR_PAGINA);
+  useEffect(() => setLimite(DESCARTES_POR_PAGINA), [entrada]);
+  const visiveis = registros?.slice(0, limite) ?? [];
   const blocos = trpc.relatorios.blocos.useQuery(undefined, {
     enabled: ehAdmin,
   });
@@ -136,7 +144,7 @@ export default function Descartes() {
     onSuccess: resultado => {
       atualizarTudo();
       toast.success(
-        `Descarte aprovado; ${resultado.pointsAwarded} ponto(s) creditado(s).`
+        `Descarte aprovado; ${plural(resultado.pointsAwarded, "ponto creditado", "pontos creditados")}.`
       );
     },
     onError: issue => toast.error(issue.message),
@@ -145,7 +153,7 @@ export default function Descartes() {
     onSuccess: resultado => {
       atualizarTudo();
       toast.success(
-        `${resultado.aprovados} descarte(s) aprovado(s); ${resultado.pontos} ponto(s) creditado(s).${resultado.recusados.length ? ` ${resultado.recusados.length} não puderam ser aprovados.` : ""}`
+        `${plural(resultado.aprovados, "descarte aprovado", "descartes aprovados")}; ${plural(resultado.pontos, "ponto creditado", "pontos creditados")}.${resultado.recusados.length ? ` ${plural(resultado.recusados.length, "não pôde ser aprovado", "não puderam ser aprovados")}.` : ""}`
       );
     },
     onError: issue => toast.error(issue.message),
@@ -222,6 +230,10 @@ export default function Descartes() {
             ) : (
               lotesPendentes.map(lote => {
                 const primeiro = lote[0];
+                const pontosPrevistos = lote.reduce(
+                  (soma, item) => soma + item.pontosCalculados,
+                  0
+                );
                 return (
                   <article
                     key={primeiro.lote ?? primeiro.id}
@@ -238,14 +250,14 @@ export default function Descartes() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {formatarDataHora(primeiro.concluidaEm)} ·{" "}
-                          {primeiro.origin} · {lote.length} tipo(s) ·{" "}
-                          {formatarPontos(
-                            lote.reduce(
-                              (soma, item) => soma + item.pontosCalculados,
-                              0
-                            )
-                          )}{" "}
-                          ponto(s) previstos
+                          {primeiro.origin} ·{" "}
+                          {plural(lote.length, "tipo", "tipos")} ·{" "}
+                          {formatarPontos(pontosPrevistos)}{" "}
+                          {palavra(
+                            pontosPrevistos,
+                            "ponto previsto",
+                            "pontos previstos"
+                          )}
                         </p>
                       </div>
                       <Button
@@ -301,8 +313,12 @@ export default function Descartes() {
                             </p>
                           )}
                           <p className="mt-2 text-xs text-muted-foreground">
-                            {formatarPontos(item.pontosCalculados)} ponto(s)
-                            previsto(s)
+                            {formatarPontos(item.pontosCalculados)}{" "}
+                            {palavra(
+                              item.pontosCalculados,
+                              "ponto previsto",
+                              "pontos previstos"
+                            )}
                           </p>
                           {item.observacoes && (
                             <p className="mt-1 flex gap-1 text-xs text-[#7a4d0a]">
@@ -441,7 +457,7 @@ export default function Descartes() {
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {registros
-                ? `${registros.length} descarte(s) com os filtros atuais.`
+                ? `${plural(registros.length, "descarte", "descartes")} com os filtros atuais.`
                 : "Filtre por tipo, situação e período."}
             </p>
           </div>
@@ -578,7 +594,7 @@ export default function Descartes() {
         ) : (
           <>
             <ul className="mt-4 divide-y divide-[#edf2ef] md:hidden">
-              {registros.map(registro => (
+              {visiveis.map(registro => (
                 <li key={registro.id}>
                   <button
                     type="button"
@@ -618,10 +634,10 @@ export default function Descartes() {
                       </Badge>
                       <span className="text-xs text-muted-foreground">
                         {registro.situacao === "aprovado"
-                          ? `${registro.pontosConcedidos} pts`
+                          ? plural(registro.pontosConcedidos, "pt", "pts")
                           : registro.situacao === "pendente" ||
                               registro.situacao === "auditoria"
-                            ? `${formatarPontos(registro.pontosPrevistos)} previsto(s)`
+                            ? `${formatarPontos(registro.pontosPrevistos)} ${palavra(registro.pontosPrevistos, "previsto", "previstos")}`
                             : "0 pts"}
                       </span>
                     </span>
@@ -643,7 +659,7 @@ export default function Descartes() {
                   </tr>
                 </thead>
                 <tbody>
-                  {registros.map(registro => (
+                  {visiveis.map(registro => (
                     <tr
                       key={registro.id}
                       className="border-b border-[#edf2ef] last:border-0"
@@ -688,7 +704,11 @@ export default function Descartes() {
                           registro.situacao === "auditoria" ? (
                           <span className="text-muted-foreground">
                             {formatarPontos(registro.pontosPrevistos)}{" "}
-                            previsto(s)
+                            {palavra(
+                              registro.pontosPrevistos,
+                              "previsto",
+                              "previstos"
+                            )}
                           </span>
                         ) : (
                           "0"
@@ -721,6 +741,27 @@ export default function Descartes() {
                 </tbody>
               </table>
             </div>
+            {registros.length > visiveis.length && (
+              <div className="mt-4 flex flex-col items-center gap-2 text-center">
+                <p className="text-xs text-muted-foreground">
+                  Mostrando {visiveis.length} de {registros.length}. Use os
+                  filtros para achar um descarte mais rápido.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setLimite(atual => atual + DESCARTES_POR_PAGINA)
+                  }
+                  className="h-10 rounded-xl"
+                >
+                  Mostrar mais{" "}
+                  {Math.min(
+                    DESCARTES_POR_PAGINA,
+                    registros.length - visiveis.length
+                  )}
+                </Button>
+              </div>
+            )}
           </>
         )}
       </section>
@@ -866,10 +907,14 @@ function DetalheDescarte({
                       <p>
                         <b>Pontos:</b>{" "}
                         {item.situacao === "aprovado"
-                          ? `${item.pontosConcedidos} creditado(s)`
+                          ? plural(
+                              item.pontosConcedidos,
+                              "creditado",
+                              "creditados"
+                            )
                           : item.situacao === "pendente" ||
                               item.situacao === "auditoria"
-                            ? `${formatarPontos(item.pontosPrevistos)} previsto(s), entram depois da aprovação`
+                            ? `${formatarPontos(item.pontosPrevistos)} ${palavra(item.pontosPrevistos, "previsto, entra", "previstos, entram")} depois da aprovação`
                             : "nenhum"}
                       </p>
                       <p>
@@ -926,14 +971,19 @@ function DetalheDescarte({
                         </span>
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Viu: {item.analiseIa.tipoIdentificado ? rotuloResiduo[item.analiseIa.tipoIdentificado] : "tipo não identificado"}
-                        {" · "}saco {item.analiseIa.corSacoIdentificada ?? "?"} (esperado{" "}
-                        {item.analiseIa.corSacoEsperada ?? "?"})
+                        Viu:{" "}
+                        {item.analiseIa.tipoIdentificado
+                          ? rotuloResiduo[item.analiseIa.tipoIdentificado]
+                          : "tipo não identificado"}
+                        {" · "}saco {item.analiseIa.corSacoIdentificada ?? "?"}{" "}
+                        (esperado {item.analiseIa.corSacoEsperada ?? "?"})
                         {" · "}visor{" "}
                         {item.analiseIa.pesoLidoGramas === null
                           ? "ilegível"
                           : formatarKg(item.analiseIa.pesoLidoGramas)}
-                        {item.analiseIa.descricao ? ` · ${item.analiseIa.descricao}` : ""}
+                        {item.analiseIa.descricao
+                          ? ` · ${item.analiseIa.descricao}`
+                          : ""}
                       </p>
                       {item.analiseIa.motivos.length > 0 && (
                         <ul className="mt-1 list-disc pl-5 text-xs text-[#7a4d0a]">
@@ -970,7 +1020,8 @@ function DetalheDescarte({
                         {item.historico.map(evento => (
                           <li key={evento.id}>
                             <span className="text-muted-foreground">
-                              {formatarDataHora(evento.criadoEm)} · {evento.autor}
+                              {formatarDataHora(evento.criadoEm)} ·{" "}
+                              {evento.autor}
                             </span>
                             <br />
                             {evento.resumo}
@@ -1066,7 +1117,7 @@ function DialogoReprovar({
       setMotivo("");
       toast.success(
         resultado.pointsReversed
-          ? `Descarte reprovado; ${resultado.pointsReversed} ponto(s) estornado(s).`
+          ? `Descarte reprovado; ${plural(resultado.pointsReversed, "ponto estornado", "pontos estornados")}.`
           : "Descarte reprovado. O morador recebeu o motivo."
       );
     },
@@ -1088,7 +1139,7 @@ function DialogoReprovar({
           <DialogDescription>
             {alvo?.resumo}.{" "}
             {alvo?.situacao === "aprovado"
-              ? `Os ${formatarPontos(alvo.pontos)} ponto(s) já lançados serão estornados.`
+              ? `${formatarPontos(alvo.pontos)} ${palavra(alvo.pontos, "ponto já lançado será estornado", "pontos já lançados serão estornados")}.`
               : "Os pontos previstos não serão creditados."}{" "}
             O morador recebe o motivo.
           </DialogDescription>
@@ -1244,7 +1295,7 @@ function DialogoConcluirAuditoria({
   const retirada = Number(penalidade) || 0;
   const pontosDasMedidas = escolhidas.reduce(
     (soma, modelo) =>
-      soma + (modelo.tipo === "perda_pontos" ? modelo.pontos ?? 0 : 0),
+      soma + (modelo.tipo === "perda_pontos" ? (modelo.pontos ?? 0) : 0),
     0
   );
   const consequencias =
@@ -1256,7 +1307,7 @@ function DialogoConcluirAuditoria({
       : [
           "O descarte é reprovado e os pontos dele saem do saldo.",
           pontosDasMedidas + retirada > 0
-            ? `Mais ${pontosDasMedidas + retirada} ponto(s) retirados do saldo e da pontuação do pódio.`
+            ? `Mais ${plural(pontosDasMedidas + retirada, "ponto retirado", "pontos retirados")} do saldo e da pontuação do pódio.`
             : null,
           ...escolhidas
             .filter(modelo => modelo.tipo !== "perda_pontos")
@@ -1336,7 +1387,7 @@ function DialogoConcluirAuditoria({
               />
               <span className="text-right font-normal text-muted-foreground">
                 {parecer.trim().length < 10
-                  ? `Faltam ${10 - parecer.trim().length} letra(s)`
+                  ? `${palavra(10 - parecer.trim().length, "Falta", "Faltam")} ${plural(10 - parecer.trim().length, "letra", "letras")}`
                   : `${parecer.length}/800`}
               </span>
             </label>
@@ -1444,7 +1495,7 @@ function DialogoReverter({
       toast.success(
         resultado.destino === "auditoria"
           ? "Descarte enviado para auditoria."
-          : `Aprovação revertida${resultado.pointsReversed ? `; ${resultado.pointsReversed} ponto(s) saíram do saldo` : ""}. O descarte voltou para a fila de aprovação.`
+          : `Aprovação revertida${resultado.pointsReversed ? `; ${plural(resultado.pointsReversed, "ponto saiu", "pontos saíram")} do saldo` : ""}. O descarte voltou para a fila de aprovação.`
       );
     },
     onError: issue => toast.error(issue.message),

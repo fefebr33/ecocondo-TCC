@@ -22,6 +22,7 @@ import {
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 const formatarData = (valor: Date | string | null | undefined) =>
   valor
@@ -160,10 +161,20 @@ export default function LeituraQr() {
                   · entregue em {formatarData(dados.entregueEm)}
                 </p>
                 <p className="text-muted-foreground">
-                  Kit: {dados.morador.adesivos.disponivel} disponível(is),{" "}
-                  {dados.morador.adesivos.utilizado} usado(s)
+                  Kit:{" "}
+                  {plural(
+                    dados.morador.adesivos.disponivel,
+                    "disponível",
+                    "disponíveis"
+                  )}
+                  ,{" "}
+                  {plural(dados.morador.adesivos.utilizado, "usado", "usados")}
                 </p>
-                <Button asChild variant="outline" className="mt-2 w-fit rounded-xl">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="mt-2 w-fit rounded-xl"
+                >
                   <Link href={`/moradores/painel?id=${dados.morador.id}`}>
                     Abrir o relatório do morador
                   </Link>
@@ -207,7 +218,8 @@ export default function LeituraQr() {
                 <p>
                   {formatarKg(dados.descarte.pesoGramas)} ·{" "}
                   {formatarData(dados.descarte.data)} · estação{" "}
-                  {dados.descarte.estacao ?? "—"} ({dados.descarte.local ?? "—"})
+                  {dados.descarte.estacao ?? "—"} ({dados.descarte.local ?? "—"}
+                  )
                 </p>
                 {dados.descarte.ia && (
                   <p className="flex items-start gap-2 rounded-xl bg-[#f6faf7] p-3">
@@ -229,7 +241,10 @@ export default function LeituraQr() {
                   />
                 )}
                 <div className="mt-1 flex flex-wrap gap-2">
-                  <Button asChild className="rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]">
+                  <Button
+                    asChild
+                    className="rounded-xl bg-[#0f7350] text-white hover:bg-[#0a6243]"
+                  >
                     <Link href={`/descartes?id=${dados.descarte.id}`}>
                       Abrir o descarte (aprovar, reverter, auditoria)
                     </Link>
@@ -244,8 +259,12 @@ export default function LeituraQr() {
                 {dados.ocorrencias.length > 0 && (
                   <p className="flex items-center gap-2 text-xs text-[#7a4d0a]">
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    {dados.ocorrencias.length} ocorrência(s) ligada(s) a este
-                    descarte.
+                    {plural(
+                      dados.ocorrencias.length,
+                      "ocorrência ligada",
+                      "ocorrências ligadas"
+                    )}{" "}
+                    a este descarte.
                   </p>
                 )}
               </div>
@@ -261,7 +280,10 @@ export default function LeituraQr() {
                 </p>
                 <ul className="mt-1 grid gap-1 text-sm">
                   {dados.recentes.map(registro => (
-                    <li key={registro.id} className="flex justify-between gap-2">
+                    <li
+                      key={registro.id}
+                      className="flex justify-between gap-2"
+                    >
                       <Link
                         href={`/descartes?id=${registro.id}`}
                         className="underline"

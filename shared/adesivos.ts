@@ -7,7 +7,8 @@
 export const ALFABETO_ADESIVO = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 
 /** Formato do código: EC- + 4 + - + 4 caracteres. */
-export const PADRAO_CODIGO_ADESIVO = /EC-?([2-9A-HJKMNP-Z]{4})-?([2-9A-HJKMNP-Z]{4})/i;
+export const PADRAO_CODIGO_ADESIVO =
+  /EC-?([2-9A-HJKMNP-Z]{4})-?([2-9A-HJKMNP-Z]{4})/i;
 
 /** Quantos adesivos disponíveis o morador pode ter antes de receber o aviso de que estão acabando. */
 export const LIMITE_ADESIVOS_ACABANDO = 3;
@@ -20,7 +21,10 @@ export const MAXIMO_ADESIVOS_POR_PEDIDO = 60;
  */
 export function normalizarCodigoAdesivo(texto: string | null | undefined) {
   if (!texto) return null;
-  const encontrado = texto.toUpperCase().replace(/\s+/g, "").match(PADRAO_CODIGO_ADESIVO);
+  const encontrado = texto
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .match(PADRAO_CODIGO_ADESIVO);
   return encontrado ? `EC-${encontrado[1]}-${encontrado[2]}` : null;
 }
 

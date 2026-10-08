@@ -8,7 +8,9 @@ import {
 
 describe("verificarSegregacaoDeFuncao", () => {
   it("bloqueia quando o responsável pela confirmação é o próprio morador beneficiado", () => {
-    expect(() => verificarSegregacaoDeFuncao(5, 5)).toThrow("morador beneficiado");
+    expect(() => verificarSegregacaoDeFuncao(5, 5)).toThrow(
+      "morador beneficiado"
+    );
   });
 
   it("permite quando são pessoas diferentes ou não há morador vinculado", () => {
@@ -19,7 +21,9 @@ describe("verificarSegregacaoDeFuncao", () => {
 
 describe("verificarLimitePorColeta", () => {
   it("bloqueia peso acima do limite plausível por lançamento", () => {
-    expect(() => verificarLimitePorColeta(200_000, 120_000)).toThrow("excede o limite plausível");
+    expect(() => verificarLimitePorColeta(200_000, 120_000)).toThrow(
+      "excede o limite plausível"
+    );
   });
 
   it("permite peso dentro do limite", () => {
@@ -29,11 +33,15 @@ describe("verificarLimitePorColeta", () => {
 
 describe("verificarLimiteDiarioMorador", () => {
   it("bloqueia quando a soma do dia ultrapassaria o limite", () => {
-    expect(() => verificarLimiteDiarioMorador(140_000, 20_000, 150_000)).toThrow("limite diário");
+    expect(() =>
+      verificarLimiteDiarioMorador(140_000, 20_000, 150_000)
+    ).toThrow("limite diário");
   });
 
   it("permite quando a soma do dia permanece dentro do limite", () => {
-    expect(() => verificarLimiteDiarioMorador(50_000, 20_000, 150_000)).not.toThrow();
+    expect(() =>
+      verificarLimiteDiarioMorador(50_000, 20_000, 150_000)
+    ).not.toThrow();
   });
 });
 

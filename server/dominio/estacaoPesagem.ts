@@ -33,7 +33,12 @@ export const JANELA_TENTATIVAS_MINUTOS = 15;
 /** A partir de tantos erros seguidos, o administrador recebe um aviso de falha operacional (uma vez). */
 export const ERROS_PARA_AVISAR_ADMINISTRADOR = 10;
 
-type RegistroAnterior = { pesoGramas: number | null; concluidaEm: Date | null; lote?: string | null; id?: number };
+type RegistroAnterior = {
+  pesoGramas: number | null;
+  concluidaEm: Date | null;
+  lote?: string | null;
+  id?: number;
+};
 
 export type ItemDescarte = {
   rotulo: string;
@@ -43,49 +48,94 @@ export type ItemDescarte = {
   mediaHistoricaGramas: number;
 };
 
-const kg = (gramas: number) => (gramas / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+const kg = (gramas: number) =>
+  (gramas / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
 /**
  * Confere um descarte (um ou vários tipos pesados com o mesmo código). Lança LimiteAntifraudeExcedidoError quando um
  * limite rígido é violado. Todo descarte vai para a aprovação do administrador; os alertas devolvidos (por item)
  * mostram o que merece mais atenção na conferência da foto e do peso.
  */
-export function avaliarDescarteEstacao(dados: { itens: ItemDescarte[]; registrosHoje: RegistroAnterior[]; agora: Date; modoDemonstracao?: boolean }) {
+export function avaliarDescarteEstacao(dados: {
+  itens: ItemDescarte[];
+  registrosHoje: RegistroAnterior[];
+  agora: Date;
+  modoDemonstracao?: boolean;
+}) {
   const { itens, agora } = dados;
   // Na estação em modo demonstração (banca, testes) não há espera entre um descarte e outro nem limite do dia:
   // dá para registrar vários seguidos com o mesmo morador. Fora dela, as regras continuam valendo.
   const registrosHoje = dados.modoDemonstracao ? [] : dados.registrosHoje;
-  if (!itens.length) throw new LimiteAntifraudeExcedidoError("Escolha pelo menos um tipo de descarte.");
-  if (itens.length > MAXIMO_ITENS_POR_DESCARTE) throw new LimiteAntifraudeExcedidoError(`Registre no máximo ${MAXIMO_ITENS_POR_DESCARTE} tipos por descarte.`);
+  if (!itens.length)
+    throw new LimiteAntifraudeExcedidoError(
+      "Escolha pelo menos um tipo de descarte."
+    );
+  if (itens.length > MAXIMO_ITENS_POR_DESCARTE)
+    throw new LimiteAntifraudeExcedidoError(
+      `Registre no máximo ${MAXIMO_ITENS_POR_DESCARTE} tipos por descarte.`
+    );
   for (const item of itens) {
     const minimo = item.pesoMinimoGramas ?? PESO_MINIMO_ESTACAO_GRAMAS;
-    const maximo = item.pesoMaximoGramas ?? LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS;
+    const maximo =
+      item.pesoMaximoGramas ?? LIMITE_PESO_POR_REGISTRO_ESTACAO_GRAMAS;
     if (!Number.isFinite(item.pesoGramas) || item.pesoGramas < minimo) {
-      throw new LimiteAntifraudeExcedidoError(`${item.rotulo}: o peso mínimo por descarte é ${kg(minimo)} kg.`);
+      throw new LimiteAntifraudeExcedidoError(
+        `${item.rotulo}: o peso mínimo por descarte é ${kg(minimo)} kg.`
+      );
     }
     if (item.pesoGramas > maximo) {
-      throw new LimiteAntifraudeExcedidoError(`${item.rotulo}: o peso informado passa do limite de ${kg(maximo)} kg por descarte. Procure a administração para volumes maiores.`);
+      throw new LimiteAntifraudeExcedidoError(
+        `${item.rotulo}: o peso informado passa do limite de ${kg(maximo)} kg por descarte. Procure a administração para volumes maiores.`
+      );
     }
   }
   // Cada ida à estação conta uma vez, mesmo com vários tipos (registros antigos, sem lote, contam um a um).
-  const idasHoje = new Set(registrosHoje.map((registro, indice) => registro.lote ?? `avulso-${registro.id ?? indice}`)).size;
+  const idasHoje = new Set(
+    registrosHoje.map(
+      (registro, indice) => registro.lote ?? `avulso-${registro.id ?? indice}`
+    )
+  ).size;
   if (idasHoje >= LIMITE_REGISTROS_DIARIOS_ESTACAO) {
-    throw new LimiteAntifraudeExcedidoError(`Você já fez ${LIMITE_REGISTROS_DIARIOS_ESTACAO} descartes hoje, o máximo por dia. Tente de novo amanhã.`);
+    throw new LimiteAntifraudeExcedidoError(
+      `Você já fez ${LIMITE_REGISTROS_DIARIOS_ESTACAO} descartes hoje, o máximo por dia. Tente de novo amanhã.`
+    );
   }
-  const pesoHoje = registrosHoje.reduce((soma, registro) => soma + (registro.pesoGramas ?? 0), 0);
+  const pesoHoje = registrosHoje.reduce(
+    (soma, registro) => soma + (registro.pesoGramas ?? 0),
+    0
+  );
   const pesoAgora = itens.reduce((soma, item) => soma + item.pesoGramas, 0);
   if (pesoHoje + pesoAgora > LIMITE_PESO_DIARIO_ESTACAO_GRAMAS) {
-    throw new LimiteAntifraudeExcedidoError(`Este descarte passaria do limite diário de ${LIMITE_PESO_DIARIO_ESTACAO_GRAMAS / 1000} kg por morador.`);
+    throw new LimiteAntifraudeExcedidoError(
+      `Este descarte passaria do limite diário de ${LIMITE_PESO_DIARIO_ESTACAO_GRAMAS / 1000} kg por morador.`
+    );
   }
-  const ultimo = registrosHoje.reduce<Date | null>((maisRecente, registro) => (registro.concluidaEm && (!maisRecente || registro.concluidaEm > maisRecente) ? registro.concluidaEm : maisRecente), null);
-  if (ultimo && agora.getTime() - ultimo.getTime() < INTERVALO_MINIMO_ENTRE_REGISTROS_MINUTOS * 60_000) {
-    throw new LimiteAntifraudeExcedidoError(`Aguarde ${INTERVALO_MINIMO_ENTRE_REGISTROS_MINUTOS} minutos entre um descarte e outro.`);
+  const ultimo = registrosHoje.reduce<Date | null>(
+    (maisRecente, registro) =>
+      registro.concluidaEm &&
+      (!maisRecente || registro.concluidaEm > maisRecente)
+        ? registro.concluidaEm
+        : maisRecente,
+    null
+  );
+  if (
+    ultimo &&
+    agora.getTime() - ultimo.getTime() <
+      INTERVALO_MINIMO_ENTRE_REGISTROS_MINUTOS * 60_000
+  ) {
+    throw new LimiteAntifraudeExcedidoError(
+      `Aguarde ${INTERVALO_MINIMO_ENTRE_REGISTROS_MINUTOS} minutos entre um descarte e outro.`
+    );
   }
   return {
-    alertasPorItem: itens.map((item) => {
+    alertasPorItem: itens.map(item => {
       const alertas: string[] = [];
-      if (item.pesoGramas > PESO_REVISAO_OBRIGATORIA_GRAMAS) alertas.push(`peso acima de ${PESO_REVISAO_OBRIGATORIA_GRAMAS / 1000} kg`);
-      if (ehPesoAnomalo(item.pesoGramas, item.mediaHistoricaGramas)) alertas.push("peso muito acima do histórico do morador");
+      if (item.pesoGramas > PESO_REVISAO_OBRIGATORIA_GRAMAS)
+        alertas.push(
+          `peso acima de ${PESO_REVISAO_OBRIGATORIA_GRAMAS / 1000} kg`
+        );
+      if (ehPesoAnomalo(item.pesoGramas, item.mediaHistoricaGramas))
+        alertas.push("peso muito acima do histórico do morador");
       return alertas;
     }),
   };
@@ -114,12 +164,20 @@ const tentativas = new Map<number, { erros: number; ultimaEm: number }>();
 
 function esperaMs(erros: number) {
   if (erros < LIMITE_TENTATIVAS_CODIGO) return 0;
-  return Math.min(ESPERA_INICIAL_SEGUNDOS * 2 ** (erros - LIMITE_TENTATIVAS_CODIGO), ESPERA_MAXIMA_SEGUNDOS) * 1000;
+  return (
+    Math.min(
+      ESPERA_INICIAL_SEGUNDOS * 2 ** (erros - LIMITE_TENTATIVAS_CODIGO),
+      ESPERA_MAXIMA_SEGUNDOS
+    ) * 1000
+  );
 }
 
 function registroAtual(estacaoId: number, agora: number) {
   const registro = tentativas.get(estacaoId);
-  if (registro && agora - registro.ultimaEm > JANELA_TENTATIVAS_MINUTOS * 60_000) {
+  if (
+    registro &&
+    agora - registro.ultimaEm > JANELA_TENTATIVAS_MINUTOS * 60_000
+  ) {
     tentativas.delete(estacaoId);
     return null;
   }
@@ -133,21 +191,34 @@ export function esperaRestanteMs(estacaoId: number, agora = Date.now()) {
   return Math.max(0, registro.ultimaEm + esperaMs(registro.erros) - agora);
 }
 
-export function verificarBloqueioTentativas(estacaoId: number, agora = Date.now()) {
+export function verificarBloqueioTentativas(
+  estacaoId: number,
+  agora = Date.now()
+) {
   const restante = esperaRestanteMs(estacaoId, agora);
   if (restante > 0) {
-    throw new LimiteAntifraudeExcedidoError(`Muitos códigos errados neste tablet. Espere ${Math.ceil(restante / 1000)} segundos e tente de novo.`);
+    throw new LimiteAntifraudeExcedidoError(
+      `Muitos códigos errados neste tablet. Espere ${Math.ceil(restante / 1000)} segundos e tente de novo.`
+    );
   }
 }
 
 /** Estações com o tablet em espera agora por excesso de códigos errados (alerta no painel do administrador). */
 export function estacoesBloqueadas(agora = Date.now()) {
-  return Array.from(tentativas.keys()).filter((estacaoId) => esperaRestanteMs(estacaoId, agora) > 0);
+  return Array.from(tentativas.keys()).filter(
+    estacaoId => esperaRestanteMs(estacaoId, agora) > 0
+  );
 }
 
 /** Registra um código errado; devolve true quando este erro acabou de atingir o número que avisa o administrador. */
-export function registrarTentativaErrada(estacaoId: number, agora = Date.now()) {
-  const registro = registroAtual(estacaoId, agora) ?? { erros: 0, ultimaEm: agora };
+export function registrarTentativaErrada(
+  estacaoId: number,
+  agora = Date.now()
+) {
+  const registro = registroAtual(estacaoId, agora) ?? {
+    erros: 0,
+    ultimaEm: agora,
+  };
   registro.erros += 1;
   registro.ultimaEm = agora;
   tentativas.set(estacaoId, registro);
@@ -156,4 +227,35 @@ export function registrarTentativaErrada(estacaoId: number, agora = Date.now()) 
 
 export function limparTentativas(estacaoId: number) {
   tentativas.delete(estacaoId);
+}
+
+/**
+ * Conferências de código em andamento por tablet. Sem isso, centenas de pedidos enviados ao mesmo tempo passavam pela
+ * espera antes do primeiro erro ser contado. Só cabem ao mesmo tempo as tentativas que ainda restam antes da espera
+ * (no mínimo uma), então chutar códigos em paralelo não rende mais do que chutar um por vez.
+ */
+const conferenciasEmAndamento = new Map<number, number>();
+
+/** Reserva uma conferência de código no tablet; lança o erro de espera se o tablet estiver em espera ou cheio. Devolve a função que libera a vaga. */
+export function reservarConferenciaCodigo(
+  estacaoId: number,
+  agora = Date.now()
+) {
+  verificarBloqueioTentativas(estacaoId, agora);
+  const erros = registroAtual(estacaoId, agora)?.erros ?? 0;
+  const emAndamento = conferenciasEmAndamento.get(estacaoId) ?? 0;
+  if (emAndamento >= Math.max(1, LIMITE_TENTATIVAS_CODIGO - erros)) {
+    throw new LimiteAntifraudeExcedidoError(
+      "O tablet ainda está conferindo outro código. Espere alguns segundos e tente de novo."
+    );
+  }
+  conferenciasEmAndamento.set(estacaoId, emAndamento + 1);
+  let liberada = false;
+  return () => {
+    if (liberada) return;
+    liberada = true;
+    const restante = (conferenciasEmAndamento.get(estacaoId) ?? 1) - 1;
+    if (restante > 0) conferenciasEmAndamento.set(estacaoId, restante);
+    else conferenciasEmAndamento.delete(estacaoId);
+  };
 }

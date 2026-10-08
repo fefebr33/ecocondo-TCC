@@ -16,6 +16,7 @@ import {
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { useAncora } from "@/hooks/useAncora";
+import { palavra, plural } from "@shared/plural";
 
 const redemptionStatusLabels = {
   solicitado: "Aguardando síndico",
@@ -63,7 +64,7 @@ export default function Engagement() {
     onSuccess: result => {
       refreshPoints();
       toast.success(
-        `Resgate solicitado. Saldo atual: ${result.balance} ponto(s).`
+        `Resgate solicitado. Saldo atual: ${plural(result.balance ?? 0, "ponto", "pontos")}.`
       );
     },
     onError: issue => {
@@ -170,7 +171,9 @@ export default function Engagement() {
                       {resident.position}
                     </b>
                     <span>
-                      <span className={`block text-sm font-semibold ${resident.suspensaoPeriodo ? "text-muted-foreground" : ""}`}>
+                      <span
+                        className={`block text-sm font-semibold ${resident.suspensaoPeriodo ? "text-muted-foreground" : ""}`}
+                      >
                         {resident.nome}
                         {resident.voce ? " (você)" : ""}
                       </span>
@@ -187,7 +190,7 @@ export default function Engagement() {
                   </span>
                   <span className="text-right">
                     <span className="block text-sm font-bold text-[#0f7350]">
-                      {resident.pontos} pts
+                      {plural(resident.pontos, "pt", "pts")}
                     </span>
                     {isAdmin && resident.saldo !== null && (
                       <span className="text-[11px] text-muted-foreground">
@@ -203,6 +206,18 @@ export default function Engagement() {
               O ranking aparece quando os primeiros descartes forem aprovados.
             </p>
           )}
+          {isAdmin && (ranking?.foraPorSuspensao.length ?? 0) > 0 && (
+            <p className="mt-4 rounded-xl bg-[#f6f7f6] p-3 text-xs leading-5 text-muted-foreground">
+              Fora do ranking por suspensão:{" "}
+              {ranking!.foraPorSuspensao
+                .map(
+                  linha =>
+                    `${linha.nome} (bloco ${linha.bloco}, ${plural(linha.pontos, "ponto", "pontos")}, suspenso(a) ${linha.periodo})`
+                )
+                .join("; ")}
+              . Os vizinhos não veem a suspensão.
+            </p>
+          )}
           {isResident && (
             <p className="mt-4 rounded-2xl bg-[#f6faf7] px-4 py-3 text-sm text-muted-foreground">
               {ranking?.minhaPosicao ? (
@@ -212,7 +227,7 @@ export default function Engagement() {
                     {ranking.minhaPosicao.position}º de{" "}
                     {ranking.totalParticipantes}
                   </b>{" "}
-                  com {ranking.minhaPosicao.pontos} pts.
+                  com {plural(ranking.minhaPosicao.pontos, "ponto", "pontos")}.
                 </>
               ) : (
                 "Você ainda não tem pontos. Registre sua reciclagem na estação para entrar no ranking."
@@ -232,8 +247,10 @@ export default function Engagement() {
                 {isResident ? (
                   <>
                     Seu saldo:{" "}
-                    <b className="text-foreground">{saldo} ponto(s)</b>. O
-                    resgate só acontece se houver saldo e estoque.
+                    <b className="text-foreground">
+                      {plural(saldo, "ponto", "pontos")}
+                    </b>
+                    . O resgate só acontece se houver saldo e estoque.
                   </>
                 ) : (
                   "Custo e disponibilidade de cada recompensa. Recompensas desativadas não aparecem para os moradores."
@@ -323,7 +340,7 @@ export default function Engagement() {
                       <Sparkles className="h-4 w-4" />
                     </span>
                     <Badge className="border-0 bg-[#edf7f1] text-[#0a7048] hover:bg-[#edf7f1]">
-                      {reward.custoPontos} pts
+                      {plural(reward.custoPontos, "pt", "pts")}
                     </Badge>
                   </div>
                   <h2 className="mt-4 text-sm font-bold">{reward.titulo}</h2>
@@ -340,7 +357,7 @@ export default function Engagement() {
                           ? "Estoque aberto"
                           : reward.estoque === 0
                             ? "Esgotado"
-                            : `${reward.estoque} disponível(is)${reward.estoqueBaixo ? " · estoque baixo" : ""}`}
+                            : `${plural(reward.estoque, "disponível", "disponíveis")}${reward.estoqueBaixo ? " · estoque baixo" : ""}`}
                     </span>
                     {isResident ? (
                       <Button
@@ -349,7 +366,7 @@ export default function Engagement() {
                         onClick={() => {
                           if (
                             window.confirm(
-                              `Resgatar "${reward.titulo}" por ${reward.custoPontos} ponto(s)? Seu saldo passa de ${saldo} para ${saldo - reward.custoPontos}.`
+                              `Resgatar "${reward.titulo}" por ${plural(reward.custoPontos, "ponto", "pontos")}? Seu saldo passa de ${saldo} para ${saldo - reward.custoPontos}.`
                             )
                           )
                             redeem.mutate({ rewardId: reward.id });
@@ -359,7 +376,7 @@ export default function Engagement() {
                         {!reward.disponivel
                           ? "Esgotado"
                           : saldo < reward.custoPontos
-                            ? `Faltam ${reward.custoPontos - saldo} pts`
+                            ? `${palavra(reward.custoPontos - saldo, "Falta", "Faltam")} ${plural(reward.custoPontos - saldo, "pt", "pts")}`
                             : "Resgatar"}
                       </Button>
                     ) : isAdmin ? (
@@ -445,7 +462,8 @@ function MyRedemptions() {
                   {item.recompensa ?? "Recompensa removida"}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {formatDate(item.criadoEm)} · {item.pontosGastos} pts
+                  {formatDate(item.criadoEm)} ·{" "}
+                  {plural(item.pontosGastos, "pt", "pts")}
                 </span>
               </span>
               <RedemptionStatus status={item.status} />
@@ -505,7 +523,8 @@ function RedemptionRequests() {
                 </span>
                 <span className="text-xs text-muted-foreground">
                   Bloco {item.bloco ?? "—"} · {item.apartamento ?? "—"} ·{" "}
-                  {formatDate(item.criadoEm)} · {item.pontosGastos} pts
+                  {formatDate(item.criadoEm)} ·{" "}
+                  {plural(item.pontosGastos, "pt", "pts")}
                 </span>
               </span>
               <span className="flex flex-wrap items-center gap-2">

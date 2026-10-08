@@ -15,6 +15,7 @@ import { Bot, Gavel, Megaphone, QrCode, ShieldAlert } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 const cartao =
   "rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6";
@@ -47,7 +48,7 @@ export default function GestaoMorador({
             Histórico de medidas
             {gestao.medidasVigentes > 0 && (
               <Badge className="border-0 bg-[#fbeceb] text-[#b3382c] hover:bg-[#fbeceb]">
-                {gestao.medidasVigentes} vigente(s)
+                {plural(gestao.medidasVigentes, "vigente", "vigentes")}
               </Badge>
             )}
           </p>
@@ -63,7 +64,10 @@ export default function GestaoMorador({
           )}
         </div>
         {moradorId && aplicando && (
-          <AplicarMedida moradorId={moradorId} onFeito={() => setAplicando(false)} />
+          <AplicarMedida
+            moradorId={moradorId}
+            onFeito={() => setAplicando(false)}
+          />
         )}
         {gestao.medidas.length ? (
           <div className="mt-3 overflow-x-auto">
@@ -83,7 +87,10 @@ export default function GestaoMorador({
                     <td className="py-2 pr-3">
                       {medida.motivo}
                       {medida.coletaId && (
-                        <Link href={`/descartes?id=${medida.coletaId}`} className="block text-xs underline">
+                        <Link
+                          href={`/descartes?id=${medida.coletaId}`}
+                          className="block text-xs underline"
+                        >
                           Descarte nº {medida.coletaId}
                         </Link>
                       )}
@@ -92,7 +99,9 @@ export default function GestaoMorador({
                       {medida.nome}
                       <span className="block text-xs text-muted-foreground">
                         {rotuloTipoPenalidade[medida.tipo]}
-                        {medida.pontos ? ` · ${medida.pontos} pts` : ""}
+                        {medida.pontos
+                          ? ` · ${plural(medida.pontos, "pt", "pts")}`
+                          : ""}
                       </span>
                     </td>
                     <td className="py-2 pr-3 text-xs">
@@ -103,9 +112,13 @@ export default function GestaoMorador({
                       <Badge
                         className={`border-0 ${medida.vigente ? "bg-[#fbeceb] text-[#b3382c] hover:bg-[#fbeceb]" : "bg-[#eef3f0] text-[#4d6157] hover:bg-[#eef3f0]"}`}
                       >
-                        {medida.vigente ? "Vigente" : rotuloStatusMedida[medida.status]}
+                        {medida.vigente
+                          ? "Vigente"
+                          : rotuloStatusMedida[medida.status]}
                       </Badge>
-                      {moradorId && medida.status === "ativa" && <RevogarMedida id={medida.id} />}
+                      {moradorId && medida.status === "ativa" && (
+                        <RevogarMedida id={medida.id} />
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -113,7 +126,9 @@ export default function GestaoMorador({
             </table>
           </div>
         ) : (
-          <p className="mt-3 text-sm text-muted-foreground">Nenhuma medida aplicada.</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Nenhuma medida aplicada.
+          </p>
         )}
       </article>
 
@@ -136,7 +151,10 @@ export default function GestaoMorador({
               <QrCode className="h-5 w-5 text-[#0f7350]" />
               Adesivos
             </p>
-            <Link href="/adesivos" className="text-sm font-semibold text-[#0f7350] hover:underline">
+            <Link
+              href="/adesivos"
+              className="text-sm font-semibold text-[#0f7350] hover:underline"
+            >
               Abrir
             </Link>
           </div>
@@ -165,7 +183,9 @@ export default function GestaoMorador({
             ))}
           </ul>
         ) : (
-          <p className="mt-3 text-sm text-muted-foreground">Nenhuma campanha.</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Nenhuma campanha.
+          </p>
         )}
       </article>
 
@@ -211,7 +231,8 @@ function ListaOcorrencias({
     criadoEm: Date;
   }>;
 }) {
-  if (!itens.length) return <p className="text-sm text-muted-foreground">Nenhuma.</p>;
+  if (!itens.length)
+    return <p className="text-sm text-muted-foreground">Nenhuma.</p>;
   return (
     <ul className="mt-1 grid gap-1 text-sm">
       {itens.map(item => (
@@ -220,7 +241,9 @@ function ListaOcorrencias({
             Nº {item.id} · {rotuloCategoriaOcorrencia[item.categoria]}
           </span>
           <span className="text-xs text-muted-foreground">
-            {item.conclusao ? rotuloConclusaoOcorrencia[item.conclusao] : rotuloStatusOcorrencia[item.status]}
+            {item.conclusao
+              ? rotuloConclusaoOcorrencia[item.conclusao]
+              : rotuloStatusOcorrencia[item.status]}
           </span>
         </li>
       ))}
@@ -229,7 +252,13 @@ function ListaOcorrencias({
 }
 
 /** O administrador escolhe uma das medidas pré-definidas e registra o motivo. */
-function AplicarMedida({ moradorId, onFeito }: { moradorId: number; onFeito: () => void }) {
+function AplicarMedida({
+  moradorId,
+  onFeito,
+}: {
+  moradorId: number;
+  onFeito: () => void;
+}) {
   const utils = trpc.useUtils();
   const modelos = trpc.penalidades.modelos.useQuery({ somenteAtivos: true });
   const [modeloId, setModeloId] = useState("");
@@ -248,7 +277,10 @@ function AplicarMedida({ moradorId, onFeito }: { moradorId: number; onFeito: () 
     aplicar.mutate({ moradorId, modeloId: Number(modeloId), motivo });
   }
   return (
-    <form onSubmit={enviar} className="mt-3 grid gap-2 rounded-2xl bg-[#f6faf7] p-3 text-sm">
+    <form
+      onSubmit={enviar}
+      className="mt-3 grid gap-2 rounded-2xl bg-[#f6faf7] p-3 text-sm"
+    >
       <select
         value={modeloId}
         onChange={event => setModeloId(event.target.value)}
@@ -267,7 +299,10 @@ function AplicarMedida({ moradorId, onFeito }: { moradorId: number; onFeito: () 
         placeholder="Ocorrência que motivou a medida (mín. 10 caracteres)"
         className="min-h-20 rounded-xl border border-[#dce8e0] bg-white p-3"
       />
-      <Button disabled={aplicar.isPending} className="w-fit rounded-xl bg-[#b45522] text-white hover:bg-[#9a461a]">
+      <Button
+        disabled={aplicar.isPending}
+        className="w-fit rounded-xl bg-[#b45522] text-white hover:bg-[#9a461a]"
+      >
         Aplicar
       </Button>
     </form>
@@ -288,7 +323,9 @@ function RevogarMedida({ id }: { id: number }) {
       type="button"
       className="mt-1 block text-xs text-[#b3382c] underline"
       onClick={() => {
-        const motivo = window.prompt("Por que revogar esta medida? (mín. 10 caracteres)");
+        const motivo = window.prompt(
+          "Por que revogar esta medida? (mín. 10 caracteres)"
+        );
         if (motivo) revogar.mutate({ id, motivo });
       }}
     >

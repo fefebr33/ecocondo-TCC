@@ -64,6 +64,13 @@ export function ConfiguracaoAnaliseIa() {
             : "Modo demonstração (sem chave da API)"}
         </Badge>
       </div>
+      {config.data && config.data.modoIa !== "claude" && (
+        <p className="mt-3 rounded-xl bg-[#fff8ec] p-3 text-sm text-[#5c3a06]">
+          Sem a chave da API do Claude, a IA só é simulada nas estações em modo
+          demonstração. Nas estações de verdade, todo descarte fica pendente até
+          um administrador conferir a foto.
+        </p>
+      )}
       <form
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
@@ -75,9 +82,8 @@ export function ConfiguracaoAnaliseIa() {
           <span>
             <b>Aprovar sozinho o que estiver de acordo com as regras</b>
             <span className="block text-muted-foreground">
-              Os demais (divergência, dúvida, confiança baixa, alerta
-              antifraude ou falha da análise) ficam pendentes para um
-              administrador.
+              Os demais (divergência, dúvida, confiança baixa, alerta antifraude
+              ou falha da análise) ficam pendentes para um administrador.
             </span>
           </span>
           <Switch
@@ -88,7 +94,9 @@ export function ConfiguracaoAnaliseIa() {
           />
         </label>
         <label className="grid gap-1.5 rounded-2xl border border-[#e6eee9] p-4 text-sm">
-          <b>Confiança mínima para aprovar sem revisão: {form.iaConfiancaMinima}%</b>
+          <b>
+            Confiança mínima para aprovar sem revisão: {form.iaConfiancaMinima}%
+          </b>
           <input
             type="range"
             min={50}
@@ -167,7 +175,8 @@ export function MedidasAdministrativas() {
       tipo: form.tipo,
       pontos: comPontos ? Number(form.pontos) || null : null,
       duracaoValor: comPeriodo ? Number(form.duracaoValor) || null : null,
-      duracaoUnidade: comPeriodo && form.duracaoValor ? form.duracaoUnidade : null,
+      duracaoUnidade:
+        comPeriodo && form.duracaoValor ? form.duracaoUnidade : null,
       descricao: form.descricao || null,
       ativo: form.ativo,
     });
@@ -273,11 +282,13 @@ export function MedidasAdministrativas() {
             }
             className="h-10 w-full min-w-0 rounded-xl border border-[#dce8e0] bg-white px-3 text-sm font-normal"
           >
-            {(Object.keys(rotuloTipoPenalidade) as TipoPenalidade[]).map(tipo => (
-              <option key={tipo} value={tipo}>
-                {rotuloTipoPenalidade[tipo]}
-              </option>
-            ))}
+            {(Object.keys(rotuloTipoPenalidade) as TipoPenalidade[]).map(
+              tipo => (
+                <option key={tipo} value={tipo}>
+                  {rotuloTipoPenalidade[tipo]}
+                </option>
+              )
+            )}
           </select>
         </label>
         {comPontos && (
@@ -288,7 +299,9 @@ export function MedidasAdministrativas() {
               type="number"
               min={1}
               value={form.pontos}
-              onChange={event => setForm({ ...form, pontos: event.target.value })}
+              onChange={event =>
+                setForm({ ...form, pontos: event.target.value })
+              }
               className="h-10 rounded-xl bg-white"
             />
           </label>
@@ -328,7 +341,9 @@ export function MedidasAdministrativas() {
           <Input
             value={form.descricao}
             maxLength={500}
-            onChange={event => setForm({ ...form, descricao: event.target.value })}
+            onChange={event =>
+              setForm({ ...form, descricao: event.target.value })
+            }
             className="h-10 rounded-xl bg-white"
           />
         </label>

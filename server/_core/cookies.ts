@@ -10,11 +10,11 @@ function isSecureRequest(req: Request) {
     ? forwardedProto
     : forwardedProto.split(",");
 
-  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
+  return protoList.some(proto => proto.trim().toLowerCase() === "https");
 }
 
 export function getSessionCookieOptions(
-  req: Request,
+  req: Request
 ): Pick<CookieOptions, "httpOnly" | "path" | "sameSite" | "secure"> {
   return {
     httpOnly: true,

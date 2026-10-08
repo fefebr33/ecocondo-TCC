@@ -13,7 +13,20 @@ type RegistroColeta = {
   aprovacaoPesoStatus: string | null;
 };
 
-const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const MESES = [
+  "jan",
+  "fev",
+  "mar",
+  "abr",
+  "mai",
+  "jun",
+  "jul",
+  "ago",
+  "set",
+  "out",
+  "nov",
+  "dez",
+];
 
 /** Data que vale para o registro: a da conclusão, se houver; senão, a do agendamento. */
 function dataDoRegistro(registro: RegistroColeta) {
@@ -21,8 +34,17 @@ function dataDoRegistro(registro: RegistroColeta) {
 }
 
 function somarPeriodo(registros: RegistroColeta[], inicio: Date, fim: Date) {
-  const concluidas = registros.filter((registro) => registro.status === "concluida" && dataDoRegistro(registro) >= inicio && dataDoRegistro(registro) < fim && registro.aprovacaoPesoStatus !== "rejeitado");
-  const gramas = concluidas.reduce((soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0), 0);
+  const concluidas = registros.filter(
+    registro =>
+      registro.status === "concluida" &&
+      dataDoRegistro(registro) >= inicio &&
+      dataDoRegistro(registro) < fim &&
+      registro.aprovacaoPesoStatus !== "rejeitado"
+  );
+  const gramas = concluidas.reduce(
+    (soma, registro) => soma + (pesoConfirmadoGramas(registro) ?? 0),
+    0
+  );
   return { coletas: concluidas.length, kg: Number((gramas / 1000).toFixed(2)) };
 }
 
@@ -39,8 +61,14 @@ export function compararPeriodos(registros: RegistroColeta[], agora: Date) {
   const atual = somarPeriodo(registros, inicioAtual, fimAtual);
   const anterior = somarPeriodo(registros, inicioAnterior, inicioAtual);
   return {
-    atual: { ...atual, rotulo: `${MESES[inicioAtual.getMonth()]}/${String(inicioAtual.getFullYear()).slice(2)}` },
-    anterior: { ...anterior, rotulo: `${MESES[inicioAnterior.getMonth()]}/${String(inicioAnterior.getFullYear()).slice(2)}` },
+    atual: {
+      ...atual,
+      rotulo: `${MESES[inicioAtual.getMonth()]}/${String(inicioAtual.getFullYear()).slice(2)}`,
+    },
+    anterior: {
+      ...anterior,
+      rotulo: `${MESES[inicioAnterior.getMonth()]}/${String(inicioAnterior.getFullYear()).slice(2)}`,
+    },
     variacaoKg: variacao(atual.kg, anterior.kg),
     variacaoColetas: variacao(atual.coletas, anterior.coletas),
     temDadosAnteriores: anterior.coletas > 0,
@@ -48,11 +76,22 @@ export function compararPeriodos(registros: RegistroColeta[], agora: Date) {
 }
 
 /** Coletas concluídas e peso confirmado de cada um dos últimos `meses` meses (o atual incluído), do mais antigo ao mais recente. */
-export function evolucaoMensal(registros: RegistroColeta[], agora: Date, meses = 6) {
+export function evolucaoMensal(
+  registros: RegistroColeta[],
+  agora: Date,
+  meses = 6
+) {
   return Array.from({ length: meses }, (_, indice) => {
-    const inicio = new Date(agora.getFullYear(), agora.getMonth() - (meses - 1 - indice), 1);
+    const inicio = new Date(
+      agora.getFullYear(),
+      agora.getMonth() - (meses - 1 - indice),
+      1
+    );
     const fim = new Date(inicio.getFullYear(), inicio.getMonth() + 1, 1);
-    return { mes: `${MESES[inicio.getMonth()]}/${String(inicio.getFullYear()).slice(2)}`, ...somarPeriodo(registros, inicio, fim) };
+    return {
+      mes: `${MESES[inicio.getMonth()]}/${String(inicio.getFullYear()).slice(2)}`,
+      ...somarPeriodo(registros, inicio, fim),
+    };
   });
 }
 
@@ -61,21 +100,61 @@ export function evolucaoMensal(registros: RegistroColeta[], agora: Date, meses =
  * Coletas futuras ainda abertas ficam de fora; atrasadas são as agendadas ou em andamento com a data já passada.
  */
 export function taxaDeConclusao(registros: RegistroColeta[], agora: Date) {
-  const vencidas = registros.filter((registro) => (registro.status !== "agendada" && registro.status !== "em_andamento") || registro.agendadaPara <= agora);
-  const concluidas = vencidas.filter((registro) => registro.status === "concluida" && registro.aprovacaoPesoStatus !== "rejeitado").length;
-  const reprovadas = vencidas.filter((registro) => registro.status === "concluida" && registro.aprovacaoPesoStatus === "rejeitado").length;
-  const canceladas = vencidas.filter((registro) => registro.status === "cancelada").length;
-  const ocorrencias = vencidas.filter((registro) => registro.status === "ocorrencia").length;
-  const atrasadas = vencidas.filter((registro) => registro.status === "agendada" || registro.status === "em_andamento").length;
-  return { percentual: vencidas.length ? Number(((concluidas / vencidas.length) * 100).toFixed(1)) : null, total: vencidas.length, concluidas, reprovadas, canceladas, ocorrencias, atrasadas };
+  const vencidas = registros.filter(
+    registro =>
+      (registro.status !== "agendada" && registro.status !== "em_andamento") ||
+      registro.agendadaPara <= agora
+  );
+  const concluidas = vencidas.filter(
+    registro =>
+      registro.status === "concluida" &&
+      registro.aprovacaoPesoStatus !== "rejeitado"
+  ).length;
+  const reprovadas = vencidas.filter(
+    registro =>
+      registro.status === "concluida" &&
+      registro.aprovacaoPesoStatus === "rejeitado"
+  ).length;
+  const canceladas = vencidas.filter(
+    registro => registro.status === "cancelada"
+  ).length;
+  const ocorrencias = vencidas.filter(
+    registro => registro.status === "ocorrencia"
+  ).length;
+  const atrasadas = vencidas.filter(
+    registro =>
+      registro.status === "agendada" || registro.status === "em_andamento"
+  ).length;
+  return {
+    percentual: vencidas.length
+      ? Number(((concluidas / vencidas.length) * 100).toFixed(1))
+      : null,
+    total: vencidas.length,
+    concluidas,
+    reprovadas,
+    canceladas,
+    ocorrencias,
+    atrasadas,
+  };
 }
 
 /** Soma do extrato por tipo: pontos distribuídos (créditos), estornados, gastos em resgates e devolvidos. */
-export function resumirPontos(movimentacoes: Array<{ tipo: string; pontos: number }>) {
-  const somar = (tipo: string) => movimentacoes.filter((item) => item.tipo === tipo).reduce((soma, item) => soma + Math.abs(item.pontos), 0);
+export function resumirPontos(
+  movimentacoes: Array<{ tipo: string; pontos: number }>
+) {
+  const somar = (tipo: string) =>
+    movimentacoes
+      .filter(item => item.tipo === tipo)
+      .reduce((soma, item) => soma + Math.abs(item.pontos), 0);
   const distribuidos = somar("credito_coleta");
   const estornados = somar("estorno_coleta");
   const resgatados = somar("resgate");
   const devolvidos = somar("devolucao_resgate");
-  return { distribuidos, estornados, resgatados, devolvidos, movimentados: distribuidos + estornados + resgatados + devolvidos };
+  return {
+    distribuidos,
+    estornados,
+    resgatados,
+    devolvidos,
+    movimentados: distribuidos + estornados + resgatados + devolvidos,
+  };
 }

@@ -6,7 +6,9 @@ const isProduction = process.env.NODE_ENV === "production";
 function segredoDaSessao() {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
   if (!isProduction) return "chave-local-de-demonstracao-troque-em-producao";
-  console.warn("[Segurança] JWT_SECRET não definido: usando uma chave aleatória. Defina JWT_SECRET para manter as sessões após reiniciar o servidor.");
+  console.warn(
+    "[Segurança] JWT_SECRET não definido: usando uma chave aleatória. Defina JWT_SECRET para manter as sessões após reiniciar o servidor."
+  );
   return randomBytes(32).toString("hex");
 }
 

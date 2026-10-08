@@ -5,6 +5,7 @@ import { rotuloConclusaoOcorrencia } from "@shared/rotulos";
 import { FormEvent, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { plural } from "@shared/plural";
 
 type Conclusao = keyof typeof rotuloConclusaoOcorrencia;
 
@@ -69,7 +70,8 @@ export default function TratarOcorrencia({
       onAlterado();
     },
   });
-  const paraEnvolvido = conclusao === "procedente" && Boolean(ocorrencia.moradorEnvolvidoId);
+  const paraEnvolvido =
+    conclusao === "procedente" && Boolean(ocorrencia.moradorEnvolvidoId);
   const paraRelator = conclusao === "denuncia_falsa";
   function enviar(event: FormEvent) {
     event.preventDefault();
@@ -86,7 +88,7 @@ export default function TratarOcorrencia({
       <p className="text-xs text-muted-foreground">
         Registrada por {ocorrencia.relator ?? "—"}
         {ocorrencia.denunciasFalsasRelator > 0
-          ? ` · ${ocorrencia.denunciasFalsasRelator} denúncia(s) falsa(s) antes`
+          ? ` · ${plural(ocorrencia.denunciasFalsasRelator, "denúncia falsa", "denúncias falsas")} antes`
           : ""}
         {ocorrencia.envolvido
           ? ` · morador do descarte: ${ocorrencia.envolvido.nome} (bloco ${ocorrencia.envolvido.bloco}, apto ${ocorrencia.envolvido.apartamento}); não é mostrado a quem denunciou`
@@ -105,7 +107,11 @@ export default function TratarOcorrencia({
             variant="outline"
             disabled={motivo.trim().length < 10 || encaminhar.isPending}
             onClick={() =>
-              encaminhar.mutate({ id: ocorrencia.id, destino: "nova_avaliacao", motivo })
+              encaminhar.mutate({
+                id: ocorrencia.id,
+                destino: "nova_avaliacao",
+                motivo,
+              })
             }
           >
             Nova avaliação
@@ -115,7 +121,11 @@ export default function TratarOcorrencia({
             variant="outline"
             disabled={motivo.trim().length < 10 || encaminhar.isPending}
             onClick={() =>
-              encaminhar.mutate({ id: ocorrencia.id, destino: "auditoria", motivo })
+              encaminhar.mutate({
+                id: ocorrencia.id,
+                destino: "auditoria",
+                motivo,
+              })
             }
             className="border-[#d8cdf1] text-[#5b3aa6]"
           >
@@ -131,26 +141,30 @@ export default function TratarOcorrencia({
       )}
       <form onSubmit={enviar} className="grid gap-2">
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(rotuloConclusaoOcorrencia) as Conclusao[]).map(opcao => (
-            <button
-              key={opcao}
-              type="button"
-              onClick={() => {
-                setConclusao(opcao);
-                setMedidas([]);
-              }}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${conclusao === opcao ? "border-[#0f7350] bg-white text-[#0f7350]" : "border-[#dce8e0] text-muted-foreground"}`}
-            >
-              {rotuloConclusaoOcorrencia[opcao]}
-            </button>
-          ))}
+          {(Object.keys(rotuloConclusaoOcorrencia) as Conclusao[]).map(
+            opcao => (
+              <button
+                key={opcao}
+                type="button"
+                onClick={() => {
+                  setConclusao(opcao);
+                  setMedidas([]);
+                }}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${conclusao === opcao ? "border-[#0f7350] bg-white text-[#0f7350]" : "border-[#dce8e0] text-muted-foreground"}`}
+              >
+                {rotuloConclusaoOcorrencia[opcao]}
+              </button>
+            )
+          )}
           {ocorrencia.status === "aberta" && (
             <Button
               type="button"
               size="sm"
               variant="ghost"
               disabled={emAnalise.isPending}
-              onClick={() => emAnalise.mutate({ id: ocorrencia.id, status: "em_analise" })}
+              onClick={() =>
+                emAnalise.mutate({ id: ocorrencia.id, status: "em_analise" })
+              }
             >
               Marcar em análise
             </Button>
@@ -160,7 +174,10 @@ export default function TratarOcorrencia({
           <fieldset className="grid gap-1 text-xs">
             <legend className="mb-1 font-semibold">
               Medidas para{" "}
-              {paraRelator ? "quem fez a denúncia falsa" : "o morador do descarte"} (opcional)
+              {paraRelator
+                ? "quem fez a denúncia falsa"
+                : "o morador do descarte"}{" "}
+              (opcional)
             </legend>
             {modelos.data?.map(modelo => (
               <label key={modelo.id} className="flex items-center gap-2">

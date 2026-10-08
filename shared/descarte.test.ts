@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { creditarComResto, estornarComResto, formatarPontos, milesimosDoDescarte } from "./descarte";
+import {
+  creditarComResto,
+  estornarComResto,
+  formatarPontos,
+  milesimosDoDescarte,
+} from "./descarte";
 
 describe("pontos com fração", () => {
   it("o descarte vale a fração exata do peso", () => {
@@ -22,11 +27,29 @@ describe("pontos com fração", () => {
     expect(estornarComResto(940, 950, 1)).toEqual({ pontos: 1, resto: 990 });
     // Descarte que só foi para a fração (0 ponto inteiro), mas a fração já foi usada por outro: tira 1 ponto e devolve o troco.
     expect(estornarComResto(100, 800, 0)).toEqual({ pontos: 1, resto: 300 });
-    for (const [resto, exato, creditados] of [[0, 2500, 2], [999, 1, 0], [0, 1, 1], [300, 4700, 5]] as const) {
-      const { pontos, resto: novo } = estornarComResto(resto, exato, creditados);
+    for (const [resto, exato, creditados] of [
+      [0, 2500, 2],
+      [999, 1, 0],
+      [0, 1, 1],
+      [300, 4700, 5],
+    ] as const) {
+      const { pontos, resto: novo } = estornarComResto(
+        resto,
+        exato,
+        creditados
+      );
       expect(novo).toBeGreaterThanOrEqual(0);
       expect(novo).toBeLessThan(1000);
       expect(-pontos * 1000 + (novo - resto)).toBe(-exato);
     }
+  });
+});
+
+describe("resíduo perigoso", () => {
+  it("vale por entrega, não por kg", () => {
+    expect(milesimosDoDescarte(10, 1, "perigoso")).toBe(1000);
+    expect(milesimosDoDescarte(4000, 1, "perigoso")).toBe(1000);
+    expect(milesimosDoDescarte(4000, 1, "reciclavel")).toBe(4000);
+    expect(milesimosDoDescarte(0, 1, "perigoso")).toBe(0);
   });
 });

@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { pontuaPorEntrega } from "@shared/descarte";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -14,6 +15,7 @@ import type { EcoRole } from "@shared/permissions";
 import { BellRing, Coins, RotateCcw, Scale } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { palavra, plural } from "@shared/plural";
 
 const cartao =
   "rounded-[24px] border border-[#dce8e0] bg-white p-5 shadow-[0_16px_34px_-28px_rgba(4,66,42,.35)] sm:p-6";
@@ -83,7 +85,8 @@ export function RegrasDescarte() {
         morador se somam e viram ponto inteiro no saldo. Mudar a regra não
         altera os descartes já registrados: vale o que o tablet mostrou ao
         morador. Coloque 0 para um tipo que não dá pontos (ele continua contando
-        nos indicadores).
+        nos indicadores). Resíduo perigoso vale por entrega, e não por kg, para
+        não premiar quem traz mais pilhas, remédios ou lâmpadas.
       </p>
     </section>
   );
@@ -217,7 +220,9 @@ function LinhaRegra({
         />
       </label>
       <label className="grid gap-1 text-[11px] font-semibold">
-        Pontos por kg
+        {pontuaPorEntrega(regra.tipoResiduo)
+          ? "Pontos por entrega"
+          : "Pontos por kg"}
         <Input
           required
           inputMode="decimal"
@@ -345,7 +350,7 @@ export function PreferenciasAvisos() {
                     ? `${opcionais.filter(linha => linha.ativo).length}/${opcionais.length} ligados`
                     : "sempre chegam"}
                   {opcionais.length && obrigatorias.length
-                    ? ` · ${obrigatorias.length} obrigatório(s)`
+                    ? ` · ${plural(obrigatorias.length, "obrigatório", "obrigatórios")}`
                     : ""}
                 </span>
               </summary>
@@ -397,7 +402,7 @@ export function ZerarPontos() {
   const zerar = trpc.pontos.zerarTodos.useMutation({
     onSuccess: resultado => {
       toast.success(
-        `Pontos zerados: ${formatarNumero(resultado.pontos)} ponto(s) de ${resultado.moradores} morador(es). Novo ciclo começou.`
+        `Pontos zerados: ${formatarNumero(resultado.pontos)} ${palavra(resultado.pontos, "ponto", "pontos")} de ${plural(resultado.moradores, "morador", "moradores")}. Novo ciclo começou.`
       );
       setAberto(false);
       setConfirmacao("");

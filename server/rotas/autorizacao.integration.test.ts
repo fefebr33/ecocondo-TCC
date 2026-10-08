@@ -34,89 +34,328 @@ beforeEach(() => {
 describe("autorização de procedimentos EcoCondo", () => {
   it("bloqueia morador no cadastro administrativo de moradores", async () => {
     mockProfile.mockResolvedValue({
-      perfil: { id: 1, usuarioId: 77, condominioId: 1, moradorId: 10, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() },
-      condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
+      perfil: {
+        id: 1,
+        usuarioId: 77,
+        condominioId: 1,
+        moradorId: 10,
+        papel: "morador",
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
+      condominio: {
+        id: 1,
+        nome: "Condomínio de teste",
+        endereco: null,
+        cidade: null,
+        estado: null,
+        quantidadeBlocos: 1,
+        ativo: true,
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
       morador: null,
     });
     const caller = appRouter.createCaller(contextFor("morador"));
-    await expect(caller.moradores.listar()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.moradores.listar()).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 
   it("bloqueia morador na emissão de relatórios administrativos", async () => {
     mockProfile.mockResolvedValue({
-      perfil: { id: 2, usuarioId: 77, condominioId: 1, moradorId: 10, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() },
-      condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
+      perfil: {
+        id: 2,
+        usuarioId: 77,
+        condominioId: 1,
+        moradorId: 10,
+        papel: "morador",
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
+      condominio: {
+        id: 1,
+        nome: "Condomínio de teste",
+        endereco: null,
+        cidade: null,
+        estado: null,
+        quantidadeBlocos: 1,
+        ativo: true,
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
       morador: null,
     });
     const caller = appRouter.createCaller(contextFor("morador"));
-    await expect(caller.relatorios.visaoGeral({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.relatorios.visaoGeral({})).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 
   it("bloqueia morador na aprovação e auditoria de descartes, no controle de pontos e na publicação de comunicados", async () => {
     mockProfile.mockResolvedValue({
-      perfil: { id: 3, usuarioId: 77, condominioId: 1, moradorId: 10, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() },
-      condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
+      perfil: {
+        id: 3,
+        usuarioId: 77,
+        condominioId: 1,
+        moradorId: 10,
+        papel: "morador",
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
+      condominio: {
+        id: 1,
+        nome: "Condomínio de teste",
+        endereco: null,
+        cidade: null,
+        estado: null,
+        quantidadeBlocos: 1,
+        ativo: true,
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
       morador: null,
     });
     const caller = appRouter.createCaller(contextFor("morador"));
-    await expect(caller.coletas.decidirAprovacaoPeso({ id: 1, aprovar: true })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.coletas.aprovarVarios({ ids: [1] })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.coletas.abrirAuditoria({ id: 1, motivo: "Motivo de teste suficiente" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.pontos.zerarTodos({ confirmation: "ZERAR", reason: "Novo ciclo de teste" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.pontos.ajustar({ residentId: 10, points: 5, reason: "Ajuste de teste válido" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.regrasDescarte.salvar({ wasteType: "reciclavel", minGrams: 100, maxGrams: 1000, pointsPerKg: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.preferenciasNotificacao.salvar({ role: "morador", type: "comunicado", active: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.auth.gerarLinkAcesso({ personId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.notificacoes.criarComunicado({ title: "Aviso", message: "Mensagem de teste" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.coletas.decidirAprovacaoPeso({ id: 1, aprovar: true })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.coletas.aprovarVarios({ ids: [1] })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.coletas.abrirAuditoria({
+        id: 1,
+        motivo: "Motivo de teste suficiente",
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.pontos.zerarTodos({
+        confirmation: "ZERAR",
+        reason: "Novo ciclo de teste",
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.pontos.ajustar({
+        residentId: 10,
+        points: 5,
+        reason: "Ajuste de teste válido",
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.regrasDescarte.salvar({
+        wasteType: "reciclavel",
+        minGrams: 100,
+        maxGrams: 1000,
+        pointsPerKg: 1,
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.preferenciasNotificacao.salvar({
+        role: "morador",
+        type: "comunicado",
+        active: false,
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.auth.gerarLinkAcesso({ personId: 1 })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.notificacoes.criarComunicado({
+        title: "Aviso",
+        message: "Mensagem de teste",
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("bloqueia morador na administração de recompensas, perfis, estações e prêmios", async () => {
     mockProfile.mockResolvedValue({
-      perfil: { id: 4, usuarioId: 77, condominioId: 1, moradorId: 10, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() },
-      condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
+      perfil: {
+        id: 4,
+        usuarioId: 77,
+        condominioId: 1,
+        moradorId: 10,
+        papel: "morador",
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
+      condominio: {
+        id: 1,
+        nome: "Condomínio de teste",
+        endereco: null,
+        cidade: null,
+        estado: null,
+        quantidadeBlocos: 1,
+        ativo: true,
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
       morador: null,
     });
     const caller = appRouter.createCaller(contextFor("morador"));
-    await expect(caller.engajamento.criarRecompensa({ title: "Recompensa", description: "Descrição válida", pointsCost: 10, stock: null })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.pessoas.definirPapel({ id: 12, role: "morador" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.estacoes.criar({ name: "Tablet", location: "Garagem" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.podio.configurarPremios({ periodo: "mensal", premios: [] })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.podio.marcarPremioEntregue({ moradorId: 10, periodo: "mensal" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.engajamento.criarRecompensa({
+        title: "Recompensa",
+        description: "Descrição válida",
+        pointsCost: 10,
+        stock: null,
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.pessoas.definirPapel({ id: 12, role: "morador" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.estacoes.criar({ name: "Tablet", location: "Garagem" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.podio.configurarPremios({ periodo: "mensal", premios: [] })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.podio.marcarPremioEntregue({ moradorId: 10, periodo: "mensal" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("bloqueia morador nos indicadores e intervenções exclusivos da administração", async () => {
     mockProfile.mockResolvedValue({
-      perfil: { id: 5, usuarioId: 77, condominioId: 1, moradorId: 10, papel: "morador", criadoEm: new Date(), atualizadoEm: new Date() },
-      condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
+      perfil: {
+        id: 5,
+        usuarioId: 77,
+        condominioId: 1,
+        moradorId: 10,
+        papel: "morador",
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
+      condominio: {
+        id: 1,
+        nome: "Condomínio de teste",
+        endereco: null,
+        cidade: null,
+        estado: null,
+        quantidadeBlocos: 1,
+        ativo: true,
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
       morador: null,
     });
     const caller = appRouter.createCaller(contextFor("morador"));
-    await expect(caller.metas.criar({ block: "A", title: "Meta válida", targetKg: 20, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-31") })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.ocorrencias.atualizarStatus({ id: 1, status: "resolvida" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.conformidade.visaoGeral()).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.comparacao.linhaDoTempo({})).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.auditoria.listar({})).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.relatorios.exportarCsv({})).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.campanhas.criar({ title: "Campanha", description: "Descrição de campanha válida", targetDescription: "Meta", startDate: new Date("2026-08-01"), endDate: new Date("2026-08-31"), status: "ativa" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller.avaliacoes.responder({ id: 1, response: "Resposta válida" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.metas.criar({
+        block: "A",
+        title: "Meta válida",
+        targetKg: 20,
+        startDate: new Date("2026-08-01"),
+        endDate: new Date("2026-08-31"),
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.ocorrencias.atualizarStatus({ id: 1, status: "resolvida" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.conformidade.visaoGeral()).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(caller.comparacao.linhaDoTempo({})).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(caller.auditoria.listar({})).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(caller.relatorios.exportarCsv({})).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(
+      caller.campanhas.criar({
+        title: "Campanha",
+        description: "Descrição de campanha válida",
+        targetDescription: "Meta",
+        startDate: new Date("2026-08-01"),
+        endDate: new Date("2026-08-31"),
+        status: "ativa",
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.avaliacoes.responder({ id: 1, response: "Resposta válida" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("exige tablet pareado para os procedimentos da estação de pesagem", async () => {
-    const caller = appRouter.createCaller({ ...contextFor("morador"), user: null } as unknown as TrpcContext);
-    await expect(caller.estacao.status()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    await expect(caller.estacao.registrar({ code: "123456", itens: [{ wasteType: "reciclavel", weightGrams: 1000, imageDataUrl: "data:image/png;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }] })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    const caller = appRouter.createCaller({
+      ...contextFor("morador"),
+      user: null,
+    } as unknown as TrpcContext);
+    await expect(caller.estacao.status()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(
+      caller.estacao.registrar({
+        code: "123456",
+        itens: [
+          {
+            wasteType: "reciclavel",
+            weightGrams: 1000,
+            imageDataUrl:
+              "data:image/png;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          },
+        ],
+      })
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("rejeita datas inválidas e conteúdo insuficiente antes de acessar o banco", async () => {
     mockProfile.mockResolvedValue({
-      perfil: { id: 6, usuarioId: 77, condominioId: 1, moradorId: null, papel: "administrador", criadoEm: new Date(), atualizadoEm: new Date() },
-      condominio: { id: 1, nome: "Condomínio de teste", endereco: null, cidade: null, estado: null, quantidadeBlocos: 1, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() },
+      perfil: {
+        id: 6,
+        usuarioId: 77,
+        condominioId: 1,
+        moradorId: null,
+        papel: "administrador",
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
+      condominio: {
+        id: 1,
+        nome: "Condomínio de teste",
+        endereco: null,
+        cidade: null,
+        estado: null,
+        quantidadeBlocos: 1,
+        ativo: true,
+        criadoEm: new Date(),
+        atualizadoEm: new Date(),
+      },
       morador: null,
     });
     const caller = appRouter.createCaller(contextFor("administrador"));
-    await expect(caller.metas.criar({ block: "A", title: "Meta válida", targetKg: 20, startDate: new Date("2026-09-01"), endDate: new Date("2026-08-31") })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    await expect(caller.ocorrencias.criar({ block: "A", wasteType: "reciclavel", location: "Ponto central", description: "oi" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    await expect(caller.campanhas.criar({ title: "Campanha", description: "Descrição de campanha válida", targetDescription: "Meta", startDate: new Date("2026-09-01"), endDate: new Date("2026-08-31"), status: "planejada" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    await expect(caller.avaliacoes.criar({ rating: 6, message: "Mensagem válida" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.metas.criar({
+        block: "A",
+        title: "Meta válida",
+        targetKg: 20,
+        startDate: new Date("2026-09-01"),
+        endDate: new Date("2026-08-31"),
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.ocorrencias.criar({
+        block: "A",
+        wasteType: "reciclavel",
+        location: "Ponto central",
+        description: "oi",
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.campanhas.criar({
+        title: "Campanha",
+        description: "Descrição de campanha válida",
+        targetDescription: "Meta",
+        startDate: new Date("2026-09-01"),
+        endDate: new Date("2026-08-31"),
+        status: "planejada",
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.avaliacoes.criar({ rating: 6, message: "Mensagem válida" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });

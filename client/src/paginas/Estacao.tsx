@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { pontuaPorEntrega } from "@shared/descarte";
 import { Input } from "@/components/ui/input";
 import {
   esquecerTokenEstacao,
@@ -34,6 +35,7 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { palavra, plural } from "@shared/plural";
 
 type WasteType = TipoResiduo;
 type Morador = {
@@ -55,6 +57,7 @@ type Resultado = {
   semPontos: string | null;
   pendingPoints: number;
   pointsAwarded: number;
+  pontosAprovados: number;
   pendingApproval: boolean;
   simulated: boolean;
   weightKg: string;
@@ -603,12 +606,25 @@ function Registro({
           {resultado.semPontos && (
             <Linha rotulo="Pontos" valor={resultado.semPontos} alerta />
           )}
-          {resultado.pointsAwarded > 0 && (
+          {resultado.pontosAprovados > 0 && (
             <Linha
-              rotulo="Pontos creditados agora"
+              rotulo="Valor do descarte aprovado"
+              valor={formatarPontos(resultado.pontosAprovados)}
+            />
+          )}
+          {resultado.pontosAprovados > 0 && (
+            <Linha
+              rotulo="Entrou no saldo agora"
               valor={`+${resultado.pointsAwarded}`}
             />
           )}
+          {resultado.pontosAprovados > 0 &&
+            resultado.pontosAprovados !== resultado.pointsAwarded && (
+              <p className="px-4 text-xs leading-5 text-muted-foreground">
+                O saldo recebe só pontos inteiros: a fração fica guardada e se
+                soma aos próximos descartes até virar mais um ponto.
+              </p>
+            )}
           {resultado.pendingPoints > 0 && (
             <Linha
               rotulo="Pontos previstos (após conferência)"
@@ -620,7 +636,9 @@ function Registro({
             valor={
               resultado.modoIa === "claude"
                 ? "IA (Claude) com visão"
-                : "IA em modo demonstração (simulada)"
+                : resultado.simulated
+                  ? "IA em modo demonstração (simulada)"
+                  : "Conferência pela administração (análise automática indisponível)"
             }
           />
         </dl>
@@ -684,7 +702,12 @@ function Registro({
                   {item.pesoKg} kg
                 </span>
                 <span className="block text-xs text-muted-foreground">
-                  {formatarPontos(item.pontosPrevistos)} ponto(s) previsto(s)
+                  {formatarPontos(item.pontosPrevistos)}{" "}
+                  {palavra(
+                    item.pontosPrevistos,
+                    "ponto previsto",
+                    "pontos previstos"
+                  )}
                 </span>
               </p>
             </div>
@@ -699,7 +722,7 @@ function Registro({
             valor={
               previa.bloqueio
                 ? `Bloqueado: ${previa.bloqueio}`
-                : `A IA confere cada foto: o que estiver certo é aprovado na hora (${formatarPontos(previa.pontosPrevistos)} ponto(s) previsto(s)); o resto vai para a administração`
+                : `A IA confere cada foto: o que estiver certo é aprovado na hora (${formatarPontos(previa.pontosPrevistos)} ${palavra(previa.pontosPrevistos, "ponto previsto", "pontos previstos")}); o resto vai para a administração`
             }
             alerta={Boolean(previa.bloqueio)}
           />
@@ -793,7 +816,7 @@ function Registro({
                     {kgTexto(tipo.pesoMinimoKg)} a {kgTexto(tipo.pesoMaximoKg)}{" "}
                     kg ·{" "}
                     {tipo.pontosPorKg
-                      ? `${kgTexto(tipo.pontosPorKg)} pt/kg`
+                      ? `${kgTexto(tipo.pontosPorKg)} ${pontuaPorEntrega(tipo.tipo) ? "pt por entrega" : "pt/kg"}`
                       : "sem pontos"}
                   </span>
                 </span>
@@ -821,7 +844,7 @@ function Registro({
           className="mt-5 h-12 w-full rounded-xl bg-[#0f7350] text-base text-white hover:bg-[#0a6243]"
         >
           {escolhidos.length
-            ? `Pesar ${escolhidos.length} tipo(s)`
+            ? `Pesar ${plural(escolhidos.length, "tipo", "tipos")}`
             : "Escolha pelo menos um tipo"}
         </Button>
       </section>
@@ -946,10 +969,10 @@ function Registro({
               />
             </label>
             <p className="text-xs text-muted-foreground">
-              Cole um adesivo do seu kit no saco e leia o QR (ou digite o
-              código impresso embaixo dele). Cada adesivo vale para um saco só.
+              Cole um adesivo do seu kit no saco e leia o QR (ou digite o código
+              impresso embaixo dele). Cada adesivo vale para um saco só.
               {morador
-                ? ` Você tem ${morador.adesivosDisponiveis} adesivo(s) disponível(is).`
+                ? ` Você ainda tem ${plural(Math.max(0, morador.adesivosDisponiveis - itens.slice(0, atual).filter(anterior => anterior.adesivo.trim()).length), "adesivo disponível", "adesivos disponíveis")}.`
                 : ""}
             </p>
             {cameraDisponivel() &&

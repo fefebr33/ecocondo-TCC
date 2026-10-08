@@ -7,8 +7,10 @@ prepararBanco()
     console.log("Banco MySQL pronto: tabelas criadas/atualizadas.");
     await fecharDb();
   })
-  .catch((error) => {
-    console.error("Não foi possível preparar o banco MySQL. Confira se o MySQL está rodando e o DATABASE_URL do arquivo .env.");
+  .catch(error => {
+    console.error(
+      "Não foi possível preparar o banco MySQL. Confira se o MySQL está rodando e o DATABASE_URL do arquivo .env."
+    );
     console.error(error);
     process.exit(1);
   });

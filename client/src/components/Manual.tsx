@@ -95,13 +95,14 @@ export function manualEstacao(
     },
     {
       titulo: "Depois do descarte",
-      resumo: "A análise automática confere as fotos; o que tiver dúvida vai para a administração.",
+      resumo:
+        "A análise automática confere as fotos; o que tiver dúvida vai para a administração.",
       passos: [
         <>
           A <b>análise automática</b> confere cada foto (tipo, peso no visor e
           cor do saco). O que estiver certo é <b>aprovado na hora</b> e os
-          pontos entram no saldo; o que tiver dúvida fica{" "}
-          <b>pendente</b> para a administração conferir.
+          pontos entram no saldo; o que tiver dúvida fica <b>pendente</b> para a
+          administração conferir.
         </>,
         <>
           Se algo estiver errado, o descarte é <b>reprovado</b> e você recebe o
@@ -132,9 +133,9 @@ export function manualEstacao(
       ),
       dica: (
         <>
-          Fora do modo demonstração, a estação pede 10 minutos entre um
-          descarte e outro do mesmo morador e aceita até 4 por dia (40 kg no
-          total). Isso evita pesar o mesmo saco várias vezes.
+          Fora do modo demonstração, a estação pede 10 minutos entre um descarte
+          e outro do mesmo morador e aceita até 4 por dia (40 kg no total). Isso
+          evita pesar o mesmo saco várias vezes.
         </>
       ),
     },
@@ -147,13 +148,14 @@ export const manualMorador: Secao[] = [
     resumo: "O resumo de tudo o que você fez no programa.",
     passos: [
       <>
-        Seu <b>painel pessoal</b> mostra quanto você descartou, de que tipos,
-        em que dias, seus pontos, sua posição no pódio do mês e a situação de
-        cada descarte (pendente, aprovado, reprovado ou em auditoria).
+        Seu <b>painel pessoal</b> mostra quanto você descartou, de que tipos, em
+        que dias, seus pontos, sua posição no pódio do mês e a situação de cada
+        descarte (pendente, aprovado, reprovado ou em auditoria).
       </>,
       <>
-        Em <b>Histórico de medidas</b> aparecem advertências, retiradas de pontos e
-        suspensões que a administração aplicou, com o motivo e o período.
+        Em <b>Histórico de medidas</b> aparecem advertências, retiradas de
+        pontos e suspensões que a administração aplicou, com o motivo e o
+        período.
       </>,
     ],
   },
@@ -189,8 +191,8 @@ export const manualMorador: Secao[] = [
         motivo.
       </>,
       <>
-        Troque pontos por recompensas do catálogo. O pedido passa por
-        aprovação e entrega; se for cancelado, os pontos voltam.
+        Troque pontos por recompensas do catálogo. O pedido passa por aprovação
+        e entrega; se for cancelado, os pontos voltam.
       </>,
       <>
         A administração pode zerar os pontos de todos para começar um novo
@@ -236,8 +238,8 @@ export const manualMorador: Secao[] = [
         veem).
       </>,
       <>
-        Quando o prazo termina ou a administração revoga, tudo volta ao normal
-        e você recebe uma notificação.
+        Quando o prazo termina ou a administração revoga, tudo volta ao normal e
+        você recebe uma notificação.
       </>,
     ],
   },
@@ -253,7 +255,10 @@ export const manualMorador: Secao[] = [
         Em <b>Gestão ambiental</b>, registre ocorrências (lixo fora do lugar,
         lixeira quebrada) ou denúncias. Quem denunciou nunca é revelado.
       </>,
-      <>Em <b>Campanhas e feedback</b>, envie também sua opinião com nota de 1 a 5; a resposta chega como notificação.</>,
+      <>
+        Em <b>Campanhas e feedback</b>, envie também sua opinião com nota de 1 a
+        5; a resposta chega como notificação.
+      </>,
     ],
     dica: (
       <>
@@ -305,9 +310,9 @@ export const manualAdministrador: Secao[] = [
         ocorrências.
       </>,
       <>
-        Em <b>Notificações</b>, exclua as que já resolveu (uma, várias ou
-        todas as lidas) e envie <b>avisos gerais</b> para todos, só moradores
-        ou só administradores, vendo quem já visualizou.
+        Em <b>Notificações</b>, exclua as que já resolveu (uma, várias ou todas
+        as lidas) e envie <b>avisos gerais</b> para todos, só moradores ou só
+        administradores, vendo quem já visualizou.
       </>,
     ],
   },
@@ -316,14 +321,13 @@ export const manualAdministrador: Secao[] = [
     resumo: "O que a análise automática não aprovou fica com você.",
     passos: [
       <>
-        Em <b>Descartes</b>, confira a foto, o peso, o adesivo e o parecer da
-        IA de cada saco. <b>Aprovar</b> libera os pontos pela regra do tipo;{" "}
+        Em <b>Descartes</b>, confira a foto, o peso, o adesivo e o parecer da IA
+        de cada saco. <b>Aprovar</b> libera os pontos pela regra do tipo;{" "}
         <b>Reprovar</b> pede um motivo, que vai para o morador.
       </>,
       <>
-        Um descarte já aprovado (inclusive pela IA) pode ser{" "}
-        <b>revertido</b>: volta para nova avaliação (os pontos saem) ou vai
-        para auditoria.
+        Um descarte já aprovado (inclusive pela IA) pode ser <b>revertido</b>:
+        volta para nova avaliação (os pontos saem) ou vai para auditoria.
       </>,
     ],
     exemplo: (
@@ -336,7 +340,8 @@ export const manualAdministrador: Secao[] = [
   },
   {
     titulo: "Auditoria",
-    resumo: "Para casos graves: suspeita de furto, peso forjado ou tentativa de burlar a estação.",
+    resumo:
+      "Para casos graves: suspeita de furto, peso forjado ou tentativa de burlar a estação.",
     passos: [
       <>
         Abra a auditoria no descarte com o motivo (o morador é avisado e os
@@ -344,9 +349,9 @@ export const manualAdministrador: Secao[] = [
       </>,
       <>
         Ao concluir, escolha <b>Regular</b> (aprova) ou <b>Irregular</b>{" "}
-        (reprova), escreva o parecer e, se quiser, marque medidas e uma
-        retirada avulsa de pontos. A janela mostra "O que vai acontecer" antes
-        de confirmar.
+        (reprova), escreva o parecer e, se quiser, marque medidas e uma retirada
+        avulsa de pontos. A janela mostra "O que vai acontecer" antes de
+        confirmar.
       </>,
       <>
         Pontos retirados saem do <b>saldo</b> e também da{" "}
@@ -361,10 +366,9 @@ export const manualAdministrador: Secao[] = [
     exemplo: (
       <>
         O mesmo saco aparece em duas pesagens seguidas. Conclusão: Irregular,
-        parecer "mesmo saco pesado duas vezes", medidas "Retirada de 30
-        pontos" e "Suspensão da participação por 15 dias". O descarte é
-        reprovado, saem 30 pontos do saldo e do pódio e a suspensão começa na
-        hora.
+        parecer "mesmo saco pesado duas vezes", medidas "Retirada de 30 pontos"
+        e "Suspensão da participação por 15 dias". O descarte é reprovado, saem
+        30 pontos do saldo e do pódio e a suspensão começa na hora.
       </>
     ),
   },
@@ -373,19 +377,21 @@ export const manualAdministrador: Secao[] = [
     resumo: "Advertência, retirada de pontos e suspensões configuráveis.",
     passos: [
       <>
-        As medidas pré-definidas ficam em <b>Configurações &gt; Medidas
-        administrativas</b> (nome, tipo, pontos e duração). Também dá para
-        aplicar uma medida pelo painel do morador (Moradores) ou por uma ocorrência.
+        As medidas pré-definidas ficam em{" "}
+        <b>Configurações &gt; Medidas administrativas</b> (nome, tipo, pontos e
+        duração). Também dá para aplicar uma medida pelo painel do morador
+        (Moradores) ou por uma ocorrência.
       </>,
       <>
-        Com a <b>participação suspensa</b>, o morador continua descartando,
-        mas sem pontos; não entra em campanhas, não resgata prêmios, não
-        recebe prêmio do pódio e aparece em cinza no pódio, com o nome oculto
-        para os vizinhos.
+        Com a <b>participação suspensa</b>, o morador continua descartando, mas
+        sem pontos; não entra em campanhas nem resgata prêmios e fica fora do
+        pódio e do ranking enquanto durar a suspensão. Quem vinha atrás sobe de
+        posição e recebe o prêmio. Os vizinhos não veem a suspensão; a
+        administração vê o suspenso em "Fora do pódio por suspensão".
       </>,
       <>
-        <b>Revogar</b> encerra a medida na hora e devolve os pontos retirados;
-        o morador e os outros administradores são avisados.
+        <b>Revogar</b> encerra a medida na hora e devolve os pontos retirados; o
+        morador e os outros administradores são avisados.
       </>,
     ],
   },
@@ -394,9 +400,8 @@ export const manualAdministrador: Secao[] = [
     resumo: "Quem fez o quê, quando e por quê.",
     passos: [
       <>
-        Cada operação importante fica registrada com o autor, a data, o
-        motivo e o que mudou, escrito em palavras (ex.: "Situação: pendente →
-        aprovado").
+        Cada operação importante fica registrada com o autor, a data, o motivo e
+        o que mudou, escrito em palavras (ex.: "Situação: pendente → aprovado").
       </>,
       <>
         Filtre por assunto (descartes, medidas, adesivos, campanhas...) e por
@@ -409,19 +414,20 @@ export const manualAdministrador: Secao[] = [
     passos: [
       <>
         Em <b>Moradores</b>, filtre por bloco, nome ou apartamento e abra o{" "}
-        <b>painel</b> de cada morador (descartes, pontos, histórico de
-        medidas, campanhas, ocorrências). Ali também dá para aplicar ou
-        revogar uma medida.
+        <b>painel</b> de cada morador (descartes, pontos, histórico de medidas,
+        campanhas, ocorrências). Ali também dá para aplicar ou revogar uma
+        medida.
       </>,
       <>
-        Em <b>Pessoas e acessos</b>, cadastre pessoas, defina o perfil
-        (morador ou administrador), desative acessos e gere o link de primeiro
-        acesso ou de nova senha.
+        Em <b>Pessoas e acessos</b>, cadastre pessoas, defina o perfil (morador
+        ou administrador), desative acessos e gere o link de primeiro acesso ou
+        de nova senha.
       </>,
       <>
         Em <b>Adesivos QR</b>, entregue os kits pedidos, imprima a folha e
-        cancele adesivos perdidos (o morador é avisado). Em <b>Ler QR de um saco</b>{" "}
-        você vê de quem é um saco e fica registrada na auditoria.
+        cancele adesivos perdidos (o morador é avisado). Em{" "}
+        <b>Ler QR de um saco</b> você vê de quem é um saco e fica registrada na
+        auditoria.
       </>,
     ],
   },
@@ -457,38 +463,104 @@ export const manualAdministrador: Secao[] = [
         pontos, resgates, IA, auditoria, medidas, campanhas e adesivos.
       </>,
       <>
-        <b>Exportar PDF</b> gera o relatório com cartões, gráficos e tabelas
-        (o top 3 respeita a privacidade do pódio). <b>Baixar planilha
-        (Excel)</b> traz uma aba por assunto: resumo, tipos, meses, blocos,
-        ranking, descartes, extrato de pontos, resgates, medidas e gestão.
+        <b>Exportar PDF</b> gera o relatório com cartões, gráficos e tabelas (o
+        top 3 respeita a privacidade do pódio). <b>Baixar planilha (Excel)</b>{" "}
+        traz uma aba por assunto: resumo, tipos, meses, blocos, ranking,
+        descartes, extrato de pontos, resgates, medidas e gestão.
       </>,
-      <>
-        As planilhas CSV avulsas continuam disponíveis para quem prefere.
-      </>,
+      <>As planilhas CSV avulsas continuam disponíveis para quem prefere.</>,
     ],
     exemplo: (
       <>
-        Prestação de contas do semestre: escolha 01/01 a 30/06, todos os
-        blocos, e baixe o PDF para a assembleia e a planilha para a
-        administradora.
+        Prestação de contas do semestre: escolha 01/01 a 30/06, todos os blocos,
+        e baixe o PDF para a assembleia e a planilha para a administradora.
       </>
     ),
   },
 ];
 
 /** Perguntas frequentes de cada perfil (aparecem no fim do manual). */
-export const perguntasMorador: Array<{ pergunta: string; resposta: ReactNode }> = [
-  { pergunta: "Meu descarte ficou pendente. Fiz algo errado?", resposta: <>Não necessariamente: a análise automática manda para a administração quando a foto não está nítida ou algo não confere. Você recebe a decisão como notificação.</> },
-  { pergunta: "Por que meus pontos diminuíram?", resposta: <>Veja o extrato em Engajamento: cada saída tem o motivo (estorno de descarte reprovado, resgate, medida administrativa ou zeragem do ciclo).</> },
-  { pergunta: "O código da estação venceu. E agora?", resposta: <>Gere outro em Descartes. Cada código vale 5 minutos e uma vez só.</> },
-  { pergunta: "Estou suspenso. Posso descartar?", resposta: <>Pode, normalmente. Só não ganha pontos, não entra em campanhas e não resgata prêmios até o fim da suspensão.</> },
+export const perguntasMorador: Array<{
+  pergunta: string;
+  resposta: ReactNode;
+}> = [
+  {
+    pergunta: "Meu descarte ficou pendente. Fiz algo errado?",
+    resposta: (
+      <>
+        Não necessariamente: a análise automática manda para a administração
+        quando a foto não está nítida ou algo não confere. Você recebe a decisão
+        como notificação.
+      </>
+    ),
+  },
+  {
+    pergunta: "Por que meus pontos diminuíram?",
+    resposta: (
+      <>
+        Veja o extrato em Engajamento: cada saída tem o motivo (estorno de
+        descarte reprovado, resgate, medida administrativa ou zeragem do ciclo).
+      </>
+    ),
+  },
+  {
+    pergunta: "O código da estação venceu. E agora?",
+    resposta: (
+      <>Gere outro em Descartes. Cada código vale 5 minutos e uma vez só.</>
+    ),
+  },
+  {
+    pergunta: "Estou suspenso. Posso descartar?",
+    resposta: (
+      <>
+        Pode, normalmente. Só não ganha pontos, não entra em campanhas e não
+        resgata prêmios até o fim da suspensão.
+      </>
+    ),
+  },
 ];
 
-export const perguntasAdministrador: Array<{ pergunta: string; resposta: ReactNode }> = [
-  { pergunta: "Quando usar reprovação e quando usar auditoria?", resposta: <>Reprovação para erros simples (tipo errado, foto ruim). Auditoria para suspeita de fraude, quando precisa investigar e talvez aplicar medidas.</> },
-  { pergunta: "Retirei pontos por engano. Como desfazer?", resposta: <>Em Moradores, abra o painel do morador e, em Histórico de medidas, toque em Revogar e informe o motivo. Os pontos voltam ao saldo e ao pódio.</> },
-  { pergunta: "A banca vai testar a estação várias vezes seguidas.", resposta: <>Ligue o modo demonstração da estação em Configurações: não há espera entre descartes nem limite diário.</> },
-  { pergunta: "Recebo notificações demais.", resposta: <>Em Configurações &gt; Quem recebe cada aviso, desligue os avisos opcionais do perfil Administradores. E use "Excluir lidas" em Notificações.</> },
+export const perguntasAdministrador: Array<{
+  pergunta: string;
+  resposta: ReactNode;
+}> = [
+  {
+    pergunta: "Quando usar reprovação e quando usar auditoria?",
+    resposta: (
+      <>
+        Reprovação para erros simples (tipo errado, foto ruim). Auditoria para
+        suspeita de fraude, quando precisa investigar e talvez aplicar medidas.
+      </>
+    ),
+  },
+  {
+    pergunta: "Retirei pontos por engano. Como desfazer?",
+    resposta: (
+      <>
+        Em Moradores, abra o painel do morador e, em Histórico de medidas, toque
+        em Revogar e informe o motivo. Os pontos voltam ao saldo e ao pódio.
+      </>
+    ),
+  },
+  {
+    pergunta: "A banca vai testar a estação várias vezes seguidas.",
+    resposta: (
+      <>
+        Ligue o modo demonstração da estação em Configurações: não há espera
+        entre descartes nem limite diário.
+      </>
+    ),
+  },
+  {
+    pergunta: "Recebo notificações demais.",
+    resposta: (
+      <>
+        Em Configurações &gt; Quem recebe cada aviso, desligue os avisos
+        opcionais do perfil Administradores. E use "Excluir lidas" em
+        Notificações.
+      </>
+    ),
+  },
 ];
 
 export function SecoesManual({ secoes }: { secoes: Secao[] }) {

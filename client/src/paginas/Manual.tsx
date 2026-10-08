@@ -67,12 +67,18 @@ export default function Manual() {
             </li>
           ))}
           <li>
-            <a href="#manual-estacao" className="font-medium text-[#0f7350] hover:underline">
+            <a
+              href="#manual-estacao"
+              className="font-medium text-[#0f7350] hover:underline"
+            >
               {secoesSistema.length + 1}. Estação de pesagem (tablet)
             </a>
           </li>
           <li>
-            <a href="#manual-perguntas" className="font-medium text-[#0f7350] hover:underline">
+            <a
+              href="#manual-perguntas"
+              className="font-medium text-[#0f7350] hover:underline"
+            >
               {secoesSistema.length + 2}. Perguntas frequentes
             </a>
           </li>
@@ -85,7 +91,11 @@ export default function Manual() {
           </h2>
           <div className="mt-4 grid gap-4">
             {secoesSistema.map((secao, indice) => (
-              <div key={secao.titulo} id={`manual-${indice}`} className="scroll-mt-24">
+              <div
+                key={secao.titulo}
+                id={`manual-${indice}`}
+                className="scroll-mt-24"
+              >
                 <SecoesManual secoes={[secao]} />
               </div>
             ))}
